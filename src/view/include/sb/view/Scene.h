@@ -32,11 +32,12 @@ struct SceneBody {
     Rgb color{};                  ///< Its color: its material's. The default is a light steel blue.
 };
 
-/// One edge drawn picked in a view: which body it's on, and its number in that
-/// body's elements (kernel::IKernel::elements()), for this rebuild only.
+/// One edge or face drawn picked in a view: which body it's on, and its number
+/// in that body's elements (kernel::IKernel::elements()), for this rebuild only.
 struct ScenePick {
     FeatureId body{};  ///< The step whose body it's on.
-    int index = -1;    ///< The edge's number in the body's elements, from 0.
+    int index = -1;    ///< The edge's or face's number in the body's elements, from 0.
+    kernel::TopoKind kind = kernel::TopoKind::Edge;  ///< An edge or a face.
 
     /// Checks whether two picks are the same edge.
     /// @param other The other pick.
@@ -50,7 +51,9 @@ struct SceneContent {
     std::vector<FeatureId> selected{};  ///< Selected steps, in picking order; drawn highlighted.
     /// True while clicking picks edges (for a fillet or chamfer) instead of bodies.
     bool pickEdges = false;
-    std::vector<ScenePick> picked{};  ///< Picked edges, drawn highlighted.
+    /// True while clicking picks faces (to sketch on) instead of bodies.
+    bool pickFaces = false;
+    std::vector<ScenePick> picked{};  ///< Picked edges and faces, drawn highlighted.
 };
 
 /// What an overlay draws.

@@ -156,7 +156,8 @@ std::optional<model::ArgValue> parseArg(const model::ArgSpec& spec, const std::s
             return std::nullopt;
         }
         case ArgType::GeometryList:
-            return text;  // edge numbers: read once the design is rebuilt (see geometryArgs())
+        case ArgType::Face:
+            return text;  // edge or face numbers: read once the design is rebuilt (see geometryArgs())
         case ArgType::Vec2List: {
             // Points split by "/", so the shell needs no quotes: 0,0/0,30/40,30.
             std::vector<sketch::Point2> points;
@@ -243,6 +244,8 @@ const char* typeName(model::ArgType t) {
             return "x,y/x,y/...";
         case model::ArgType::GeometryList:
             return "edge numbers";
+        case model::ArgType::Face:
+            return "face number";
         case model::ArgType::FeatureRef:
             return "step name";
         case model::ArgType::FeatureList:
@@ -363,25 +366,28 @@ int listPlugins(int argc, char** argv) {
 bool geometryArgs(const model::CommandInfo& info, model::Args& values, const model::Document& doc,
                   kernel::IKernel& kernel, sketch::ISketchSolver& solver) {
     for (const auto& spec : info.args) {
-        if (spec.type != model::ArgType::GeometryList || !values.count(spec.name)) continue;
+        const bool faces = spec.type == model::ArgType::Face;
+        if ((spec.type != model::ArgType::GeometryList && !faces) || !values.count(spec.name)) continue;
+        const auto kind = faces ? kernel::TopoKind::Face : kernel::TopoKind::Edge;
         const std::string text = std::get<std::string>(values[spec.name]);
         FeatureId body = model::argFeature(values, "body");
-        if (body.isNil()) {
+        if (body.isNil() && !faces) {
             const auto* step = doc.find(model::argFeature(values, "feature"));
             if (const auto* e = dynamic_cast<const model::EdgeFeature*>(step)) {
                 body = e->body();
             } else if (step) {
-                std::fprintf(stderr,
-                             "error: %s isn't a Fillet or Chamfer, so it has no edges to pick. Pick a Fillet or "
-                             "Chamfer.\n",
-                             step->name().c_str());
+                std::fprintf(
+                    stderr,
+                    "error: %s isn't a Fillet or Chamfer, so it has no edges to pick. Pick a Fillet or "
+                    "Chamfer.\n",
+                    step->name().c_str());
                 return false;
             }
         }
         const auto* step = doc.find(body);
         if (!step) {
-            std::fprintf(stderr, "error: say which body %s are on, with body=, like body=Extrude1.\n",
-                         spec.name.c_str());
+            std::fprintf(stderr, "error: say which body %s %s on, with body=, like body=Extrude1.\n",
+                         spec.name.c_str(), faces ? "is" : "are");
             return false;
         }
         const auto report = doc.regenerate(kernel, &solver);
@@ -391,29 +397,40 @@ bool geometryArgs(const model::CommandInfo& info, model::Args& values, const mod
                          step->name().c_str(), spec.name.c_str());
             return false;
         }
-        const auto count = r->names->edges.size();
-        const auto order = model::listingOrder(r->names->elements, kernel::TopoKind::Edge);
+        const auto count = r->names->of(kind).size();
+        const auto order = model::listingOrder(r->names->elements, kind);
         std::vector<model::GeometryRef> refs;
         std::size_t from = 0;
         for (;;) {
-            const auto comma = text.find(',', from);
+            const auto comma = faces ? std::string::npos : text.find(',', from);
             const std::string item =
                 text.substr(from, comma == std::string::npos ? std::string::npos : comma - from);
             const auto n = toNumber(item);
             if (!n || *n != std::floor(*n) || *n < 1 || *n > static_cast<double>(count)) {
-                std::fprintf(
-                    stderr,
-                    "error: %s must be edge numbers of %s from 1 to %zu, split by commas, like 1,3 (%s "
-                    "isn't one). To see them: sketchbillet_cli open <design.sb> --edges %s\n",
-                    spec.name.c_str(), step->name().c_str(), count, item.c_str(), step->name().c_str());
+                if (faces) {
+                    std::fprintf(stderr,
+                                 "error: %s must be a face number of %s from 1 to %zu (%s isn't one). To see "
+                                 "them: sketchbillet_cli open <design.sb> --faces %s\n",
+                                 spec.name.c_str(), step->name().c_str(), count, item.c_str(),
+                                 step->name().c_str());
+                } else {
+                    std::fprintf(
+                        stderr,
+                        "error: %s must be edge numbers of %s from 1 to %zu, split by commas, like 1,3 "
+                        "(%s isn't one). To see them: sketchbillet_cli open <design.sb> --edges %s\n",
+                        spec.name.c_str(), step->name().c_str(), count, item.c_str(), step->name().c_str());
+                }
                 return false;
             }
-            refs.push_back(model::referTo(*r->names, kernel::TopoKind::Edge,
-                                          order.at(static_cast<std::size_t>(*n) - 1)));
+            refs.push_back(model::referTo(*r->names, kind, order.at(static_cast<std::size_t>(*n) - 1)));
             if (comma == std::string::npos) break;
             from = comma + 1;
         }
-        values[spec.name] = std::move(refs);
+        if (faces) {
+            values[spec.name] = refs.front();
+        } else {
+            values[spec.name] = std::move(refs);
+        }
     }
     return true;
 }

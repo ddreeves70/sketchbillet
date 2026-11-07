@@ -39,6 +39,23 @@ enum class SketchPlane {
     YZ,  ///< Standing up, facing the right: sketch x is y, sketch y is z. Seen from the Right.
 };
 
+/// Where a sketch plane sits in the design.
+struct PlaneAxes {
+    kernel::Vec3 origin{};  ///< Where the sketch's x and y are 0, in mm.
+    kernel::Vec3 x{};       ///< The sketch's x direction in the design (a unit vector).
+    kernel::Vec3 y{};       ///< The sketch's y direction in the design (a unit vector).
+
+    /// Checks whether two planes sit in exactly the same place.
+    /// @param other The other plane.
+    /// @return True if origin and directions are equal.
+    bool operator==(const PlaneAxes& other) const {
+        auto same = [](const kernel::Vec3& a, const kernel::Vec3& b) {
+            return a.x == b.x && a.y == b.y && a.z == b.z;
+        };
+        return same(origin, other.origin) && same(x, other.x) && same(y, other.y);
+    }
+};
+
 /// How one feature came out of a rebuild.
 enum class FeatureStatus {
     Ok,          ///< Built successfully.
@@ -55,9 +72,10 @@ struct FeatureResult {
     /// For a Sketch step: what the solver gave back (the solved geometry, the
     /// degrees of freedom, conflicting and repeated constraints). Null otherwise.
     std::shared_ptr<const sketch::SolveResult> sketch;
-    /// For a Sketch step: the plane it's drawn on (so a later step, like
-    /// Extrude, knows where its shapes are). Empty otherwise.
-    std::optional<SketchPlane> plane;
+    /// For a Sketch step: where its plane sits in the design (so a later step,
+    /// like Extrude, knows where its shapes are): a base plane, or a face of a
+    /// body as it is in this rebuild. Empty otherwise.
+    std::optional<PlaneAxes> plane;
     /// For a step that made a shape: a lasting name for each of its faces, edges
     /// and vertices (see ShapeNames). Null for sketches and for steps that failed.
     std::shared_ptr<const ShapeNames> names;
@@ -205,6 +223,12 @@ public:
     /// sketch input is ready when it solved; other inputs when they made a body.
     /// @return The sketch inputs; empty for features that use no sketches.
     virtual std::vector<FeatureId> sketchInputs() const { return {}; }
+
+    /// Lists the inputs (from dependencies()) that are only looked at, not used
+    /// up: a sketch on a face of a body leaves the body in the design, where a
+    /// Boolean or a Fillet replaces its inputs with its result.
+    /// @return Those inputs; empty for most features.
+    virtual std::vector<FeatureId> referenceInputs() const { return {}; }
 
     /// Makes a copy with a new id, for duplicating and pasting. Everything else
     /// (name, numbers, inputs, material, turned off) is copied as it is.
@@ -478,19 +502,42 @@ private:
     kernel::Motion motion_;
 };
 
-/// Where a sketch plane sits in the design.
-struct PlaneAxes {
-    kernel::Vec3 origin{};  ///< Where the sketch's x and y are 0, in mm.
-    kernel::Vec3 x{};       ///< The sketch's x direction in the design (a unit vector).
-    kernel::Vec3 y{};       ///< The sketch's y direction in the design (a unit vector).
-};
-
 /// Gives where a sketch plane sits: XY has sketch x, y along x, y; XZ along x, z;
 /// YZ along y, z. Each is seen from the side x × y points to (the top, the front,
 /// the right).
 /// @param plane The plane.
 /// @return Its origin and directions.
 PlaneAxes planeAxes(SketchPlane plane);
+
+/// Works out a sketch plane on a flat face: its x and y directions lie in the
+/// face, and x × y is the face's outward normal, so the sketch is seen from
+/// outside the body and an Extrude goes out of it. On a face that faces up or
+/// down, x is the design's x; on any other face, x is level (square to the
+/// design's z), so a top face is drawn like XY, a front face like XZ and a right
+/// face like YZ. The origin is the point of the face's plane nearest the design's
+/// origin, so moving the face along its normal doesn't move the sketch across it.
+/// @param face The face's ElementInfo (it must be kernel::GeomKind::Plane).
+/// @return The axes, or nothing if the face isn't flat.
+std::optional<PlaneAxes> faceAxes(const kernel::ElementInfo& face);
+
+/// Gives the base plane a direction is most square to: XY for a direction
+/// mostly up or down, XZ for mostly front or back, YZ for mostly left or right.
+/// @param normal A face's normal.
+/// @return The base plane.
+SketchPlane nearestPlane(const kernel::Vec3& normal);
+
+/// Turns a point of a sketch into a point of the design.
+/// @param axes Where the sketch's plane sits.
+/// @param point The point in the sketch (mm).
+/// @return The same point in the design's x, y and z (mm).
+kernel::Vec3 toDesign(const PlaneAxes& axes, const sketch::Point2& point);
+
+/// Turns a point of the design into a point of a sketch, dropping the distance
+/// off the plane.
+/// @param axes Where the sketch's plane sits.
+/// @param point A point in the design (mm).
+/// @return The point in the sketch's x and y (mm).
+sketch::Point2 toSketch(const PlaneAxes& axes, const kernel::Vec3& point);
 
 /// Turns a point of a sketch into a point of the design.
 /// @param plane The sketch's plane.
@@ -504,6 +551,12 @@ kernel::Vec3 toDesign(SketchPlane plane, const sketch::Point2& point);
 /// @param point A point in the design (mm).
 /// @return The point in the sketch's x and y (mm).
 sketch::Point2 toSketch(SketchPlane plane, const kernel::Vec3& point);
+
+/// The flat face of a body that a sketch is drawn on.
+struct SketchFace {
+    FeatureId body{};    ///< The step whose body has the face.
+    GeometryRef face{};  ///< The face, by name (see ShapeNames).
+};
 
 /// A sketch: points, lines, circles and arcs on a plane, with constraints and
 /// dimensions. It isn't a body; its rebuild result is the solved sketch
@@ -525,9 +578,19 @@ public:
     /// @param sketch Its entities and constraints.
     SketchFeature(FeatureId id, std::string name, SketchPlane plane, sketch::Sketch sketch);
 
-    /// Gives the plane it's drawn on.
+    /// Gives the base plane it's drawn on, or, for a sketch on a face, the base
+    /// plane closest to the face (an older SketchBillet draws it there).
     /// @return The plane.
     SketchPlane plane() const { return plane_; }
+
+    /// Gives the face it's drawn on, if it's on a face of a body.
+    /// @return The face, or nothing for a sketch on a base plane.
+    const std::optional<SketchFace>& face() const { return face_; }
+
+    /// Puts the sketch on a face of a body, or back on its base plane. Use on a
+    /// copy, or from a Command.
+    /// @param face The face, or nothing for the base plane.
+    void setFace(std::optional<SketchFace> face) { face_ = std::move(face); }
 
     /// Gives its entities and constraints, as drawn (not solved).
     /// @return The sketch.
@@ -539,6 +602,11 @@ public:
 
     FeatureType type() const override { return FeatureType::Sketch; }
     std::unique_ptr<Feature> clone() const override { return std::make_unique<SketchFeature>(*this); }
+    std::vector<FeatureId> dependencies() const override {
+        return face_ ? std::vector<FeatureId>{face_->body} : std::vector<FeatureId>{};
+    }
+    std::vector<FeatureId> referenceInputs() const override { return dependencies(); }
+    void remapInputs(const std::map<FeatureId, FeatureId>& map) override;
     /// A sketch isn't built by the kernel: Document::regenerate() solves it with
     /// the sketch solver instead. This returns an error if it's called.
     /// @param kernel Not used.
@@ -548,6 +616,7 @@ public:
 
 private:
     SketchPlane plane_;
+    std::optional<SketchFace> face_;
     sketch::Sketch sketch_;
 };
 

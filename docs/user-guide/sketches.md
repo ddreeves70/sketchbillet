@@ -15,7 +15,8 @@ dimensions, and the solver makes it exact.
 
 ![Editing a sketch: the view looks straight at it, and the status bar says what to click](images/app-sketch-edit.png)
 
-1. **Sketch > New sketch on XY (the ground)** (Ctrl+Shift+K), or on XZ or YZ. SketchBillet
+1. **Sketch > New sketch on XY (the ground)** (Ctrl+Shift+K), or on XZ or YZ, or
+   [on a face of a body](sketch-on-face.md). SketchBillet
    adds `Sketch1`, turns the view to look straight at its plane, and starts
    drawing lines. To work on a sketch you already have, pick it in the feature
    tree and use **Sketch > Edit sketch** (Ctrl+K); it starts with **Select**, for

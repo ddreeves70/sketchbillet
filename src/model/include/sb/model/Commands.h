@@ -267,6 +267,29 @@ Diagnostics trim(sketch::Sketch& sketch, const EntityId& entity, sketch::Point2 
 /// @return The first free name of "Line1", "Line2", ...
 std::string uniqueSketchName(const sketch::Sketch& sketch, const std::string& base);
 
+/// Puts a sketch on a flat face of a body (feature.set_sketch_face), or picks
+/// its face again after an earlier change took the face away. What's drawn keeps
+/// its sketch x and y.
+class SetSketchFaceCommand final : public Command {
+public:
+    /// Prepares the change.
+    /// @param sketch The Sketch step.
+    /// @param face The face to put it on.
+    SetSketchFaceCommand(FeatureId sketch, SketchFace face);
+    /// Destroys the command.
+    ~SetSketchFaceCommand() override;
+
+    std::string label() const override;
+    Diagnostics apply(DocumentEditor& editor) override;
+    void revert(DocumentEditor& editor) override;
+
+private:
+    FeatureId sketch_;
+    SketchFace face_;
+    std::string name_;
+    std::unique_ptr<Command> edit_;  // the edit it made, to undo
+};
+
 /// Changes which edges a Fillet or Chamfer changes (feature.set_edges): for when
 /// an earlier change took its edges away and it asks for them to be picked again.
 ///

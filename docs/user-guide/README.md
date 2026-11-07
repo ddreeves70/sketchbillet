@@ -19,7 +19,8 @@ works in either.
 | Boxes, cylinders, union, cut, intersect | Revolve; pulling a face of a solid |
 | Sketches with constraints and dimensions, drawn in the app or with `sketchbillet_cli` | |
 | Extrude a sketch into a solid | |
-| Fillet and chamfer edges, picked in the 3D view; they stay on the same edges when earlier steps change | Sketching on a face of a body |
+| Fillet and chamfer edges, picked in the 3D view; they stay on the same edges when earlier steps change | |
+| Sketch on a flat face of a body; the sketch follows the face | Extrude that joins or cuts in one step |
 | Name, rename and delete steps; undo and redo | |
 | Move and turn bodies; copy, paste and duplicate steps; turn steps off; folders | |
 | The desktop app: 3D viewer with 1, 2 or 4 panes, feature tree, Properties, layouts | |
@@ -40,12 +41,13 @@ works in either.
 7. [Moving bodies](moving.md): slide and turn a body.
 8. [Sketches](sketches.md): flat drawings with constraints and dimensions.
 9. [Extrude](extrude.md): turn a sketch into a solid.
-10. [Fillet and chamfer](fillet-chamfer.md): round or bevel edges.
-11. [Materials](materials.md): what a body is made of, its mass, weight and cost.
-12. [Parameters](parameters.md): named values like `wall = 3 mm`, and formulas that use them.
-13. [Files](files.md): saving, opening, and exporting for 3D printing.
-14. [Plugins](plugins.md): adding features to SketchBillet.
-15. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
+10. [Sketching on a face](sketch-on-face.md): draw on the top or side of a body.
+11. [Fillet and chamfer](fillet-chamfer.md): round or bevel edges.
+12. [Materials](materials.md): what a body is made of, its mass, weight and cost.
+13. [Parameters](parameters.md): named values like `wall = 3 mm`, and formulas that use them.
+14. [Files](files.md): saving, opening, and exporting for 3D printing.
+15. [Plugins](plugins.md): adding features to SketchBillet.
+16. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
 
 ## Other guides
 

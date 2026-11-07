@@ -72,7 +72,7 @@ TEST_CASE("Extrude makes a body from a sketch's closed shape; the sketch isn't a
     REQUIRE(report.bodies() == std::vector<FeatureId>{e.id()});
     CHECK(d.kernel.massProps(*report.shapeOf(e.id())).volume == Approx(800 * 5));
     // The sketch's result says which plane it's on, for steps that use it.
-    CHECK(report.result(d.id("Sketch1"))->plane == SketchPlane::XY);
+    CHECK(report.result(d.id("Sketch1"))->plane == planeAxes(SketchPlane::XY));
 }
 
 TEST_CASE("Extrude's defaults, sides and names come from the command", "[model][extrude]") {

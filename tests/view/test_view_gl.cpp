@@ -574,3 +574,58 @@ TEST_CASE("picking edges: a click picks the edge under it; Ctrl-click adds or ta
     f.view.clickAt(QPoint(f.view.width() / 2, f.view.height() / 2));
     REQUIRE(waitFor([&] { return bodyPicks == 1; }));
 }
+
+TEST_CASE("picking faces: a click picks the face under it, one at a time", "[view][gl][faces]") {
+    Fixture f;
+    const auto parts = f.kernel->elements(f.box);
+    int top = -1, front = -1;
+    for (std::size_t i = 0; i < parts.faces.size(); ++i) {
+        if (parts.faces[i].direction.z > 0.999) top = static_cast<int>(i);
+        if (parts.faces[i].direction.y < -0.999) front = static_cast<int>(i);
+    }
+    REQUIRE(top >= 0);
+    REQUIRE(front >= 0);
+
+    SceneContent c;
+    c.bodies = {{f.boxId, f.box, false}};
+    c.pickFaces = true;
+    f.view.setContent(c);
+    f.view.fitAll();
+    settle(f.view);
+
+    int picks = 0, edgePicks = 0;
+    std::vector<ScenePick> last;
+    QObject::connect(&f.view, &ViewWidget::edgesPicked, [&](const std::vector<ScenePick>&) { ++edgePicks; });
+    QObject::connect(&f.view, &ViewWidget::facesPicked, [&](const std::vector<ScenePick>& p) {
+        ++picks;
+        last = p;
+        auto now = f.view.content();
+        now.picked = p;
+        f.view.setContent(now);
+    });
+    // The middle of the top (the box is 20 mm, from -10 to 10, 0 to 20 tall), and of the front.
+    const auto topAt = f.view.toScreen({0, 0, 20});
+    const auto frontAt = f.view.toScreen({0, -10, 10});
+    REQUIRE(topAt);
+    REQUIRE(frontAt);
+
+    f.view.clickAt(*topAt);
+    REQUIRE(waitFor([&] { return picks == 1; }));
+    CHECK(last == std::vector<ScenePick>{{f.boxId, top, kernel::TopoKind::Face}});
+    settle(f.view);
+    const QImage img = f.view.grabFramebuffer();
+    const double ratio = f.view.devicePixelRatioF();
+    const QColor at =
+        img.pixelColor(static_cast<int>(topAt->x() * ratio), static_cast<int>(topAt->y() * ratio));
+    INFO("picked face pixel " << at.name().toStdString());
+    CHECK(at.red() > at.blue() + 60);  // filled orange
+
+    // Another face replaces it, even with Ctrl held: one face at a time.
+    f.view.clickAt(*frontAt, true);
+    REQUIRE(waitFor([&] { return picks == 2; }));
+    CHECK(last == std::vector<ScenePick>{{f.boxId, front, kernel::TopoKind::Face}});
+    f.view.clickAt(QPoint(8, f.view.height() - 8));
+    REQUIRE(waitFor([&] { return picks == 3; }));
+    CHECK(last.empty());
+    CHECK(edgePicks == 0);
+}

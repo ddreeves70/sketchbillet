@@ -70,6 +70,20 @@ A *Matched* reference builds, with a note ("found an edge by where it is ...
 check it's the right one"). [`feature.set_edges`](../cli/commands.md#featureset_edges)
 picks edges again.
 
+## Sketching on a face
+
+A sketch can be drawn on a flat face (`SketchFeature::face()`: a body and a
+`GeometryRef`). Every rebuild resolves the face, and `faceAxes()` works out the
+sketch's plane from it: x and y in the face, x × y its outward normal; x along
+the design's x on a face that faces up or down, otherwise level; the origin the
+point of the face's plane nearest the design's origin. So a sketch on a top face
+draws like XY, lifted to the face, and moves with the face when it moves along
+its normal. The plane is in `FeatureResult::plane`, which Extrude and the sketcher
+use. A face that's Missing or Ambiguous, or no longer flat, stops the sketch.
+
+The body is a `referenceInputs()` input: the sketch looks at it but doesn't use
+it up, so it stays one of the design's bodies.
+
 ## People see numbers and words, not names
 
 Names are for matching. People see:
@@ -82,7 +96,8 @@ Names are for matching. People see:
   Line1 of Sketch1 (Extrude1)".
 - **Picking** in the 3D view: with **Edit > Pick edges** on (or after clicking
   Fillet or Chamfer), a click picks the edge under it. The view gives the edge's
-  number in this rebuild; the viewer plugin turns it into a `GeometryRef`
+  number in this rebuild (faces work the same way, with **Sketch > New sketch on
+  a face**); the viewer plugin turns it into a `GeometryRef`
   (`plugin::Selection::elements()`), and draws picked edges by resolving their
   references after every rebuild.
 
@@ -101,8 +116,8 @@ Names are for matching. People see:
 
 ## Not yet
 
-- **Picking faces** in the 3D view, and sketching on a face (the next pieces of
-  Phase 2).
+- **Extrude that joins or cuts** in one step, so a sketch on a face makes a boss
+  or a pocket without a separate Combine (the next piece of Phase 2).
 - **Picking a fillet's edges again in the app** (the command line has
   `feature.set_edges`).
 - **Fuzzing:** random edits on corpus models, checking every reference stays

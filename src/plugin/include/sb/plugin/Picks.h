@@ -12,12 +12,13 @@ namespace sb::plugin {
 enum class PickMode {
     Bodies,  ///< The step whose body it is (the usual).
     Edges,   ///< The edge under the mouse, for a fillet or chamfer.
+    Faces,   ///< The face under the mouse, to sketch on.
 };
 
-/// One edge (or face) picked in a viewer: which body, and a lasting reference to it.
+/// One edge or face picked in a viewer: which body, and a lasting reference to it.
 struct PickedElement {
     FeatureId body{};          ///< The step whose body it's on.
-    model::GeometryRef ref{};  ///< The edge, by name (see model::ShapeNames).
+    model::GeometryRef ref{};  ///< The edge or face, by name (see model::ShapeNames); ref.kind says which.
 
     /// Checks whether two picks are the same element.
     /// @param other The other pick.

@@ -176,6 +176,15 @@ std::vector<int> listingOrder(const kernel::Elements& elements, TopoKind kind) {
     return order;
 }
 
+void remapRef(GeometryRef& ref, const std::map<FeatureId, FeatureId>& map) {
+    for (const auto& [from, to] : map) {
+        const std::string a = shortId(from.toString()), b = shortId(to.toString());
+        for (auto at = ref.name.find(a); at != std::string::npos; at = ref.name.find(a, at + b.size())) {
+            ref.name.replace(at, a.size(), b);
+        }
+    }
+}
+
 std::string shortId(const std::string& id) {
     return id.substr(0, std::min<std::size_t>(8, id.size()));
 }

@@ -182,6 +182,55 @@ bool EditFeatureCommand::mergeWith(const Command& next) {
 }
 
 // ---------------------------------------------------------------------------
+// SetSketchFaceCommand
+// ---------------------------------------------------------------------------
+
+SetSketchFaceCommand::SetSketchFaceCommand(FeatureId sketch, SketchFace face)
+    : sketch_(sketch), face_(std::move(face)) {}
+
+SetSketchFaceCommand::~SetSketchFaceCommand() = default;
+
+std::string SetSketchFaceCommand::label() const {
+    return "Move " + name_ + " to a face";
+}
+
+Diagnostics SetSketchFaceCommand::apply(DocumentEditor& editor) {
+    const auto& doc = editor.document();
+    const Feature* f = doc.find(sketch_);
+    if (!f) return {error("feature.not_found", "That step isn't in the design anymore.")};
+    name_ = f->name();
+    if (f->type() != FeatureType::Sketch) {
+        return {error("sketch.not_sketch", f->name() + " isn't a sketch. Pick a sketch to put on the face.")};
+    }
+    const Feature* body = doc.find(face_.body);
+    if (!body) return {error("feature.not_found", "The body with the face isn't in the design anymore.")};
+    if (face_.face.name.empty() || face_.face.kind != kernel::TopoKind::Face) {
+        return {error("sketch.no_face", "Pick a flat face of " + body->name() + " for " + f->name() + ".")};
+    }
+    if (face_.face.signature.geom != kernel::GeomKind::Plane) {
+        return {error("sketch.face_curved",
+                      "A sketch needs a flat face, and that face is curved. Pick a flat face of " +
+                          body->name() + ".")};
+    }
+    // The body must come before the sketch, or the sketch would use a step after it.
+    if (doc.indexOf(face_.body) > doc.indexOf(sketch_)) {
+        return {
+            error("sketch.face_later",
+                  body->name() + " comes after " + f->name() +
+                      " in the timeline, so the sketch can't be on its face. Pick a body made before it.")};
+    }
+    auto copy = f->clone();
+    auto& sk = static_cast<SketchFeature&>(*copy);
+    sk.setFace(face_);
+    edit_ = std::make_unique<EditFeatureCommand>(std::move(copy));
+    return edit_->apply(editor);
+}
+
+void SetSketchFaceCommand::revert(DocumentEditor& editor) {
+    if (edit_) edit_->revert(editor);
+}
+
+// ---------------------------------------------------------------------------
 // SetEdgesCommand
 // ---------------------------------------------------------------------------
 

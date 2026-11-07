@@ -40,12 +40,16 @@ enum class ArgType {
     /// command's "body" argument. Picked in the app; on the command line, numbers
     /// as `sketchbillet_cli elements` lists them, like 3,7.
     GeometryList,
+    /// A GeometryRef: one face of the body named by the command's "body"
+    /// argument. Picked in the app; on the command line, its number as
+    /// `sketchbillet_cli open <design.sb> --faces <body>` lists it, like 6.
+    Face,
 };
 
 /// One argument value. Which alternative is allowed depends on the ArgSpec's ArgType.
 using ArgValue =
     std::variant<double, std::int64_t, bool, std::string, kernel::Vec3, FeatureId, std::vector<FeatureId>,
-                 FolderId, sketch::Point2, std::vector<sketch::Point2>, std::vector<GeometryRef>>;
+                 FolderId, sketch::Point2, std::vector<sketch::Point2>, std::vector<GeometryRef>, GeometryRef>;
 
 /// Arguments for one command, by argument name.
 using Args = std::map<std::string, ArgValue>;
@@ -192,6 +196,12 @@ FolderId argFolder(const Args& args, const std::string& name);
 /// @param name The argument's name, like "edges".
 /// @return Its references, or an empty list if it's missing or isn't one.
 std::vector<GeometryRef> argGeometry(const Args& args, const std::string& name);
+
+/// Reads an argument of ArgType::Face.
+/// @param args The arguments.
+/// @param name The argument's name, like "face".
+/// @return Its reference, or nothing if it's missing or isn't one.
+std::optional<GeometryRef> argFace(const Args& args, const std::string& name);
 
 /// Reads a true-or-false argument, for use in a CommandFactory.
 /// @param args The checked arguments.

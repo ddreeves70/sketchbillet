@@ -198,8 +198,8 @@ public:
         doc_ = ctx_.documents().active();
         tool_ = tool;
         reset();
-        viewer->face(toolPlane(step->plane()));
-        viewer->startTool(*this, toolPlane(step->plane()));
+        viewer->face(toolPlane(axesOf(*step)));
+        viewer->startTool(*this, toolPlane(axesOf(*step)));
         draw();
         hint();
         ctx_.setToolbarMode(std::string(kEditingMode));  // the toolbar shows the sketch buttons
@@ -475,7 +475,7 @@ public:
                 if (f.type() != model::FeatureType::Sketch || f.suppressed()) continue;
                 const auto& step = static_cast<const model::SketchFeature&>(f);
                 if (f.id() != editing_) {
-                    auto add = sketchLines(step.plane(), shown(step));
+                    auto add = sketchLines(axesOf(step), shown(step));
                     others.points.insert(others.points.end(), add.begin(), add.end());
                     continue;
                 }
@@ -490,7 +490,7 @@ public:
                     return !solved || std::ranges::find(solved->freePoints, r) != solved->freePoints.end();
                 };
                 auto lineInto = [&](Overlay& o, const sketch::Entity& e) {
-                    auto add = sketchLines(step.plane(), {e});
+                    auto add = sketchLines(axesOf(step), {e});
                     o.points.insert(o.points.end(), add.begin(), add.end());
                 };
                 for (const auto& e : entities) {
@@ -498,20 +498,20 @@ public:
                     // A spline's control points, joined by thin helper lines (its control polygon).
                     if (const auto* sp = std::get_if<sketch::SplineShape>(&e.shape)) {
                         for (std::size_t k = 0; k + 1 < sp->poles.size() + (sp->closed ? 1 : 0); ++k) {
-                            helpers.points.push_back(model::toDesign(step.plane(), sp->poles[k]));
+                            helpers.points.push_back(model::toDesign(axesOf(step), sp->poles[k]));
                             helpers.points.push_back(
-                                model::toDesign(step.plane(), sp->poles[(k + 1) % sp->poles.size()]));
+                                model::toDesign(axesOf(step), sp->poles[(k + 1) % sp->poles.size()]));
                         }
                     }
                 }
                 for (const auto& [ref, at] : sketchPoints(entities)) {
                     (pointFree(ref) ? freePoints : fixedPoints)
-                        .points.push_back(model::toDesign(step.plane(), at));
+                        .points.push_back(model::toDesign(axesOf(step), at));
                 }
                 // Ends that aren't joined, so the shape isn't closed yet: red dots.
                 for (const auto& ref : sketch::findProfiles({entities, {}}).openEnds) {
                     if (const auto at = sketch::pointOf({entities, {}}, ref))
-                        openEnds.points.push_back(model::toDesign(step.plane(), *at));
+                        openEnds.points.push_back(model::toDesign(axesOf(step), *at));
                 }
                 // Picked, and under the mouse (in Select).
                 auto showItem = [&](const Item& item, Overlay& lines, Overlay& points) {
@@ -521,10 +521,10 @@ public:
                     if (!e) return;
                     if (item.point) {
                         if (const auto at = sketch::pointOf(s, item.ref()))
-                            points.points.push_back(model::toDesign(step.plane(), *at));
+                            points.points.push_back(model::toDesign(axesOf(step), *at));
                     } else if (std::holds_alternative<sketch::PointShape>(e->shape)) {
                         points.points.push_back(
-                            model::toDesign(step.plane(), std::get<sketch::PointShape>(e->shape).at));
+                            model::toDesign(axesOf(step), std::get<sketch::PointShape>(e->shape).at));
                     } else {
                         lineInto(lines, *e);
                     }
@@ -579,7 +579,7 @@ public:
                                     : conflict                                        ? conflictLabels
                                     : last && listed(last->redundant, c.id)           ? redundantLabels
                                                                                       : labels;
-                    into.points.push_back(model::toDesign(step.plane(), place));
+                    into.points.push_back(model::toDesign(axesOf(step), place));
                     into.texts.push_back(text);
                     if (conflict) {
                         for (const auto& e : entities) {
@@ -727,7 +727,7 @@ public:
         const auto* step = sketchStep(editing_);
         auto* solver = ctx_.documents().solver();
         if (!step || !solver) return;
-        const auto plane = step->plane();
+        const auto plane = axesOf(*step);
         const auto a = model::toSketch(plane, from.at);
         const auto b = model::toSketch(plane, to.at);
         if (!drag_) {
@@ -1046,6 +1046,14 @@ private:
         return n;
     }
 
+    // Where a sketch's plane sits now: as the last rebuild worked it out (a face's
+    // plane moves with the face), or its base plane before the first rebuild.
+    model::PlaneAxes axesOf(const model::SketchFeature& step) const {
+        const auto* report = ctx_.documents().lastRebuild(ctx_.documents().active());
+        const auto* r = report ? report->result(step.id()) : nullptr;
+        return r && r->plane ? *r->plane : model::planeAxes(step.plane());
+    }
+
     const model::SketchFeature* sketchStep(const FeatureId& id) const {
         const auto* doc = ctx_.documents().find(ctx_.documents().active());
         const auto* f = doc ? doc->find(id) : nullptr;
@@ -1108,17 +1116,14 @@ private:
         return out;
     }
 
-    static viewer::ToolPlane toolPlane(model::SketchPlane plane) {
-        const auto a = model::planeAxes(plane);
-        return {a.origin, a.x, a.y};
-    }
+    static viewer::ToolPlane toolPlane(const model::PlaneAxes& a) { return {a.origin, a.x, a.y}; }
 
     // The part of the edited sketch under the mouse: a point within 8 pixels,
     // else an edge within 6, else a constraint's label within 12.
     std::optional<Item> itemAt(const viewer::ToolPoint& point) const {
         const auto* step = sketchStep(editing_);
         if (!step) return std::nullopt;
-        const auto at = model::toSketch(step->plane(), point.at);
+        const auto at = model::toSketch(axesOf(*step), point.at);
         const auto entities = current(*step);
         std::optional<Item> best;
         double bestDistance = kSnapPixels * point.pixel;
@@ -1179,7 +1184,7 @@ private:
     Pick pick(const viewer::ToolPoint& point) const {
         const auto* step = sketchStep(editing_);
         if (!step) return {};
-        const auto plane = step->plane();
+        const auto plane = axesOf(*step);
         const auto at = model::toSketch(plane, point.at);
         std::optional<std::pair<sketch::PointRef, sketch::Point2>> best;
         double bestDistance = kSnapPixels * point.pixel;
@@ -1297,7 +1302,7 @@ private:
         plugin::Overlay dots{.shape = plugin::OverlayShape::Points, .color = {230, 120, 20}, .size = 7};
         const auto* step = sketchStep(editing_);
         if (step && hover_ && (tool_ != Tool::Select || drag_)) {
-            const auto plane = step->plane();
+            const auto plane = axesOf(*step);
             const Pick& h = *hover_;
             auto show = [&](sketch::Shape shape) {
                 auto add = sketchLines(plane, {sketch::Entity{{}, {}, shape, false}});
@@ -1366,7 +1371,7 @@ private:
         if (step && tool_ == Tool::Trim && trimAt_) {
             const sketch::Sketch now{shown(*step), step->sketch().constraints};
             if (const auto piece = model::trimmedPiece(now, trimAt_->first, trimAt_->second)) {
-                auto add = sketchLines(step->plane(), {sketch::Entity{{}, {}, *piece, false}});
+                auto add = sketchLines(axesOf(*step), {sketch::Entity{{}, {}, *piece, false}});
                 cut.points.insert(cut.points.end(), add.begin(), add.end());
             }
         }
@@ -1463,7 +1468,7 @@ private:
     std::optional<std::pair<EntityId, sketch::Point2>> trimTarget(const viewer::ToolPoint& point) const {
         const auto* step = sketchStep(editing_);
         if (!step) return std::nullopt;
-        const auto at = model::toSketch(step->plane(), point.at);
+        const auto at = model::toSketch(axesOf(*step), point.at);
         std::optional<std::pair<EntityId, sketch::Point2>> best;
         double bestDistance = kEdgePixels * point.pixel;
         for (const auto& e : shown(*step)) {
@@ -1663,12 +1668,42 @@ void registerSketcher(plugin::PluginContext& ctx) {
     auto sketcher = std::make_shared<Sketcher>(ctx);
     using plugin::ActionSpec;
 
-    auto newSketch = [&ctx, sketcher](const char* plane) {
+    // The one face picked in the active design, if a face is what's picked.
+    auto pickedFace = [&ctx]() -> std::optional<plugin::PickedElement> {
+        const auto& sel = ctx.selection();
+        if (sel.doc() != ctx.documents().active() || sel.elements().size() != 1) return std::nullopt;
+        const auto& e = sel.elements().front();
+        if (e.ref.kind != kernel::TopoKind::Face) return std::nullopt;
+        return e;
+    };
+    auto say = [&ctx](const std::string& message) {
+        if (auto* ui = ctx.service<ui::UiRegistry>()) ui->showMessage(QString::fromStdString(message));
+    };
+    auto problem = [&ctx](std::string code, std::string message) {
+        if (auto* ui = ctx.service<ui::UiRegistry>()) {
+            ui->showProblems({{std::move(code), Severity::Error, std::move(message), {}}});
+        }
+    };
+    // A face that can hold a sketch: flat. Says why not, if it isn't.
+    auto flatFace = [problem](const plugin::PickedElement& e) {
+        if (e.ref.signature.geom == kernel::GeomKind::Plane) return true;
+        problem("sketch.face_curved",
+                "A sketch needs a flat face, and that face is curved. Pick a flat face.");
+        return false;
+    };
+
+    // Starts a new sketch on a base plane, or on the picked face, and draws in it.
+    auto newSketch = [&ctx, sketcher](const char* plane, std::optional<plugin::PickedElement> face) {
         auto& docs = ctx.documents();
         const DocId doc = docs.active();
         if (!docs.find(doc)) return;
         sketcher->finish();
-        const auto problems = docs.run(doc, "feature.add_sketch", {{"plane", std::string(plane)}});
+        model::Args args{{"plane", std::string(plane)}};
+        if (face) {
+            args = {{"body", face->body}, {"face", face->ref}};
+            ctx.selection().setPickMode(plugin::PickMode::Bodies);  // done picking faces
+        }
+        const auto problems = docs.run(doc, "feature.add_sketch", args);
         if (!problems.empty()) {
             if (auto* ui = ctx.service<ui::UiRegistry>()) ui->showProblems(problems);
             return;
@@ -1685,18 +1720,43 @@ void registerSketcher(plugin::PluginContext& ctx) {
                              .toolbar = true,
                              .buttonText = "New sketch",
                              .icon = std::string(icons::sketcher::new_sketch_svg),
-                             .tip = "Start a sketch lying flat, seen from the top, and draw in it.",
-                             .run = [newSketch] { newSketch("xy"); }});
+                             .tip =
+                                 "Start a sketch lying flat, seen from the top, and draw in it. With a flat "
+                                 "face picked, the sketch goes on that face.",
+                             .run = [newSketch, pickedFace, flatFace] {
+                                 const auto face = pickedFace();
+                                 if (face && !flatFace(*face)) return;
+                                 newSketch("xy", face);
+                             }});
+    ctx.addAction(ActionSpec{
+        .id = "sb.sketcher.new_face",
+        .text = "New sketch on a face",
+        .menu = "Sketch",
+        .tip = "Start a sketch on a flat face of a body, like the top of a block, and draw in it. The sketch "
+               "stays "
+               "on the face when the body changes.",
+        .run =
+            [&ctx, newSketch, pickedFace, flatFace, say] {
+                const auto face = pickedFace();
+                if (!face) {
+                    // Pick the face first, then click this again.
+                    ctx.selection().setPickMode(plugin::PickMode::Faces);
+                    say("Click a flat face in the 3D view, then click New sketch on a face again.");
+                    return;
+                }
+                if (flatFace(*face)) newSketch("xy", face);
+            },
+        .enabled = [&ctx] { return ctx.documents().find(ctx.documents().active()) != nullptr; }});
     ctx.addAction(ActionSpec{.id = "sb.sketcher.new_xz",
                              .text = "New sketch on XZ (standing, from the front)",
                              .menu = "Sketch",
                              .tip = "Start a sketch standing up, seen from the front, and draw in it.",
-                             .run = [newSketch] { newSketch("xz"); }});
+                             .run = [newSketch] { newSketch("xz", std::nullopt); }});
     ctx.addAction(ActionSpec{.id = "sb.sketcher.new_yz",
                              .text = "New sketch on YZ (standing, from the right)",
                              .menu = "Sketch",
                              .tip = "Start a sketch standing up, seen from the right, and draw in it.",
-                             .run = [newSketch] { newSketch("yz"); }});
+                             .run = [newSketch] { newSketch("yz", std::nullopt); }});
     // The one sketch picked in the active design, if that's what's picked.
     auto pickedSketch = [&ctx]() -> std::optional<FeatureId> {
         const auto& sel = ctx.selection();
@@ -1729,6 +1789,44 @@ void registerSketcher(plugin::PluginContext& ctx) {
             },
         // Only with one sketch picked, and not while already editing one.
         .enabled = [sketcher, pickedSketch] { return !sketcher->editing() && pickedSketch().has_value(); }});
+    // Move to a face: pick the sketch and click it, then pick a face and click it again.
+    auto moving = std::make_shared<FeatureId>();
+    ctx.addAction(ActionSpec{
+        .id = "sb.sketcher.move_to_face",
+        .text = "Move to a face",
+        .menu = "Sketch",
+        .tip =
+            "Put the picked sketch on a flat face of a body, or pick its face again when it can't find it.",
+        .run =
+            [&ctx, sketcher, pickedSketch, pickedFace, flatFace, say, moving] {
+                auto& docs = ctx.documents();
+                const DocId doc = docs.active();
+                if (const auto id = pickedSketch()) {
+                    *moving = *id;
+                    ctx.selection().setPickMode(plugin::PickMode::Faces);
+                    say("Click a flat face in the 3D view for " + docs.find(doc)->find(*id)->name() +
+                        ", then click Move to a face again.");
+                    return;
+                }
+                const auto face = pickedFace();
+                if (!face || moving->isNil() || !flatFace(*face)) return;
+                const FeatureId id = *moving;
+                *moving = FeatureId{};
+                sketcher->finish();
+                ctx.selection().setPickMode(plugin::PickMode::Bodies);
+                const auto problems = docs.run(doc, "feature.set_sketch_face",
+                                               {{"feature", id}, {"body", face->body}, {"face", face->ref}});
+                if (!problems.empty()) {
+                    if (auto* ui = ctx.service<ui::UiRegistry>()) ui->showProblems(problems);
+                    return;
+                }
+                ctx.selection().set(doc, {id});
+            },
+        // A sketch picked; or, after that, a face.
+        .enabled =
+            [pickedSketch, pickedFace, moving] {
+                return pickedSketch().has_value() || (!moving->isNil() && pickedFace().has_value());
+            }});
     ctx.addAction(ActionSpec{.id = "sb.sketcher.finish",
                              .text = "Finish sketch",
                              .menu = "Sketch",
@@ -1934,7 +2032,8 @@ void registerSketcher(plugin::PluginContext& ctx) {
 
 }  // namespace
 
-std::vector<kernel::Vec3> sketchLines(model::SketchPlane plane, const std::vector<sketch::Entity>& entities) {
+std::vector<kernel::Vec3> sketchLines(const model::PlaneAxes& plane,
+                                      const std::vector<sketch::Entity>& entities) {
     std::vector<kernel::Vec3> out;
     auto segment = [&](sketch::Point2 a, sketch::Point2 b) {
         out.push_back(model::toDesign(plane, a));

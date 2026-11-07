@@ -96,6 +96,13 @@
       "run --save block.sb feature.add_sketch",
       "run --open block.sb --save block.sb sketch.add_rectangle sketch=Sketch1 from=0,0 to=40,20",
       "run --open block.sb --save block.sb feature.add_extrude sketch=Sketch1 distance=10"
+    ],
+    "facesketch": [
+      "run --save block.sb feature.add_sketch",
+      "run --open block.sb --save block.sb sketch.add_rectangle sketch=Sketch1 from=0,0 to=40,20",
+      "run --open block.sb --save block.sb feature.add_extrude sketch=Sketch1 distance=10",
+      "run --open block.sb --save block.sb feature.add_sketch body=Extrude1 face=6",
+      "run --open block.sb --save block.sb sketch.add_circle sketch=Sketch2 center=20,10 radius=5"
     ]
   },
   "pictures": [
@@ -1306,6 +1313,60 @@
         ],
         "trigger": [
           "sb.viewer.fit"
+        ]
+      },
+      "crop": [
+        0,
+        0,
+        1280,
+        800
+      ]
+    },
+    {
+      "out": "docs/user-guide/images/sketch-face-boss.png",
+      "size": "560x340",
+      "script": "facesketch",
+      "commands": [
+        "run --open block.sb --save block.sb feature.add_extrude sketch=Sketch2 distance=8",
+        "run --open block.sb --save block.sb feature.add_boolean operation=union a=Extrude1 b=Extrude2"
+      ],
+      "show": [
+        {
+          "file": "block.sb",
+          "step": "Union1",
+          "color": "blue"
+        }
+      ]
+    },
+    {
+      "out": "docs/user-guide/images/app-sketch-face-pick.png",
+      "size": "1280x800",
+      "script": "block",
+      "app": {
+        "open": "block.sb",
+        "trigger": [
+          "sb.sketcher.new_face"
+        ],
+        "faces": "Extrude1:6"
+      },
+      "crop": [
+        0,
+        0,
+        1280,
+        800
+      ]
+    },
+    {
+      "out": "docs/user-guide/images/app-sketch-face-draw.png",
+      "size": "1280x800",
+      "script": "facesketch",
+      "app": {
+        "open": "block.sb",
+        "select": [
+          "Sketch2"
+        ],
+        "trigger": [
+          "sb.sketcher.edit"
         ]
       },
       "crop": [

@@ -180,6 +180,17 @@ private:
             const auto& edges = ctx_.selection().elements();
             const auto* design = ctx_.documents().find(ctx_.selection().doc());
             const auto* body = design && !edges.empty() ? design->find(edges.front().body) : nullptr;
+            if (body && edges.front().ref.kind == kernel::TopoKind::Face) {
+                // A face picked: say which, and what it's for.
+                title_->setText(tr("Face picked: %1")
+                                    .arg(QString::fromStdString(model::describeElement(
+                                        *design, kernel::TopoKind::Face, edges.front().ref.name))));
+                status_->setText(
+                    edges.front().ref.signature.geom == kernel::GeomKind::Plane
+                        ? QString()
+                        : tr("This face is curved, so it can't hold a sketch. Pick a flat face."));
+                return;
+            }
             if (body) {
                 // Edges picked: say how many, and what to do with them.
                 const bool oneBody =
@@ -390,16 +401,23 @@ private:
                 form->addRow(tr("Free to move"), freedom);
                 updaters_.push_back([this, plane, drawn, constraints, freedom](const model::Feature& g) {
                     const auto& sk = static_cast<const model::SketchFeature&>(g);
-                    switch (sk.plane()) {
-                        case model::SketchPlane::XY:
-                            plane->setText(tr("XY (the ground, seen from the top)"));
-                            break;
-                        case model::SketchPlane::XZ:
-                            plane->setText(tr("XZ (standing, seen from the front)"));
-                            break;
-                        case model::SketchPlane::YZ:
-                            plane->setText(tr("YZ (standing, seen from the right)"));
-                            break;
+                    const auto* design = ctx_.documents().find(ctx_.selection().doc());
+                    if (sk.face() && design) {
+                        plane->setText(tr("On the %1")
+                                           .arg(QString::fromStdString(model::describeElement(
+                                               *design, kernel::TopoKind::Face, sk.face()->face.name))));
+                    } else {
+                        switch (sk.plane()) {
+                            case model::SketchPlane::XY:
+                                plane->setText(tr("XY (the ground, seen from the top)"));
+                                break;
+                            case model::SketchPlane::XZ:
+                                plane->setText(tr("XZ (standing, seen from the front)"));
+                                break;
+                            case model::SketchPlane::YZ:
+                                plane->setText(tr("YZ (standing, seen from the right)"));
+                                break;
+                        }
                     }
                     int points = 0, lines = 0, circles = 0, arcs = 0, splines = 0;
                     for (const auto& e : sk.sketch().entities) {
