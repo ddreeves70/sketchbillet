@@ -139,6 +139,24 @@
       "run --open plate.sb --save plate.sb sketch.add_point sketch=Sketch1 at=8,15",
       "run --open plate.sb --save plate.sb sketch.add_point sketch=Sketch1 at=52,15",
       "run --open plate.sb --save plate.sb feature.add_hole sketch=Sketch1 kind=counterbore name=Screws"
+    ],
+    "boltring": [
+      "run --save ring.sb feature.add_box corner=-30,-30,0 size=60,60,5 name=Plate",
+      "run --open ring.sb --save ring.sb feature.add_sketch body=Plate face=6",
+      "run --open ring.sb --save ring.sb sketch.add_point sketch=Sketch1 at=20,0",
+      "run --open ring.sb --save ring.sb feature.add_hole sketch=Sketch1",
+      "run --open ring.sb --save ring.sb feature.add_pattern steps=Hole1 kind=circular"
+    ],
+    "fancover": [
+      "run --save fan.sb feature.add_box corner=-20,-20,0 size=40,40,3 name=Plate",
+      "run --open fan.sb --save fan.sb feature.add_sketch body=Plate face=6",
+      "run --open fan.sb --save fan.sb sketch.add_point sketch=Sketch1 at=16,16",
+      "run --open fan.sb --save fan.sb feature.add_hole sketch=Sketch1 name=Screw",
+      "run --open fan.sb --save fan.sb feature.add_pattern steps=Screw kind=circular count=4 name=Screws",
+      "run --open fan.sb --save fan.sb feature.add_sketch body=Plate face=6",
+      "run --open fan.sb --save fan.sb sketch.add_point sketch=Sketch2 at=-10,-10",
+      "run --open fan.sb --save fan.sb feature.add_hole sketch=Sketch2 body=Screws diameter=6 name=Air",
+      "run --open fan.sb --save fan.sb feature.add_pattern steps=Air count=3 count2=3 name=Grille"
     ]
   },
   "pictures": [
@@ -1571,6 +1589,50 @@
         {
           "file": "plate.sb",
           "step": "Screws",
+          "color": "blue"
+        }
+      ]
+    },
+    {
+      "out": "docs/user-guide/images/patterns-ring.png",
+      "size": "560x340",
+      "script": "boltring",
+      "show": [
+        {
+          "file": "ring.sb",
+          "step": "Pattern1",
+          "color": "blue"
+        }
+      ]
+    },
+    {
+      "out": "docs/user-guide/images/app-pattern.png",
+      "size": "1280x800",
+      "script": "boltring",
+      "app": {
+        "open": "ring.sb",
+        "select": [
+          "Pattern1"
+        ],
+        "trigger": [
+          "sb.viewer.fit"
+        ]
+      },
+      "crop": [
+        0,
+        0,
+        1280,
+        800
+      ]
+    },
+    {
+      "out": "docs/tutorials/images/fan-done.png",
+      "size": "560x340",
+      "script": "fancover",
+      "show": [
+        {
+          "file": "fan.sb",
+          "step": "Grille",
           "color": "blue"
         }
       ]

@@ -32,6 +32,7 @@ enum class FeatureType {
     Chamfer,   ///< A ChamferFeature.
     Revolve,   ///< A RevolveFeature.
     Hole,      ///< A HoleFeature (sb/model/Holes.h).
+    Pattern,   ///< A PatternFeature (sb/model/Pattern.h).
 };
 
 /// The flat plane a sketch is drawn on.
@@ -66,6 +67,14 @@ enum class FeatureStatus {
     Suppressed,  ///< Turned off by the user.
 };
 
+/// What a step that joins, cuts or drills added to its body or took from it,
+/// so a Pattern can do the same again somewhere else.
+struct StepTool {
+    kernel::ShapeHandle shape;                ///< The solid, as it was before it was joined or cut.
+    std::shared_ptr<const ShapeNames> names;  ///< Its faces' names: the names they have on the body.
+    bool cut = true;                          ///< True if it was taken away; false if it was added.
+};
+
 /// The rebuild result of one feature.
 struct FeatureResult {
     FeatureStatus status = FeatureStatus::Ok;  ///< How it came out.
@@ -81,12 +90,16 @@ struct FeatureResult {
     /// For a step that made a shape: a lasting name for each of its faces, edges
     /// and vertices (see ShapeNames). Null for sketches and for steps that failed.
     std::shared_ptr<const ShapeNames> names;
+    /// For a step that joins, cuts or drills: each solid it added or took away
+    /// (one per hole), so a Pattern can repeat it. Empty otherwise.
+    std::vector<StepTool> tools;
 };
 
 /// What a step builds: its shape, and names for the shape's faces, edges and vertices.
 struct Built {
     kernel::OpResult op;                      ///< The shape, or why it couldn't be built.
     std::shared_ptr<const ShapeNames> names;  ///< Its names; null if it failed.
+    std::vector<StepTool> tools{};            ///< What it added or took away (see FeatureResult::tools).
 };
 
 /// One of a step's numbers that can be changed by name, and worked out from a

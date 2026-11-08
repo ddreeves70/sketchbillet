@@ -44,6 +44,7 @@
 #include "sb/kernel_occt/OcctKernel.h"
 #include "sb/model/Feature.h"
 #include "sb/model/Holes.h"
+#include "sb/model/Pattern.h"
 #include "sb/plugin/PluginHost.h"
 #include "sb/plugins/Axes.h"
 #include "sb/plugins/FeatureTree.h"
@@ -255,7 +256,7 @@ TEST_CASE("every toolbar button has a picture", "[app][icons]") {
         CHECK_FALSE(a->icon().pixmap(24, 24).isNull());
     }
     CHECK(buttons ==
-          5 + 11 + 2 + 11 + 15);  // SketchBillet's own, sb.modeling, sb.sketcher, sketch tools, constraints
+          5 + 13 + 2 + 11 + 15);  // SketchBillet's own, sb.modeling, sb.sketcher, sketch tools, constraints
     // The menu item shows the same picture as its button.
     CHECK_FALSE(app.shell->action("sb.modeling.box")->icon().isNull());
 }
@@ -1644,6 +1645,80 @@ TEST_CASE("Create > Hole from two edges: pick two edges of a face, then click it
     app.field<QDoubleSpinBox>("distance_b")->setValue(25);
     settle();
     CHECK(static_cast<const model::HoleFeature&>(*app.doc().find(id)).placement().distanceB == 25);
+}
+
+TEST_CASE("Circular pattern repeats the picked hole; Properties changes how many and the kind",
+          "[app][pattern]") {
+    App app;
+    auto& docs = app.host.documents();
+    const auto doc = app.shell->activeDesign();
+    REQUIRE(docs.run(doc, "feature.add_box",
+                     {{"corner", kernel::Vec3{-30, -30, 0}}, {"size", kernel::Vec3{60, 60, 5}}})
+                .empty());
+    REQUIRE(docs.run(doc, "feature.add_sketch", {}).empty());
+    const auto sketchId = app.doc().featureAt(1).id();
+    REQUIRE(docs.run(doc, "sketch.add_point", {{"sketch", sketchId}, {"at", sketch::Point2{20, 0}}}).empty());
+    REQUIRE(docs.run(doc, "feature.add_hole",
+                     {{"sketch", sketchId}, {"body", app.doc().featureAt(0).id()}, {"flip", true}})
+                .empty());
+    settle();
+    auto* circular = app.shell->action("sb.modeling.pattern_circular");
+    REQUIRE(circular);
+    app.pickRows({1});  // a sketch can't be patterned
+    CHECK_FALSE(circular->isEnabled());
+    app.pickRows({2});  // Hole1
+    REQUIRE(circular->isEnabled());
+    app.click("sb.modeling.pattern_circular");
+    REQUIRE(app.doc().featureCount() == 4);
+    const auto id = app.doc().featureAt(3).id();
+    CHECK(app.doc().featureAt(3).name() == "Pattern1");
+    auto volume = [&] { return docs.kernel()->massProps(*docs.lastRebuild(doc)->shapeOf(id)).volume; };
+    const double hole = std::numbers::pi * 1.7 * 1.7 * 5;
+    CHECK(volume() == Approx(18000 - 6 * hole));
+
+    // Properties: what it repeats, how many; the circle's rows, not the row's.
+    CHECK(app.field<QLabel>("repeats")->text() == QStringLiteral("Hole1"));
+    auto* count = app.field<QSpinBox>("count");
+    REQUIRE(count);
+    CHECK(count->value() == 6);
+    CHECK(app.field<QDoubleSpinBox>("angle")->isVisible());
+    CHECK_FALSE(app.field<QDoubleSpinBox>("spacing")->isVisible());
+    count->setValue(4);
+    settle();
+    CHECK(volume() == Approx(18000 - 4 * hole));
+    CHECK(app.doc().undoLabel() == "Edit Pattern1");
+
+    // A row instead: 4 along x, 10 mm apart, from the hole at x = 20. Copy 2 is on
+    // the plate's edge (half a hole), and copies 3 and 4 run off it.
+    auto* kind = app.field<QComboBox>("kind");
+    kind->setCurrentIndex(0);
+    emit kind->activated(0);
+    settle();
+    CHECK(app.field<QDoubleSpinBox>("spacing")->isVisible());
+    CHECK_FALSE(app.field<QDoubleSpinBox>("angle")->isVisible());
+    CHECK(volume() == Approx(18000 - 1.5 * hole));
+    CHECK(docs.lastRebuild(doc)->result(id)->issues.size() == 2);
+    // The other way along x, 12 mm apart: all four on the plate.
+    app.field<QDoubleSpinBox>("direction.x")->setValue(-1);
+    app.field<QDoubleSpinBox>("spacing")->setValue(12);
+    settle();
+    CHECK(volume() == Approx(18000 - 4 * hole));
+    CHECK(docs.lastRebuild(doc)->result(id)->issues.empty());
+}
+
+TEST_CASE("Linear pattern of a picked body copies it", "[app][pattern]") {
+    App app;
+    auto& docs = app.host.documents();
+    const auto doc = app.shell->activeDesign();
+    REQUIRE(docs.run(doc, "feature.add_box", {{"size", kernel::Vec3{5, 5, 5}}}).empty());
+    settle();
+    app.pickRows({0});
+    app.click("sb.modeling.pattern_linear");
+    REQUIRE(app.doc().featureCount() == 2);
+    const auto id = app.doc().featureAt(1).id();
+    CHECK(app.field<QLabel>("repeats")->text() == QStringLiteral("Copies of Box1"));
+    CHECK(docs.kernel()->massProps(*docs.lastRebuild(doc)->shapeOf(id)).volume == Approx(375));
+    CHECK(docs.lastRebuild(doc)->bodies() == std::vector{id});
 }
 
 TEST_CASE("Paste explains when the clipboard has no steps", "[app][copy]") {

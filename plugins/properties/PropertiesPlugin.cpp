@@ -15,6 +15,7 @@
 #include <QLineEdit>
 #include <QPointer>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -32,6 +33,7 @@
 #include "sb/model/Document.h"
 #include "sb/model/Holes.h"
 #include "sb/model/Material.h"
+#include "sb/model/Pattern.h"
 #include "sb/plugin/Events.h"
 #include "sb/ui/UiRegistry.h"
 
@@ -537,6 +539,7 @@ private:
             case model::FeatureType::Extrude:  // see addExtrude()
             case model::FeatureType::Revolve:  // see addRevolve()
             case model::FeatureType::Hole:     // see addHole()
+            case model::FeatureType::Pattern:  // see addPattern()
                 break;
             case model::FeatureType::Fillet:
             case model::FeatureType::Chamfer: {
@@ -634,6 +637,7 @@ private:
         if (f.type() == model::FeatureType::Extrude) addExtrude(form);
         if (f.type() == model::FeatureType::Revolve) addRevolve(form);
         if (f.type() == model::FeatureType::Hole) addHole(form, static_cast<const model::HoleFeature&>(f));
+        if (f.type() == model::FeatureType::Pattern) addPattern(form);
         if (f.type() != model::FeatureType::Sketch) addMaterial(form);  // a sketch isn't a body
     }
 
@@ -883,6 +887,159 @@ private:
                 show("countersink_diameter", cs);
                 show("countersink_angle", cs);
             });
+    }
+
+    void addPattern(QFormLayout* form) {
+        using model::PatternFeature;
+        using model::PatternLayout;
+        auto pattern = [](const model::Feature& g) -> const PatternFeature& {
+            return static_cast<const PatternFeature&>(g);
+        };
+        // Changes the layout of the step being edited.
+        auto relayout = [this](const QString& field, std::function<void(PatternLayout&)> change) {
+            edit(field, [change](model::Feature& g) {
+                auto& p = static_cast<PatternFeature&>(g);
+                auto l = p.layout();
+                change(l);
+                p.setLayout(l);
+            });
+        };
+        auto* what = new QLabel(form_);
+        what->setObjectName(QStringLiteral("repeats"));
+        what->setWordWrap(true);
+        form->addRow(tr("Repeats"), what);
+        updaters_.push_back([this, what, pattern](const model::Feature& g) {
+            const auto& p = pattern(g);
+            const auto* d = design();
+            auto nameOf = [d](const FeatureId& id) {
+                const auto* f = d ? d->find(id) : nullptr;
+                return f ? qs(f->name()) : QObject::tr("(missing)");
+            };
+            if (p.steps().empty()) {
+                what->setText(tr("Copies of %1").arg(nameOf(p.body())));
+                return;
+            }
+            QStringList names;
+            for (const auto& s : p.steps()) names << nameOf(s);
+            // "on <body>" only when it isn't one of the steps' own body.
+            const bool own = std::find(p.steps().begin(), p.steps().end(), p.body()) != p.steps().end();
+            what->setText(own ? names.join(QStringLiteral(", "))
+                              : tr("%1, on %2").arg(names.join(QStringLiteral(", ")), nameOf(p.body())));
+        });
+
+        auto* kind = new QComboBox(form_);
+        kind->setObjectName(QStringLiteral("kind"));
+        kind->addItem(tr("Row (or grid)"), static_cast<int>(PatternLayout::Kind::Linear));
+        kind->addItem(tr("Circle"), static_cast<int>(PatternLayout::Kind::Circular));
+        form->addRow(tr("Kind"), kind);
+        connect(kind, &QComboBox::activated, this, [relayout, kind](int index) {
+            const auto k = static_cast<PatternLayout::Kind>(kind->itemData(index).toInt());
+            relayout(QStringLiteral("kind"), [k](PatternLayout& l) {
+                if (l.kind != k && k == PatternLayout::Kind::Circular && l.count < 2) l.count = 6;
+                l.kind = k;
+            });
+        });
+        auto addCount = [this, form, relayout](const char* key, const QString& label, const QString& tip,
+                                               int PatternLayout::*member) {
+            auto* box = new QSpinBox(form_);
+            box->setObjectName(QLatin1String(key));
+            box->setRange(1, 200);
+            box->setKeyboardTracking(false);
+            box->setToolTip(tip);
+            form->addRow(label, box);
+            connect(box, &QSpinBox::valueChanged, this, [relayout, member, key](int n) {
+                relayout(QLatin1String(key), [member, n](PatternLayout& l) { l.*member = n; });
+            });
+            updaters_.push_back([box, member](const model::Feature& g) {
+                box->setValue(static_cast<const PatternFeature&>(g).layout().*member);
+            });
+        };
+        addCount("count", tr("How many"),
+                 tr("How many in the row, or round the circle, the first one included."),
+                 &PatternLayout::count);
+        addVec3(
+            form, QStringLiteral("direction"), tr("Direction"), false,
+            [pattern](const model::Feature& g) { return pattern(g).layout().direction; },
+            [](model::Feature& g, kernel::Vec3 v) {
+                auto& p = static_cast<PatternFeature&>(g);
+                auto l = p.layout();
+                l.direction = v;
+                p.setLayout(l);
+            },
+            false);
+        addNumber(
+            form, QStringLiteral("spacing"), tr("Spacing"),
+            [pattern](const model::Feature& g) { return pattern(g).layout().spacing; },
+            [](model::Feature& g, double v) { static_cast<PatternFeature&>(g).setNumber("spacing", v); });
+        addCount("count2", tr("Rows"), tr("How many rows, for a grid: 1 for one row."),
+                 &PatternLayout::count2);
+        addVec3(
+            form, QStringLiteral("direction2"), tr("Rows go"), false,
+            [pattern](const model::Feature& g) { return pattern(g).layout().direction2; },
+            [](model::Feature& g, kernel::Vec3 v) {
+                auto& p = static_cast<PatternFeature&>(g);
+                auto l = p.layout();
+                l.direction2 = v;
+                p.setLayout(l);
+            },
+            false);
+        addNumber(
+            form, QStringLiteral("spacing2"), tr("Row spacing"),
+            [pattern](const model::Feature& g) { return pattern(g).layout().spacing2; },
+            [](model::Feature& g, double v) { static_cast<PatternFeature&>(g).setNumber("spacing2", v); });
+        addVec3(
+            form, QStringLiteral("axis"), tr("Axis"), false,
+            [pattern](const model::Feature& g) { return pattern(g).layout().axis; },
+            [](model::Feature& g, kernel::Vec3 v) {
+                auto& p = static_cast<PatternFeature&>(g);
+                auto l = p.layout();
+                l.axis = v;
+                p.setLayout(l);
+            },
+            false);
+        addVec3(
+            form, QStringLiteral("center"), tr("Axis through"), false,
+            [pattern](const model::Feature& g) { return pattern(g).layout().center; },
+            [](model::Feature& g, kernel::Vec3 v) {
+                auto& p = static_cast<PatternFeature&>(g);
+                auto l = p.layout();
+                l.center = v;
+                p.setLayout(l);
+            });
+        auto* angle = new QDoubleSpinBox(form_);
+        angle->setObjectName(QStringLiteral("angle"));
+        angle->setDecimals(1);
+        angle->setRange(0.1, 360.0);
+        angle->setSuffix(QStringLiteral("°"));
+        angle->setKeyboardTracking(false);
+        angle->setToolTip(tr("The angle they spread over: 360 for evenly all the way round."));
+        form->addRow(tr("Angle"), angle);
+        connect(angle, &QDoubleSpinBox::valueChanged, this, [relayout](double degrees) {
+            relayout(QStringLiteral("angle"),
+                     [degrees](PatternLayout& l) { l.angle = degrees * std::numbers::pi / 180.0; });
+        });
+
+        // Show the rows that fit a row or a circle.
+        updaters_.push_back([this, form, pattern, kind, angle](const model::Feature& g) {
+            const auto& l = pattern(g).layout();
+            kind->setCurrentIndex(kind->findData(static_cast<int>(l.kind)));
+            angle->setValue(l.angle * 180.0 / std::numbers::pi);
+            const bool row = l.kind == PatternLayout::Kind::Linear;
+            auto show = [&](const char* key, bool on) {
+                // A box of its own, or the first of an x, y, z row's boxes.
+                auto* w = form_->findChild<QWidget*>(QLatin1String(key));
+                if (!w) {
+                    if (auto* x = form_->findChild<QWidget*>(QLatin1String(key) + QStringLiteral(".x")))
+                        w = x->parentWidget();
+                }
+                if (w) form->setRowVisible(w, on);
+            };
+            for (const char* key : {"direction", "spacing", "count2", "direction2", "spacing2"})
+                show(key, row);
+            show("direction2", row && l.count2 > 1);
+            show("spacing2", row && l.count2 > 1);
+            for (const char* key : {"axis", "center", "angle"}) show(key, !row);
+        });
     }
 
     // A sketch step's sketch, by name.

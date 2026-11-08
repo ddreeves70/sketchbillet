@@ -1,0 +1,173 @@
+{
+  "name": "pattern-bolt-ring",
+  "description": "A ring of six 3.4 mm bolt holes 20 mm from the middle of a 60 x 60 x 5 mm plate, as a circular Pattern makes it: one pin, turned 60 degrees at a time about the z axis, cut each time. Worked out by hand: volume 18000 - 6 pi 1.7^2 5 = 17727.623917 mm^3; area 8400, less twelve 1.7 mm circles (12 pi 1.7^2), plus six walls (6 x 2 pi 1.7 x 5) = 8611.492017 mm^2.",
+  "steps": [
+    {
+      "id": "plate",
+      "op": "box",
+      "corner": [
+        -30,
+        -30,
+        0
+      ],
+      "size": [
+        60,
+        60,
+        5
+      ]
+    },
+    {
+      "id": "pin",
+      "op": "cylinder",
+      "base": [
+        20,
+        0,
+        -1
+      ],
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "radius": 1.7,
+      "height": 7
+    },
+    {
+      "id": "h1",
+      "op": "cut",
+      "a": "plate",
+      "b": "pin"
+    },
+    {
+      "id": "pin2",
+      "op": "move",
+      "body": "pin",
+      "turn": 60,
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "about": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "h2",
+      "op": "cut",
+      "a": "h1",
+      "b": "pin2"
+    },
+    {
+      "id": "pin3",
+      "op": "move",
+      "body": "pin",
+      "turn": 120,
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "about": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "h3",
+      "op": "cut",
+      "a": "h2",
+      "b": "pin3"
+    },
+    {
+      "id": "pin4",
+      "op": "move",
+      "body": "pin",
+      "turn": 180,
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "about": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "h4",
+      "op": "cut",
+      "a": "h3",
+      "b": "pin4"
+    },
+    {
+      "id": "pin5",
+      "op": "move",
+      "body": "pin",
+      "turn": 240,
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "about": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "h5",
+      "op": "cut",
+      "a": "h4",
+      "b": "pin5"
+    },
+    {
+      "id": "pin6",
+      "op": "move",
+      "body": "pin",
+      "turn": 300,
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "about": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "h6",
+      "op": "cut",
+      "a": "h5",
+      "b": "pin6"
+    }
+  ],
+  "expect": {
+    "valid": true,
+    "volume": 17727.623917,
+    "area": 8611.492017,
+    "bounds": [
+      [
+        -30.0,
+        -30.0,
+        0.0
+      ],
+      [
+        30.0,
+        30.0,
+        5.0
+      ]
+    ],
+    "solids": 1,
+    "faces": 12,
+    "edges": 30,
+    "vertices": 20
+  }
+}

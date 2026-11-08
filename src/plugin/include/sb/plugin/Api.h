@@ -115,7 +115,11 @@ class PluginContext;
 /// Version 40 added holes: sb/model/Holes.h (model::HoleFeature,
 /// model::HolePlacement, model::HoleKind, model::HoleFit, model::ScrewSize,
 /// model::screwSizes()), FeatureType::Hole and the feature.add_hole command.
-inline constexpr int kPluginApiVersion = 40;
+/// Version 41 added patterns: sb/model/Pattern.h (model::PatternFeature,
+/// model::PatternLayout, model::patternMotions()), FeatureType::Pattern, the
+/// feature.add_pattern command, and model::StepTool (FeatureResult::tools and
+/// Built::tools: what a join, cut or hole step added or took away).
+inline constexpr int kPluginApiVersion = 41;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.
