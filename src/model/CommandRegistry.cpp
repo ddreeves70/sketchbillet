@@ -500,6 +500,104 @@ CommandRegistry makeBuiltin() {
               return std::make_unique<AddFeatureCommand>(std::move(step));
           });
 
+    r.add(
+        {"feature.add_revolve",
+         "Revolve",
+         "Turns every closed shape of a sketch around a line in the sketch, making a solid like a knob, a "
+         "wheel or a vase. The shapes may touch the line but not cross it. The solid can be a new body, or "
+         "join onto a body, or be cut out of one (a groove).",
+         {{"sketch", ArgType::FeatureRef, "The sketch, like Sketch1.", true, {}},
+          {"axis",
+           ArgType::Text,
+           "The line to turn about: x or y (the sketch's axes), or a line of the sketch, like Line5. Default "
+           "the sketch's helper line, if it has just one; otherwise y.",
+           false,
+           {}},
+          {"angle",
+           ArgType::Number,
+           "How far to turn, in degrees: more than 0, at most 360. Default 360.",
+           false,
+           {}},
+          {"side",
+           ArgType::Choice,
+           "Which way: one (the right-hand way about the axis), flip (the other way) or both (half each "
+           "way). Default one.",
+           false,
+           {"one", "flip", "both"}},
+          {"operation",
+           ArgType::Choice,
+           "new (a body of its own), join (added to a body) or cut (taken out of a body). Default join for "
+           "a sketch on a face of a body, otherwise new.",
+           false,
+           {"new", "join", "cut"}},
+          {"body",
+           ArgType::FeatureRef,
+           "For join or cut: the body, like Box1. Default the body the sketch is on.",
+           false,
+           {}},
+          {"name", ArgType::Text, "Step name. Default Revolve1, Revolve2, ...", false, {}}}},
+        [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+            const auto* sketch = dynamic_cast<const SketchFeature*>(doc.find(argFeature(a, "sketch")));
+            auto problem = [](std::string code, std::string message) {
+                return std::make_unique<ProblemCommand>(
+                    Diagnostic{std::move(code), Severity::Error, std::move(message), {}});
+            };
+            if (!sketch) return problem("revolve.sketch", "Revolve needs a sketch, like sketch=Sketch1.");
+            // The axis: x, y, a line by name, or the only helper line.
+            RevolveAxis axis;
+            const std::string axisText = argText(a, "axis", "");
+            const auto& entities = sketch->sketch().entities;
+            if (axisText == "x" || axisText == "X") {
+                axis.kind = RevolveAxis::Kind::X;
+            } else if (axisText == "y" || axisText == "Y") {
+                axis.kind = RevolveAxis::Kind::Y;
+            } else if (!axisText.empty()) {
+                const auto it = std::find_if(entities.begin(), entities.end(),
+                                             [&](const sketch::Entity& e) { return e.name == axisText; });
+                if (it == entities.end() || !std::holds_alternative<sketch::LineShape>(it->shape)) {
+                    return problem("revolve.axis",
+                                   sketch->name() + " has no line called " + axisText +
+                                       ". Use x or y (the sketch's axes), or a line of the sketch, like "
+                                       "axis=Line1.");
+                }
+                axis = {RevolveAxis::Kind::Line, it->id};
+            } else {
+                const sketch::Entity* helper = nullptr;
+                int helpers = 0;
+                for (const auto& e : entities) {
+                    if (e.construction && std::holds_alternative<sketch::LineShape>(e.shape)) {
+                        helper = &e;
+                        ++helpers;
+                    }
+                }
+                if (helpers == 1) axis = {RevolveAxis::Kind::Line, helper->id};
+            }
+            const double degrees = a.count("angle") ? argNumber(a, "angle") : 360.0;
+            const bool onFace = sketch->face().has_value();
+            const std::string op = argText(a, "operation", onFace ? "join" : "new");
+            const auto operation = op == "join"  ? ExtrudeOp::Join
+                                   : op == "cut" ? ExtrudeOp::Cut
+                                                 : ExtrudeOp::NewBody;
+            const std::string side = argText(a, "side", "one");
+            FeatureId body = argFeature(a, "body");
+            if (body.isNil() && onFace) body = sketch->face()->body;
+            if (body.isNil() && operation != ExtrudeOp::NewBody) {
+                return problem(
+                    "revolve.no_body",
+                    std::string("To ") + (operation == ExtrudeOp::Join ? "join" : "cut") +
+                        ", say which body with body=, like body=Box1, or draw the sketch on a face "
+                        "of the body.");
+            }
+            auto step =
+                std::make_unique<RevolveFeature>(argText(a, "name", doc.uniqueName("Revolve")), sketch->id(),
+                                                 axis, degrees * std::numbers::pi / 180.0);
+            step->setSide(side == "flip"   ? ExtrudeSide::Flip
+                          : side == "both" ? ExtrudeSide::Both
+                                           : ExtrudeSide::One);
+            step->setOperation(operation, body);
+            return std::make_unique<AddFeatureCommand>(std::move(step));
+        });
+
     for (const bool fillet : {true, false}) {
         const std::string word = fillet ? "Fillet" : "Chamfer";
         const std::string size = fillet ? "radius" : "distance";
@@ -1291,7 +1389,7 @@ CommandRegistry makeBuiltin() {
              ArgType::Text,
              "Which number: distance (extrude); size_x, size_y, size_z, corner_x, corner_y, corner_z (box); "
              "radius, height, base_x, base_y, base_z (cylinder); offset_x, offset_y, offset_z, center_x, "
-             "center_y, center_z, angle (move).",
+             "center_y, center_z, angle (move or revolve).",
              true,
              {}},
             {"value", ArgType::Number, "Its new number: mm, or degrees for an angle.", false, {}},

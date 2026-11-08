@@ -16,12 +16,12 @@ works in either.
 
 | You can do now | Coming next |
 | --- | --- |
-| Boxes, cylinders, union, cut, intersect | Revolve; pulling a face of a solid |
+| Boxes, cylinders, union, cut, intersect | Pulling a face of a solid |
 | Sketches with constraints and dimensions, drawn in the app or with `sketchbillet_cli` | |
-| Extrude a sketch into a solid | |
+| Extrude a sketch into a solid; revolve one around a line, for round parts | |
 | Fillet and chamfer edges, picked in the 3D view; they stay on the same edges when earlier steps change | |
 | Sketch on a flat face of a body; the sketch follows the face | |
-| Extrude that joins onto a body or cuts into it (a peg, a pocket) | Revolve |
+| Extrude and revolve that join onto a body or cut into it (a peg, a pocket, a groove) | |
 | Name, rename and delete steps; undo and redo | |
 | Move and turn bodies; copy, paste and duplicate steps; turn steps off; folders | |
 | The desktop app: 3D viewer with 1, 2 or 4 panes, feature tree, Properties, layouts | |
@@ -42,13 +42,14 @@ works in either.
 7. [Moving bodies](moving.md): slide and turn a body.
 8. [Sketches](sketches.md): flat drawings with constraints and dimensions.
 9. [Extrude](extrude.md): turn a sketch into a solid.
-10. [Sketching on a face](sketch-on-face.md): draw on the top or side of a body.
-11. [Fillet and chamfer](fillet-chamfer.md): round or bevel edges.
-12. [Materials](materials.md): what a body is made of, its mass, weight and cost.
-13. [Parameters](parameters.md): named values like `wall = 3 mm`, and formulas that use them.
-14. [Files](files.md): saving, opening, and exporting for 3D printing.
-15. [Plugins](plugins.md): adding features to SketchBillet.
-16. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
+10. [Revolve](revolve.md): turn a sketch around a line, for round parts.
+11. [Sketching on a face](sketch-on-face.md): draw on the top or side of a body.
+12. [Fillet and chamfer](fillet-chamfer.md): round or bevel edges.
+13. [Materials](materials.md): what a body is made of, its mass, weight and cost.
+14. [Parameters](parameters.md): named values like `wall = 3 mm`, and formulas that use them.
+15. [Files](files.md): saving, opening, and exporting for 3D printing.
+16. [Plugins](plugins.md): adding features to SketchBillet.
+17. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
 
 ## Other guides
 

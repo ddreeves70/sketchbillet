@@ -104,6 +104,24 @@ void registerModeling(plugin::PluginContext& ctx) {
             const auto* f = doc && sel.features().size() == 1 ? doc->find(sel.features()[0]) : nullptr;
             return f && f->type() == model::FeatureType::Sketch;
         }});
+    // Revolve: the one sketch picked, turned all the way round its y axis (or its
+    // only helper line).
+    ctx.addAction(ActionSpec{
+        .id = "sb.modeling.revolve",
+        .text = "Revolve",
+        .menu = "Create",
+        .command = "feature.add_revolve",
+        .fromSelection = {"sketch"},
+        .toolbar = true,
+        .icon = std::string(icons::modeling::revolve_svg),
+        .tip = "Turn the picked sketch's closed shapes all the way round a line, like a lathe: its y axis, "
+               "or its helper line. Change the axis and angle in Properties.",
+        .enabled = [&ctx] {
+            const auto& sel = ctx.selection();
+            const auto* doc = ctx.documents().find(sel.doc());
+            const auto* f = doc && sel.features().size() == 1 ? doc->find(sel.features()[0]) : nullptr;
+            return f && f->type() == model::FeatureType::Sketch;
+        }});
     // Fillet and Chamfer: the picked edges of one body. With none picked, the
     // first click starts picking edges.
     ctx.addAction(ActionSpec{

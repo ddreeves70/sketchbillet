@@ -289,3 +289,6 @@ takes about 15 minutes.
 - Steps that use a sketch rebuild when it changes: `sketch.set_value` changes one
   dimension, and the part follows.
 
+
+Next: [Tutorial 4](04-spinning-top.md) makes a round part by turning a sketch
+instead of sweeping it.

@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
+#include <numbers>
 #include <utility>
 
 #include "sb/sketch/Profiles.h"
@@ -251,63 +253,72 @@ Built extrudeFailed(std::string code, std::string message) {
 
 }  // namespace
 
-Built ExtrudeFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) const {
-    if (!(distance_ > 0)) {
-        return extrudeFailed("extrude.distance",
-                             "Extrude needs a distance greater than 0 mm. Type one in Properties, like 10.");
-    }
-    const FeatureResult* r = earlier.resultOf(sketch_);
+namespace {
+
+// A sketch step's solved sketch and its closed shapes, or why it can't be used
+// (`failure` set): not solved yet, or no closed shape. `verb` is "extrude" or
+// "revolve", for codes and messages.
+struct SketchShapes {
+    sketch::Sketch solved;
+    sketch::Profiles found;
+    PlaneAxes axes;
+    std::optional<Built> failure;
+};
+
+SketchShapes shapesOf(const ResultLookup& earlier, const FeatureId& sketchId, const std::string& verb,
+                      const std::string& Verb) {
+    SketchShapes out;
+    const FeatureResult* r = earlier.resultOf(sketchId);
     if (!r || !r->sketch || !r->sketch->ok() || !r->plane) {
         // Rebuilds block this step first; this is only for callers that don't.
-        return extrudeFailed("extrude.sketch", "Extrude needs a sketch that solved. Fix the sketch first.");
+        out.failure =
+            extrudeFailed(verb + ".sketch", Verb + " needs a sketch that solved. Fix the sketch first.");
+        return out;
     }
-    const sketch::Sketch solved{r->sketch->entities, {}};
-    const auto found = sketch::findProfiles(solved);
-    if (found.shapes.empty()) {
-        std::string why = "The sketch has no closed shape to extrude.";
-        if (!found.openEnds.empty()) {
+    out.solved = sketch::Sketch{r->sketch->entities, {}};
+    out.axes = *r->plane;
+    out.found = sketch::findProfiles(out.solved);
+    if (out.found.shapes.empty()) {
+        std::string why = "The sketch has no closed shape to " + verb + ".";
+        if (!out.found.openEnds.empty()) {
             std::string ends;
-            for (const auto& end : found.openEnds) {
-                const auto* e = solved.find(end.entity);
+            for (const auto& end : out.found.openEnds) {
+                const auto* e = out.solved.find(end.entity);
                 ends += (ends.empty() ? "" : ", ") + (e ? e->name : std::string("?")) + "'s " +
                         (end.role == sketch::PointRole::Start ? "start" : "end");
             }
             why += " These ends aren't joined: " + ends + ". Join them so the lines go all the way round.";
-        } else if (!found.issues.empty()) {
-            why += " " + found.issues.front().message;
+        } else if (!out.found.issues.empty()) {
+            why += " " + out.found.issues.front().message;
         } else {
             why += " Draw a closed shape in it, like a rectangle or a circle.";
         }
-        return extrudeFailed("extrude.no_shape", why);
+        out.failure = extrudeFailed(verb + ".no_shape", why);
     }
+    return out;
+}
 
-    // Which way: the sketch's front (the side it's seen from) unless flipped; for
-    // both sides, start half the distance behind the sketch.
-    const PlaneAxes axes = *r->plane;
-    const kernel::Vec3 n{axes.x.y * axes.y.z - axes.x.z * axes.y.y, axes.x.z * axes.y.x - axes.x.x * axes.y.z,
-                         axes.x.x * axes.y.y - axes.x.y * axes.y.x};
-    const double sign = side_ == ExtrudeSide::Flip ? -1 : 1;
-    const kernel::Vec3 sweep{n.x * distance_ * sign, n.y * distance_ * sign, n.z * distance_ * sign};
-    const double back = side_ == ExtrudeSide::Both ? -distance_ / 2 : 0;
-    const kernel::Plane plane{
-        {axes.origin.x + n.x * back, axes.origin.y + n.y * back, axes.origin.z + n.z * back}, axes.x, axes.y};
-
-    // Names: each side for the sketch curve it was swept from ("side:<curve>"),
-    // and each shape's ends for its outline ("start:<curve>", "end:<curve>", with
-    // the outline curve whose id comes first).
-    const std::string me = shortId(id().toString());
+// Makes each closed shape's face on `plane` and sweeps it with `sweep` (extrude
+// or revolve), naming the faces: each side for the sketch curve it was swept
+// from ("side:<curve>"), and each shape's ends for its outline ("start:<curve>",
+// "end:<curve>", with the outline curve whose id comes first). Several shapes
+// make one body.
+Built sweepShapes(kernel::IKernel& kernel, const SketchShapes& shapes, const kernel::Plane& plane,
+                  const FeatureId& id,
+                  const std::function<kernel::OpResult(const kernel::ShapeHandle&)>& sweep) {
+    const std::string me = shortId(id.toString());
     Built out;
-    for (const auto& shape : found.shapes) {
+    for (const auto& shape : shapes.found.shapes) {
         std::vector<EntityId> curves;
-        kernel::Profile2 profile{toKernel(shape.outer, solved, curves), {}};
+        kernel::Profile2 profile{toKernel(shape.outer, shapes.solved, curves), {}};
         const std::string outline = shortId(std::min_element(curves.begin(), curves.end())->toString());
-        for (const auto& hole : shape.holes) profile.holes.push_back(toKernel(hole, solved, curves));
+        for (const auto& hole : shape.holes) profile.holes.push_back(toKernel(hole, shapes.solved, curves));
         auto face = kernel.makeFace(profile, plane);
         if (!face.ok()) return {face, nullptr};
-        auto solid = kernel.extrude(face.shape, sweep);
+        auto solid = sweep(face.shape);
         if (!solid.ok()) return {solid, nullptr};
         const auto& edgeCurves = face.history.edges;
-        auto named = carried(kernel, std::move(solid), {}, id(), [&](const kernel::Origin& o) -> std::string {
+        auto named = carried(kernel, std::move(solid), {}, id, [&](const kernel::Origin& o) -> std::string {
             switch (o.kind) {
                 case kernel::OriginKind::Start:
                     return me + "/start:" + outline;
@@ -323,49 +334,163 @@ Built ExtrudeFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier
                     return {};
             }
         });
-        // Several shapes make one body.
         if (out.op.shape.valid()) {
             auto joined = kernel.boolean(kernel::BoolOp::Union, out.op.shape, named.op.shape);
             if (!joined.ok()) return {joined, nullptr};
-            named = carried(kernel, std::move(joined), {out.names.get(), named.names.get()}, id());
+            named = carried(kernel, std::move(joined), {out.names.get(), named.names.get()}, id);
         }
         out = std::move(named);
     }
-    // Join onto a body, or cut out of it: every face keeps its name.
-    if (op_ != ExtrudeOp::NewBody) {
-        const auto* target = earlier.shapeOf(body_);
-        if (!target) {
-            return extrudeFailed("extrude.no_body", name() + " needs a body to " +
-                                                        (op_ == ExtrudeOp::Join ? "join onto" : "cut from") +
-                                                        ". Pick one in Properties, or make it a new body.");
-        }
-        const bool cut = op_ == ExtrudeOp::Cut;
-        auto combined =
-            kernel.boolean(cut ? kernel::BoolOp::Cut : kernel::BoolOp::Union, *target, out.op.shape);
-        if (!combined.ok()) {
-            return extrudeFailed(
-                "extrude.combine_failed",
-                name() + (cut ? " couldn't cut its shape out of the body." : " couldn't join the body.") +
-                    " Check that they touch, or try another distance.");
-        }
-        Diagnostics notes;
-        if (cut &&
-            std::abs(kernel.massProps(combined.shape).volume - kernel.massProps(*target).volume) < 1e-9) {
-            // A cut that misses changes nothing: usually it goes the wrong way.
-            notes.push_back({"extrude.cut_missed",
-                             Severity::Warning,
-                             name() +
-                                 " doesn't reach the body, so nothing was cut. Try Flip, to go into it, or a "
-                                 "longer distance.",
-                             {}});
-        }
-        auto named = carried(kernel, std::move(combined), {namesOf(earlier, body_), out.names.get()}, id());
-        named.op.issues.insert(named.op.issues.end(), notes.begin(), notes.end());
-        out = std::move(named);
+    return out;
+}
+
+// Joins a swept solid onto a body, or cuts it out of one; every face keeps its
+// name. `verb` ("extrude" or "revolve") starts the codes; `tryHint` says what to
+// change when it doesn't work or a cut misses.
+Built combineWithBody(kernel::IKernel& kernel, const ResultLookup& earlier, Built out, ExtrudeOp op,
+                      const FeatureId& body, const std::string& name, const FeatureId& id,
+                      const std::string& verb, const std::string& tryHint, const std::string& missHint) {
+    const auto* target = earlier.shapeOf(body);
+    if (!target) {
+        return extrudeFailed(verb + ".no_body", name + " needs a body to " +
+                                                    (op == ExtrudeOp::Join ? "join onto" : "cut from") +
+                                                    ". Pick one in Properties, or make it a new body.");
     }
-    // Pieces that weren't in any shape (three lines meeting, shapes crossing) are worth knowing about.
-    for (const auto& d : found.issues)
+    const bool cut = op == ExtrudeOp::Cut;
+    auto combined = kernel.boolean(cut ? kernel::BoolOp::Cut : kernel::BoolOp::Union, *target, out.op.shape);
+    if (!combined.ok()) {
+        return extrudeFailed(
+            verb + ".combine_failed",
+            name + (cut ? " couldn't cut its shape out of the body." : " couldn't join the body.") +
+                " Check that they touch, or " + tryHint + ".");
+    }
+    Diagnostics notes;
+    if (cut && std::abs(kernel.massProps(combined.shape).volume - kernel.massProps(*target).volume) < 1e-9) {
+        // A cut that misses changes nothing: usually it goes the wrong way.
+        notes.push_back({verb + ".cut_missed",
+                         Severity::Warning,
+                         name + " doesn't reach the body, so nothing was cut. " + missHint,
+                         {}});
+    }
+    auto named = carried(kernel, std::move(combined), {namesOf(earlier, body), out.names.get()}, id);
+    named.op.issues.insert(named.op.issues.end(), notes.begin(), notes.end());
+    return named;
+}
+
+// Pieces that weren't in any shape (three lines meeting, shapes crossing) are worth knowing about.
+void addShapeNotes(Built& out, const SketchShapes& shapes) {
+    for (const auto& d : shapes.found.issues)
         out.op.issues.push_back({d.code, Severity::Warning, d.message, d.detail});
+}
+
+kernel::Vec3 cross(const kernel::Vec3& a, const kernel::Vec3& b) {
+    return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
+}
+
+}  // namespace
+
+Built ExtrudeFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) const {
+    if (!(distance_ > 0)) {
+        return extrudeFailed("extrude.distance",
+                             "Extrude needs a distance greater than 0 mm. Type one in Properties, like 10.");
+    }
+    const auto shapes = shapesOf(earlier, sketch_, "extrude", "Extrude");
+    if (shapes.failure) return *shapes.failure;
+
+    // Which way: the sketch's front (the side it's seen from) unless flipped; for
+    // both sides, start half the distance behind the sketch.
+    const PlaneAxes& axes = shapes.axes;
+    const kernel::Vec3 n = cross(axes.x, axes.y);
+    const double sign = side_ == ExtrudeSide::Flip ? -1 : 1;
+    const kernel::Vec3 sweep{n.x * distance_ * sign, n.y * distance_ * sign, n.z * distance_ * sign};
+    const double back = side_ == ExtrudeSide::Both ? -distance_ / 2 : 0;
+    const kernel::Plane plane{
+        {axes.origin.x + n.x * back, axes.origin.y + n.y * back, axes.origin.z + n.z * back}, axes.x, axes.y};
+
+    Built out = sweepShapes(kernel, shapes, plane, id(),
+                            [&](const kernel::ShapeHandle& face) { return kernel.extrude(face, sweep); });
+    if (!out.op.ok()) return out;
+    if (op_ != ExtrudeOp::NewBody) {
+        out = combineWithBody(kernel, earlier, std::move(out), op_, body_, name(), id(), "extrude",
+                              "try another distance", "Try Flip, to go into it, or a longer distance.");
+        if (!out.op.ok()) return out;
+    }
+    addShapeNotes(out, shapes);
+    return out;
+}
+
+RevolveFeature::RevolveFeature(std::string name, FeatureId sketch, RevolveAxis axis, double angle)
+    : Feature(std::move(name)), sketch_(sketch), axis_(axis), angle_(angle) {}
+
+RevolveFeature::RevolveFeature(FeatureId id, std::string name, FeatureId sketch, RevolveAxis axis,
+                               double angle)
+    : Feature(id, std::move(name)), sketch_(sketch), axis_(axis), angle_(angle) {}
+
+Built RevolveFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) const {
+    constexpr double kFull = 2 * std::numbers::pi;
+    if (!(angle_ > 0) || angle_ > kFull + 1e-9) {
+        return extrudeFailed(
+            "revolve.angle",
+            "Revolve needs an angle more than 0 degrees and at most 360 degrees. Type one in "
+            "Properties, like 360 for a full turn.");
+    }
+    const auto shapes = shapesOf(earlier, sketch_, "revolve", "Revolve");
+    if (shapes.failure) return *shapes.failure;
+
+    // The line, in the sketch, then in the design.
+    sketch::Point2 from{0, 0}, to{0, 1};
+    if (axis_.kind == RevolveAxis::Kind::X) {
+        to = {1, 0};
+    } else if (axis_.kind == RevolveAxis::Kind::Line) {
+        const auto* e = shapes.solved.find(axis_.line);
+        const auto* line = e ? std::get_if<sketch::LineShape>(&e->shape) : nullptr;
+        if (!line) {
+            return extrudeFailed("revolve.no_axis",
+                                 name() +
+                                     " can't find the line it turns about: it was deleted from the sketch. "
+                                     "Pick an axis for it in Properties.");
+        }
+        from = line->start;
+        to = line->end;
+        if (std::hypot(to.x - from.x, to.y - from.y) < 1e-9) {
+            return extrudeFailed("revolve.no_axis", name() + "'s axis, " + e->name +
+                                                        ", has no length, so it has no direction. Pick "
+                                                        "another axis in Properties.");
+        }
+    }
+    const PlaneAxes& axes = shapes.axes;
+    const kernel::Vec3 p = toDesign(axes, from), q = toDesign(axes, to);
+    kernel::Vec3 dir{q.x - p.x, q.y - p.y, q.z - p.z};
+    if (side_ == ExtrudeSide::Flip) dir = {-dir.x, -dir.y, -dir.z};
+
+    // For both ways, the sketch's plane is turned back half the angle first (the
+    // axis lies in it, so it stays put).
+    kernel::Plane plane{axes.origin, axes.x, axes.y};
+    if (side_ == ExtrudeSide::Both) {
+        const double len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+        const kernel::Vec3 k{dir.x / len, dir.y / len, dir.z / len};
+        const double a = -angle_ / 2, c = std::cos(a), s = std::sin(a);
+        // Rodrigues' formula: v turned by a about k.
+        auto turn = [&](const kernel::Vec3& v) {
+            const auto kv = cross(k, v);
+            const double d = (k.x * v.x + k.y * v.y + k.z * v.z) * (1 - c);
+            return kernel::Vec3{v.x * c + kv.x * s + k.x * d, v.y * c + kv.y * s + k.y * d,
+                                v.z * c + kv.z * s + k.z * d};
+        };
+        const kernel::Vec3 o = turn({axes.origin.x - p.x, axes.origin.y - p.y, axes.origin.z - p.z});
+        plane = {{p.x + o.x, p.y + o.y, p.z + o.z}, turn(axes.x), turn(axes.y)};
+    }
+
+    Built out = sweepShapes(kernel, shapes, plane, id(), [&](const kernel::ShapeHandle& face) {
+        return kernel.revolve(face, p, dir, std::min(angle_, kFull));
+    });
+    if (!out.op.ok()) return out;
+    if (op_ != ExtrudeOp::NewBody) {
+        out = combineWithBody(kernel, earlier, std::move(out), op_, body_, name(), id(), "revolve",
+                              "try another axis or angle", "Check its axis, or try Flip.");
+        if (!out.op.ok()) return out;
+    }
+    addShapeNotes(out, shapes);
     return out;
 }
 
@@ -477,6 +602,21 @@ std::optional<double> ExtrudeFeature::number(std::string_view key) const {
 bool ExtrudeFeature::setNumber(std::string_view key, double value) {
     if (key != "distance") return false;
     distance_ = value;
+    return true;
+}
+
+std::vector<StepNumber> RevolveFeature::numbers() const {
+    return {{"angle", kAngle, true}};
+}
+
+std::optional<double> RevolveFeature::number(std::string_view key) const {
+    if (key == "angle") return angle_;
+    return std::nullopt;
+}
+
+bool RevolveFeature::setNumber(std::string_view key, double value) {
+    if (key != "angle") return false;
+    angle_ = value;
     return true;
 }
 

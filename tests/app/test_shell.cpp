@@ -254,7 +254,7 @@ TEST_CASE("every toolbar button has a picture", "[app][icons]") {
         CHECK_FALSE(a->icon().pixmap(24, 24).isNull());
     }
     CHECK(buttons ==
-          5 + 9 + 2 + 11 + 15);  // SketchBillet's own, sb.modeling, sb.sketcher, sketch tools, constraints
+          5 + 10 + 2 + 11 + 15);  // SketchBillet's own, sb.modeling, sb.sketcher, sketch tools, constraints
     // The menu item shows the same picture as its button.
     CHECK_FALSE(app.shell->action("sb.modeling.box")->icon().isNull());
 }
@@ -1444,6 +1444,76 @@ TEST_CASE("Create > Extrude makes a solid from the picked sketch; Properties cha
     CHECK(docs.kernel()->bounds(*solid()).min.z == Approx(-2.5));
     CHECK(docs.kernel()->bounds(*solid()).max.z == Approx(2.5));
     CHECK(app.field<QLabel>("sketch")->text() == QStringLiteral("Sketch1"));
+}
+
+TEST_CASE("Create > Revolve turns the picked sketch; Properties changes its axis, angle and side",
+          "[app][revolve]") {
+    App app;
+    auto& docs = app.host.documents();
+    const auto doc = app.shell->activeDesign();
+    REQUIRE(docs.run(doc, "feature.add_sketch", {}).empty());
+    const auto sketchId = app.doc().featureAt(0).id();
+    // A 5 x 20 mm rectangle, 10 mm right of the sketch's y axis.
+    REQUIRE(docs.run(doc, "sketch.add_rectangle",
+                     {{"sketch", sketchId}, {"from", sketch::Point2{10, 0}}, {"to", sketch::Point2{15, 20}}})
+                .empty());
+    settle();
+    auto* revolve = app.shell->action("sb.modeling.revolve");
+    REQUIRE(revolve);
+    CHECK_FALSE(revolve->isEnabled());  // nothing picked
+    app.pickRows({0});
+    REQUIRE(revolve->isEnabled());
+    app.click("sb.modeling.revolve");
+    REQUIRE(app.doc().featureCount() == 2);
+    const auto id = app.doc().featureAt(1).id();
+    CHECK(app.doc().featureAt(1).name() == "Revolve1");
+    auto solid = [&] { return docs.lastRebuild(doc)->shapeOf(id); };
+    REQUIRE(solid());
+    CHECK(docs.kernel()->massProps(*solid()).volume == Approx(std::numbers::pi * 125 * 20));  // a tube
+
+    // Properties: the new step is picked, so its fields show.
+    CHECK(app.field<QLabel>("sketch")->text() == QStringLiteral("Sketch1"));
+    auto* axis = app.field<QComboBox>("axis");
+    REQUIRE(axis);
+    CHECK(axis->currentText() == QStringLiteral("Sketch's y axis"));
+    CHECK(axis->count() == 2 + 4);  // the two axes and the rectangle's four lines
+    auto* angle = app.field<QDoubleSpinBox>("angle");
+    REQUIRE(angle);
+    CHECK(angle->value() == Approx(360));
+
+    // Half a turn, in degrees: half the tube, one undo step.
+    angle->setValue(180);
+    settle();
+    CHECK(docs.kernel()->massProps(*solid()).volume == Approx(std::numbers::pi * 125 * 10));
+    CHECK(app.doc().undoLabel() == "Edit Revolve1");
+    // +x turns toward -z; flipped, toward +z.
+    CHECK(docs.kernel()->bounds(*solid()).max.z == Approx(0).margin(1e-6));
+    auto* side = app.field<QComboBox>("side");
+    REQUIRE(side);
+    side->setCurrentIndex(1);
+    emit side->activated(1);
+    settle();
+    CHECK(docs.kernel()->bounds(*solid()).min.z == Approx(0).margin(1e-6));
+
+    // About Line4 (the rectangle's left side, x = 10): a solid half rod 5 mm round.
+    const int line4 = axis->findText(QStringLiteral("Line4"));
+    REQUIRE(line4 >= 0);
+    axis->setCurrentIndex(line4);
+    emit axis->activated(line4);
+    settle();
+    const auto& step = static_cast<const model::RevolveFeature&>(*app.doc().find(id));
+    CHECK(step.axis().kind == model::RevolveAxis::Kind::Line);
+    CHECK(docs.kernel()->massProps(*solid()).volume == Approx(std::numbers::pi * 25 * 20 / 2));
+    CHECK(app.field<QComboBox>("axis")->currentText() == QStringLiteral("Line4"));
+
+    // The sketch's x axis: the rectangle sits on it, so it turns into half a rod
+    // 20 mm round and 5 mm long.
+    const int x = axis->findData(QStringLiteral("x"));
+    axis->setCurrentIndex(x);
+    emit axis->activated(x);
+    settle();
+    REQUIRE(docs.lastRebuild(doc)->result(id)->status == model::FeatureStatus::Ok);
+    CHECK(docs.kernel()->massProps(*solid()).volume == Approx(std::numbers::pi * 400 * 5 / 2));
 }
 
 TEST_CASE("Paste explains when the clipboard has no steps", "[app][copy]") {

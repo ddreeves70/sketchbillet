@@ -36,7 +36,7 @@ sketch-entity ids are shortened to their first 8 characters.
 | --- | --- |
 | Box | `left`, `right`, `front`, `back`, `bottom`, `top` (by which way each faces) |
 | Cylinder | `side`, `bottom`, `top` (top is where the axis points) |
-| Extrude | `side:<curve>` for each side, from the sketch line, arc, circle or spline it was swept from; `start:<curve>` and `end:<curve>` for each shape's ends, after the outline curve whose id comes first |
+| Extrude, Revolve | `side:<curve>` for each side, from the sketch line, arc, circle or spline it was swept from; `start:<curve>` and `end:<curve>` for each shape's ends, after the outline curve whose id comes first |
 | Boolean, Move | Each face keeps the name it had on its body. Faces merged into one get their names joined by `+` |
 | Fillet, Chamfer | Faces it kept keep their names; each round or bevel is `round:<edge>` or `bevel:<edge>`, after the edge it replaced; a corner where several meet is `corner:<vertex>` |
 | Anything else | `<step>/new` |

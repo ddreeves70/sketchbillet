@@ -31,6 +31,7 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`sketch.set_value`](#sketchset_value) | Changes a dimension |
 | [`sketch.delete`](#sketchdelete) | Deletes something from a sketch |
 | [`feature.add_extrude`](#featureadd_extrude) | Turns a sketch's closed shapes into a solid |
+| [`feature.add_revolve`](#featureadd_revolve) | Turns a sketch's closed shapes around a line into a solid |
 | [`feature.add_fillet`](#featureadd_fillet) | Rounds edges of a body |
 | [`feature.add_chamfer`](#featureadd_chamfer) | Bevels edges of a body |
 | [`feature.set_edges`](#featureset_edges) | Picks a fillet's or chamfer's edges again |
@@ -1527,6 +1528,115 @@ pin: 3 steps
   Sketch1      ok  1 circle, 0 constraints, free to move 3 ways
   Extrude1     ok  volume 7717.26 mm^3  mass 9.57 g (PLA)
 ```
+
+## feature.add_revolve
+
+Turns every closed shape of a sketch around a line in the sketch into a solid,
+like a part made on a lathe: a washer, a knob, a wheel, a vase. The shapes may
+touch the line but not cross it. Several shapes make one body. The sketch stays as
+it is, so changing it changes the solid. See [Revolve](../user-guide/revolve.md).
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `sketch` | step name | yes | The sketch |
+| `axis` | `x`, `y` or a line's name | no | The line to turn about: the sketch's `x` or `y` axis, or a line of the sketch, like `Line5` (a helper line, or a side of the shape). Default the sketch's helper line, if it has just one; otherwise `y` |
+| `angle` | number (degrees) | no | How far to turn: more than 0, at most 360. Default `360`, all the way round |
+| `side` | `one`, `flip` or `both` | no | Which way to turn, for less than 360: `one` the right-hand way about the axis (point your right thumb along it, and your fingers curl the way it turns), `flip` the other way, `both` half the angle each way. Default `one` |
+| `operation` | `new`, `join` or `cut` | no | `new`: a body of its own; `join`: added to a body; `cut`: taken out of a body (a groove). Default `join` for a [sketch on a face](#featureadd_sketch) of a body, otherwise `new` |
+| `body` | step name | no | For `join` or `cut`: the body. Default the body the sketch is on |
+| `name` | text | no | Step name. Default `Revolve1`, `Revolve2`, ... |
+
+A washer: a 5 × 2 mm rectangle, 5 mm from the sketch's y axis, turned all the
+way round it:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save washer.sb feature.add_sketch
+washer: 1 step
+  Sketch1      ok  empty
+wrote washer.sb
+$ sketchbillet_cli run --open washer.sb --save washer.sb sketch.add_rectangle sketch=Sketch1 from=5,0 to=10,2
+washer: 1 step
+  Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
+wrote washer.sb
+$ sketchbillet_cli run --open washer.sb --save washer.sb feature.add_revolve sketch=Sketch1
+washer: 2 steps
+  Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
+  Revolve1     ok  volume 471.24 mm^3  mass 0.58 g (PLA)
+wrote washer.sb
+```
+
+That's π × (10² − 5²) × 2 = 471.24 mm³. A quarter of a turn, even on both sides
+of the sketch:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open washer.sb feature.add_revolve sketch=Sketch1 angle=90 side=both name=Quarter
+washer: 3 steps
+  Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
+  Revolve1     ok  volume 471.24 mm^3  mass 0.58 g (PLA)
+  Quarter      ok  volume 117.81 mm^3  mass 0.15 g (PLA)
+```
+
+Turned about `Line4`, the rectangle's own left side (x = 5 mm), it makes a solid
+disc 10 mm across instead:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open washer.sb feature.add_revolve sketch=Sketch1 axis=Line4 name=Disc
+washer: 3 steps
+  Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
+  Revolve1     ok  volume 471.24 mm^3  mass 0.58 g (PLA)
+  Disc         ok  volume 157.08 mm^3  mass 0.19 g (PLA)
+```
+
+A shape that crosses the line would turn through itself, so it's refused:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --save across.sb feature.add_sketch
+across: 1 step
+  Sketch1      ok  empty
+wrote across.sb
+$ sketchbillet_cli run --open across.sb --save across.sb sketch.add_rectangle sketch=Sketch1 from=-5,0 to=5,10
+across: 1 step
+  Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
+wrote across.sb
+$ sketchbillet_cli run --open across.sb feature.add_revolve sketch=Sketch1
+across: 2 steps
+  Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
+  Revolve1     failed
+    error [kernel.revolve.crosses]: The shape crosses the line it turns about, so it would turn through itself. Move the shape so it's all on one side of the line (it may touch it), or pick another axis.
+```
+
+**Cut a groove.** A rod 20 mm round and 20 mm long along y, with a groove 2 mm
+deep and 4 mm wide cut round it 8 mm up:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save rod.sb feature.add_cylinder base=0,0,0 axis=0,1,0 radius=10 height=20
+rod: 1 step
+  Cylinder1    ok  volume 6283.19 mm^3  mass 7.79 g (PLA)
+wrote rod.sb
+$ sketchbillet_cli run --open rod.sb --save rod.sb feature.add_sketch
+rod: 2 steps
+  Cylinder1    ok  volume 6283.19 mm^3  mass 7.79 g (PLA)
+  Sketch1      ok  empty
+wrote rod.sb
+$ sketchbillet_cli run --open rod.sb --save rod.sb sketch.add_rectangle sketch=Sketch1 from=8,8 to=12,12
+rod: 2 steps
+  Cylinder1    ok  volume 6283.19 mm^3  mass 7.79 g (PLA)
+  Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
+wrote rod.sb
+$ sketchbillet_cli run --open rod.sb --save rod.sb feature.add_revolve sketch=Sketch1 operation=cut body=Cylinder1
+rod: 3 steps
+  Cylinder1    ok  volume 6283.19 mm^3
+  Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
+  Revolve1     ok  volume 5830.80 mm^3  mass 7.23 g (PLA)
+wrote rod.sb
+```
+
+The groove takes π × (10² − 8²) × 4 = 452.39 mm³ out of the 6283.19 mm³ rod.
 
 ## feature.add_fillet
 

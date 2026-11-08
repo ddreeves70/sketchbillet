@@ -120,6 +120,10 @@ Outcome build(IKernel& k, const json& c) {
             r = k.makeFace(profile, plane);
         } else if (op == "extrude") {
             r = k.extrude(shapes.at(step.at("face").get<std::string>()), vec3(step.at("by")));
+        } else if (op == "revolve") {
+            r = k.revolve(shapes.at(step.at("face").get<std::string>()),
+                          vec3(step.value("about", json::array({0, 0, 0}))), vec3(step.at("axis")),
+                          step.value("angle", 360.0) * std::numbers::pi / 180.0);  // degrees in the file
         } else if (op == "fillet" || op == "chamfer") {
             // Edges by where their middles are (not by number, which a kernel
             // version may change): each must be within 1e-6 mm of exactly one edge.

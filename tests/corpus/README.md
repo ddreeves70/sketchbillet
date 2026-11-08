@@ -48,7 +48,9 @@ deterministic).
   `{"spline": {"poles": [[x, y], ...], "degree": 3, "weights": [...], "closed": false}}`
   (degree, weights and closed are optional; knots are spread evenly), with
   `"reversed": true` for an edge the loop runs backwards), `extrude` (`face`, an
-  earlier step id; `by`, the direction and distance), and `fillet` (`radius`) and
+  earlier step id; `by`, the direction and distance), `revolve` (`face`; `about`, a
+  point on the line, default 0, 0, 0; `axis`, its direction; `angle` in degrees,
+  default 360), and `fillet` (`radius`) and
   `chamfer` (`distance`) with `body`, an earlier step id, and `edges`, a list of
   points: each the middle of one edge (within 1e-6 mm), so a case doesn't depend on
   the kernel's edge order. Lengths are in mm.

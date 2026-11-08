@@ -1,0 +1,92 @@
+{
+  "name": "revolve-quarter",
+  "description": "A 10 x 5 mm rectangle (x 10 to 20, y 0 to 5) turned 90 degrees about the y axis, the right-hand way, so +x turns toward -z. Volume: area 50 times the path of its middle, 15 x pi/2, so 375 pi = 1178.097245 mm^3. Area: outside 50 pi, inside 25 pi, top and bottom quarter rings 2 x (pi/4)(400 - 100) = 150 pi, and the two 50 mm^2 ends: 225 pi + 100 = 806.858347 mm^2. Six faces, bounds 0 to 20 in x, 0 to 5 in y, -20 to 0 in z.",
+  "steps": [
+    {
+      "id": "face",
+      "op": "face",
+      "outer": [
+        {
+          "line": [
+            [
+              10,
+              0
+            ],
+            [
+              20,
+              0
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              20,
+              0
+            ],
+            [
+              20,
+              5
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              20,
+              5
+            ],
+            [
+              10,
+              5
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              10,
+              5
+            ],
+            [
+              10,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "quarter",
+      "op": "revolve",
+      "face": "face",
+      "axis": [
+        0,
+        1,
+        0
+      ],
+      "angle": 90
+    }
+  ],
+  "expect": {
+    "valid": true,
+    "volume": 1178.097245,
+    "area": 806.858347,
+    "bounds": [
+      [
+        0.0,
+        0.0,
+        -20.0
+      ],
+      [
+        20.0,
+        5.0,
+        0.0
+      ]
+    ],
+    "solids": 1,
+    "faces": 6,
+    "edges": 12,
+    "vertices": 8
+  }
+}

@@ -23,6 +23,7 @@
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
+#include <BRepPrimAPI_MakeRevol.hxx>
 #include <BRep_Builder.hxx>
 #include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
@@ -30,6 +31,7 @@
 #include <Geom2d_Curve.hxx>
 #include <Geom_BSplineCurve.hxx>
 #include <Geom_BSplineSurface.hxx>
+#include <Geom_Plane.hxx>
 #include <Message.hxx>
 #include <Message_Messenger.hxx>
 #include <Message_PrinterOStream.hxx>
@@ -741,6 +743,85 @@ public:
             return out;
         } catch (const Standard_Failure& e) {
             return failed("kernel.extrude.failed", "The shape couldn't be extruded.", describe(e));
+        }
+    }
+
+    OpResult revolve(const ShapeHandle& face, const Point3& point, const Vec3& direction,
+                     double angle) override {
+        const TopoDS_Shape* s = unwrap(face);
+        if (!s || s->ShapeType() != TopAbs_FACE)
+            return failed("kernel.revolve.input", "Revolve needs a flat face.");
+        const Vec3& d = direction;
+        const double length = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+        if (length < 1e-9) {
+            return failed(
+                "kernel.revolve.axis",
+                "The line to turn about can't have the direction 0, 0, 0. Pick a line for the axis.");
+        }
+        constexpr double kFull = 2 * 3.14159265358979323846;
+        if (!(angle > 1e-9) || angle > kFull + 1e-9) {
+            return failed(
+                "kernel.revolve.angle",
+                "Revolve needs an angle more than 0 degrees and at most 360 degrees, like 360 for a "
+                "full turn.");
+        }
+        try {
+            const TopoDS_Face f = TopoDS::Face(*s);
+            Handle(Geom_Surface) surface = BRep_Tool::Surface(f);
+            Handle(Geom_Plane) plane = Handle(Geom_Plane)::DownCast(surface);
+            if (plane.IsNull()) return failed("kernel.revolve.input", "Revolve needs a flat face.");
+            const gp_Pln pln = plane->Pln();
+            const gp_Dir n = pln.Axis().Direction();
+            const gp_Pnt p(point.x, point.y, point.z);
+            const gp_Dir dir(d.x, d.y, d.z);
+            if (std::abs(dir.Dot(n)) > 1e-9 || pln.Distance(p) > 1e-6) {
+                return failed(
+                    "kernel.revolve.axis",
+                    "The line to turn about must lie in the sketch's plane. Pick a line in the sketch, "
+                    "or the sketch's x or y axis.");
+            }
+            // Which side of the line each point of the outline is on: all must be on one
+            // side (or on the line). Checked at points along every edge.
+            const gp_Vec side = gp_Vec(n).Crossed(gp_Vec(dir));  // in the plane, square to the line
+            double low = 0, high = 0;
+            for (TopExp_Explorer x(f, TopAbs_EDGE); x.More(); x.Next()) {
+                BRepAdaptor_Curve c(TopoDS::Edge(x.Current()));
+                constexpr int kSamples = 64;
+                for (int k = 0; k <= kSamples; ++k) {
+                    const double t =
+                        c.FirstParameter() + (c.LastParameter() - c.FirstParameter()) * k / kSamples;
+                    const double off = gp_Vec(p, c.Value(t)).Dot(side);
+                    low = std::min(low, off);
+                    high = std::max(high, off);
+                }
+            }
+            if (low < -1e-7 && high > 1e-7) {
+                return failed(
+                    "kernel.revolve.crosses",
+                    "The shape crosses the line it turns about, so it would turn through itself. Move "
+                    "the shape so it's all on one side of the line (it may touch it), or pick another "
+                    "axis.");
+            }
+            const gp_Ax1 axis(p, dir);
+            const bool full = angle > kFull - 1e-9;
+            BRepPrimAPI_MakeRevol mk = full ? BRepPrimAPI_MakeRevol(f, axis, Standard_True)
+                                            : BRepPrimAPI_MakeRevol(f, axis, angle, Standard_True);
+            if (!mk.IsDone() || mk.Shape().IsNull() || !BRepCheck_Analyzer(mk.Shape()).IsValid()) {
+                return failed("kernel.revolve.failed", "The shape couldn't be turned into a solid.");
+            }
+            OpResult out{wrap(mk.Shape()), {}, {}};
+            const Maps result(mk.Shape());
+            traceFaces(mk, *s, 0, result, out.history);  // the sides, from the face's edges
+            if (!full) {
+                for (const auto& [end, kind] : {std::pair{mk.FirstShape(), OriginKind::Start},
+                                                std::pair{mk.LastShape(), OriginKind::End}}) {
+                    const int at = end.IsNull() ? 0 : result.faces.FindIndex(end);
+                    if (at > 0) out.history.faces[static_cast<std::size_t>(at - 1)] = {{0, kind, -1}};
+                }
+            }
+            return out;
+        } catch (const Standard_Failure& e) {
+            return failed("kernel.revolve.failed", "The shape couldn't be turned into a solid.", describe(e));
         }
     }
 

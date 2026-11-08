@@ -88,6 +88,15 @@ public:
         if (edges.empty() || r <= 0) return fail();
         return make(volumeOf(s) - static_cast<double>(edges.size()));
     }
+    // A revolve's volume is the face's area times the angle (radians): enough to
+    // tell its steps apart in these tests.
+    kernel::OpResult revolve(const kernel::ShapeHandle& face, const kernel::Point3&, const kernel::Vec3& d,
+                             double angle) override {
+        ++calls;
+        if (d.x == 0 && d.y == 0 && d.z == 0) return fail();
+        if (angle <= 0) return fail();
+        return make(volumeOf(face) * angle);
+    }
     kernel::OpResult chamfer(const kernel::ShapeHandle& s, const std::vector<int>& edges, double d) override {
         ++calls;
         if (edges.empty() || d <= 0) return fail();

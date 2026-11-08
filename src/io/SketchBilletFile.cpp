@@ -579,6 +579,21 @@ json featureToJson(const Feature& f) {
             }
             break;
         }
+        case FeatureType::Revolve: {
+            const auto& r = static_cast<const model::RevolveFeature&>(f);
+            j["type"] = "Revolve";
+            j["inputs"] = {{"sketch", r.sketch().toString()}};
+            json axis = r.axis().kind == model::RevolveAxis::Kind::X ? json("x")
+                        : r.axis().kind == model::RevolveAxis::Kind::Y
+                            ? json("y")
+                            : json({{"line", r.axis().line.toString()}});
+            j["params"] = {{"angle", r.angle()}, {"axis", axis}, {"side", sideName(r.side())}};
+            if (r.operation() != model::ExtrudeOp::NewBody) {
+                j["params"]["operation"] = r.operation() == model::ExtrudeOp::Join ? "join" : "cut";
+                j["inputs"]["body"] = r.body().toString();
+            }
+            break;
+        }
         case FeatureType::Fillet:
         case FeatureType::Chamfer: {
             const auto& e = static_cast<const model::EdgeFeature&>(f);
@@ -721,6 +736,43 @@ std::unique_ptr<Feature> stepFromJson(const json& j, const FeatureId& id, std::s
         if (!distance) return bad("distance");
         if (!side) return bad("side");
         auto step = std::make_unique<model::ExtrudeFeature>(id, name, *sketch, *distance, *side);
+        const std::string op = params.value("operation", std::string("new"));
+        if (op == "join" || op == "cut") {
+            const auto body = inputs.contains("body") && inputs["body"].is_string()
+                                  ? FeatureId::parse(inputs["body"].get<std::string>())
+                                  : std::nullopt;
+            if (!body) return bad("input body");
+            step->setOperation(op == "join" ? model::ExtrudeOp::Join : model::ExtrudeOp::Cut, *body);
+        } else if (op != "new") {
+            return bad("operation");
+        }
+        return step;
+    }
+    if (type == "Revolve") {
+        const auto sketch = inputs.contains("sketch") && inputs["sketch"].is_string()
+                                ? FeatureId::parse(inputs["sketch"].get<std::string>())
+                                : std::nullopt;
+        const auto angle = readNumber(params.value("angle", json()));
+        const auto side = readSide(params.value("side", json()));
+        if (!sketch) return bad("input sketch");
+        if (!angle) return bad("angle");
+        if (!side) return bad("side");
+        // "x", "y", or {"line": <entity id>}.
+        const json a = params.value("axis", json());
+        model::RevolveAxis axis;
+        if (a == "x") {
+            axis.kind = model::RevolveAxis::Kind::X;
+        } else if (a == "y") {
+            axis.kind = model::RevolveAxis::Kind::Y;
+        } else if (a.is_object() && a.contains("line") && a["line"].is_string()) {
+            const auto line = EntityId::parse(a["line"].get<std::string>());
+            if (!line) return bad("axis");
+            axis = {model::RevolveAxis::Kind::Line, *line};
+        } else {
+            return bad("axis");
+        }
+        auto step = std::make_unique<model::RevolveFeature>(id, name, *sketch, axis, *angle);
+        step->setSide(*side);
         const std::string op = params.value("operation", std::string("new"));
         if (op == "join" || op == "cut") {
             const auto body = inputs.contains("body") && inputs["body"].is_string()
