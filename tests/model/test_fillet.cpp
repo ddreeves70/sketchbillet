@@ -146,9 +146,8 @@ TEST_CASE("a fillet whose edge is gone says so, and works again when its edges a
     REQUIRE(r->issues.size() == 1);
     CHECK(r->issues[0].code == "edges.missing");
     CHECK(r->issues[0].message ==
-          "Fillet1 can't find an edge it rounds: an earlier change took it away. Edit Fillet1 and pick its "
-          "edges "
-          "again.");
+          "Fillet1 can't find an edge it rounds: an earlier change took it away. Pick Fillet1, then Modify > Change "
+          "edges.");
 
     // Pick the top's front edge instead: the fillet works again, as one undo step.
     const auto front = d.edgeAt(cut, {20, 0, 10});

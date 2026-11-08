@@ -841,9 +841,16 @@ view::SceneContent viewerScene(const plugin::DocumentList& docs, const plugin::S
         return view::Rgb{c.r, c.g, c.b};
     };
     const auto& bodies = report->bodies();
-    for (const auto& body : bodies) {
-        if (const auto* shape = report->shapeOf(body))
-            out.bodies.push_back({body, *shape, false, colorOf(body)});
+    if (const auto& only = selection.pickOnly(); !only.isNil()) {
+        // Picking again on one body, as it was before the steps that used it.
+        if (const auto* shape = report->shapeOf(only))
+            out.bodies.push_back({only, *shape, false, colorOf(only)});
+        out.selected.clear();
+    } else {
+        for (const auto& body : bodies) {
+            if (const auto* shape = report->shapeOf(body))
+                out.bodies.push_back({body, *shape, false, colorOf(body)});
+        }
     }
     // A selected step that a later step used up (the tool of a cut, say) is
     // drawn see-through, so the student can see what they picked.

@@ -308,6 +308,16 @@ for (const auto& e : sel.elements()) {     // each: e.body, e.ref
 Picking edges with `setElements()` un-picks steps, and the other way round.
 Changing the pick mode forgets the picked edges or faces.
 
+To pick on one body only, as it was before the steps that used it (to pick a
+Fillet's edges again, say), call `setPickOnly(body)` after `setPickMode()`: the
+viewer then shows just that body. Going back to `PickMode::Bodies` shows every
+body again.
+
+```cpp
+sel.setPickMode(plugin::PickMode::Edges);
+sel.setPickOnly(fillet.body());  // the body before the fillet, alone
+```
+
 ## Add view options (desktop app only)
 
 If your plugin draws something in the viewer that the student may want to turn on

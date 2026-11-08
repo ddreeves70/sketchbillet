@@ -25,7 +25,8 @@ namespace sb::plugins {
 plugin::BuiltinPlugin viewerPlugin();
 
 /// Works out what the viewer shows of the active design: its finished bodies,
-/// plus selected steps that built but are used by a later step, drawn see-through;
+/// plus selected steps that built but are used by a later step, drawn see-through
+/// (or, while picking on one body again, Selection::pickOnly(), only that body);
 /// whether clicking picks edges, and the picked edges, found by name in the
 /// latest rebuild (one that can't be found isn't drawn).
 /// @param docs The open designs.

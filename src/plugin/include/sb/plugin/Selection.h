@@ -77,6 +77,17 @@ public:
     /// @param mode Bodies or edges.
     void setPickMode(PickMode mode);
 
+    /// Gives the one body viewers show while picking its edges or faces again
+    /// (for a step that uses a body it replaced, like a Fillet), or nil.
+    /// @return The step that made that body, or nil for every body as usual.
+    const FeatureId& pickOnly() const { return only_; }
+
+    /// Picks edges or faces of one body only: viewers show just that body, as it
+    /// was before the steps that used it. Sends PickModeChanged. Going back to
+    /// PickMode::Bodies forgets it.
+    /// @param body The step that made the body, or nil for every body.
+    void setPickOnly(const FeatureId& body);
+
     /// Picks the design itself instead of any of its steps, as the feature
     /// tree's **Document settings** row does: Properties then shows the design's
     /// settings. Sends SelectionChanged if it differs. Picking steps with set()
@@ -100,6 +111,7 @@ private:
     std::vector<FeatureId> features_;
     std::vector<PickedElement> elements_;
     PickMode mode_ = PickMode::Bodies;
+    FeatureId only_{};
     bool design_ = false;
     std::vector<Subscription> subscriptions_;
 };

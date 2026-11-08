@@ -2908,6 +2908,107 @@ TEST_CASE("Fillet: click it, pick edges, click it again; Chamfer the same", "[ap
     CHECK(docs.lastRebuild(doc)->result(app.doc().featureAt(3).id())->status == model::FeatureStatus::Ok);
 }
 
+TEST_CASE("Change edges: pick a fillet's edges again on its body, then Done or Cancel", "[app][fillet]") {
+    App app;
+    const auto doc = app.shell->activeDesign();
+    auto& docs = app.host.documents();
+    auto& sel = app.host.selection();
+    REQUIRE(docs.run(doc, "feature.add_box", {{"size", kernel::Vec3{40, 20, 10}}}).empty());
+    settle();
+    const auto box = app.doc().featureAt(0).id();
+    const auto edgeAt = [&](kernel::Vec3 p) {
+        const auto* r = docs.lastRebuild(doc)->result(box);
+        REQUIRE(r->names);
+        for (std::size_t i = 0; i < r->names->elements.edges.size(); ++i) {
+            const auto& c = r->names->elements.edges[i].center;
+            if (std::abs(c.x - p.x) < 1e-9 && std::abs(c.y - p.y) < 1e-9 && std::abs(c.z - p.z) < 1e-9)
+                return model::referTo(*r->names, kernel::TopoKind::Edge, static_cast<int>(i));
+        }
+        FAIL("no edge there");
+        return model::GeometryRef{};
+    };
+    REQUIRE(docs.run(doc, "feature.add_fillet",
+                     {{"body", box}, {"edges", std::vector{edgeAt({20, 0, 10})}}, {"radius", 1.0}})
+                .empty());
+    settle();
+    const auto fillet = app.doc().featureAt(1).id();
+    const auto edgesOf = [&] {
+        return static_cast<const model::FilletFeature&>(*app.doc().find(fillet)).edges();
+    };
+    auto* change = app.shell->action("sb.properties.change_edges");
+    REQUIRE(change);
+    CHECK_FALSE(change->isEnabled());  // nothing picked
+
+    // Pick Fillet1: Properties has a Change edges button next to its edges.
+    sel.set(doc, {fillet});
+    settle();
+    CHECK(change->isEnabled());
+    auto* button = app.properties()->findChild<QPushButton*>(QStringLiteral("changeedges"));
+    REQUIRE(button);
+    button->click();
+    settle();
+
+    // Picking edges, on the box alone, as it was before the fillet.
+    CHECK(sel.pickMode() == plugin::PickMode::Edges);
+    CHECK(sel.pickOnly() == box);
+    const auto scene = plugins::viewerScene(docs, sel);
+    REQUIRE(scene.bodies.size() == 1);
+    CHECK(scene.bodies[0].feature == box);
+    CHECK(app.shell->statusBar()->currentMessage().contains(QStringLiteral("Click the edges for Fillet1")));
+    const auto title = [&] {
+        return app.properties()->findChild<QLabel*>(QStringLiteral("sb.properties.title"))->text();
+    };
+    CHECK(title() == QStringLiteral("Changing the edges of Fillet1"));
+    auto* done = app.properties()->findChild<QPushButton*>(QStringLiteral("edgesdone"));
+    REQUIRE(done);
+    CHECK(done->isVisible());
+    CHECK_FALSE(done->isEnabled());  // no edges picked yet
+
+    // Two edges, then Done: the fillet rounds both, in one undo step.
+    sel.setElements(doc, {plugin::PickedElement{box, edgeAt({20, 0, 10})},
+                          plugin::PickedElement{box, edgeAt({20, 20, 10})}});
+    settle();
+    CHECK(done->isEnabled());
+    CHECK(app.properties()->findChild<QLabel*>(QStringLiteral("sb.properties.status"))->text() ==
+          QStringLiteral("2 edges picked."));
+    done->click();
+    settle();
+    CHECK(edgesOf().size() == 2);
+    CHECK(sel.pickMode() == plugin::PickMode::Bodies);
+    CHECK(sel.pickOnly().isNil());
+    CHECK(sel.features() == std::vector{fillet});
+    CHECK_FALSE(done->isVisible());
+    CHECK(app.field<QLabel>("edges")->text() == QStringLiteral("2"));
+    CHECK(docs.lastRebuild(doc)->result(fillet)->status == model::FeatureStatus::Ok);
+    CHECK(app.shell->undoAction()->text() == QStringLiteral("Undo Pick edges of Fillet1"));
+    app.shell->undoAction()->trigger();
+    settle();
+    CHECK(edgesOf().size() == 1);
+
+    // Modify > Change edges does the same; Cancel changes nothing.
+    sel.set(doc, {fillet});
+    settle();
+    change->trigger();
+    settle();
+    REQUIRE(sel.pickOnly() == box);
+    sel.setElements(doc, {plugin::PickedElement{box, edgeAt({20, 20, 10})}});
+    settle();
+    app.properties()->findChild<QPushButton*>(QStringLiteral("edgescancel"))->click();
+    settle();
+    CHECK(edgesOf().size() == 1);
+    CHECK(sel.pickMode() == plugin::PickMode::Bodies);
+    CHECK(sel.features() == std::vector{fillet});
+
+    // Leaving edge picking another way (Edit > Pick edges) stops changing too.
+    change->trigger();
+    settle();
+    app.menu("sb.modeling.pick_edges")->trigger();
+    settle();
+    CHECK(sel.pickMode() == plugin::PickMode::Bodies);
+    CHECK(sel.pickOnly().isNil());
+    CHECK(title() != QStringLiteral("Changing the edges of Fillet1"));
+}
+
 TEST_CASE("New sketch on a face: click it, pick a face, click it again; Move to a face",
           "[app][sketch][face]") {
     App app;
