@@ -415,7 +415,10 @@ RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolve
                 r.status = built.op.ok() ? FeatureStatus::Ok : FeatureStatus::Failed;
                 r.shape = built.op.shape;
                 r.issues = std::move(built.op.issues);
-                if (r.status == FeatureStatus::Ok) r.names = std::move(built.names);
+                if (r.status == FeatureStatus::Ok) {
+                    r.names = std::move(built.names);
+                    r.tools = std::move(built.tools);
+                }
             }
             r.issues.insert(r.issues.end(), formulaIssues.begin(), formulaIssues.end());
         }

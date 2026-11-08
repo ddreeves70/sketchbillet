@@ -153,6 +153,46 @@ void registerModeling(plugin::PluginContext& ctx) {
         .tip =
             "Drill an M3 hole 10 mm in from two picked edges of a flat face. With no edges picked, click two "
             "edges first. Change how far in from each in Properties."});
+    // Patterns of the picked steps: their holes, joins and cuts again; or, for
+    // one step that makes a body of its own, copies of the body.
+    const auto patternable = [&ctx] {
+        const auto& sel = ctx.selection();
+        const auto* doc = ctx.documents().find(sel.doc());
+        if (!doc || sel.features().empty()) return false;
+        for (const auto& id : sel.features()) {
+            const auto* f = doc->find(id);
+            if (!f || f->type() == model::FeatureType::Sketch) return false;
+        }
+        return true;
+    };
+    ctx.addAction(ActionSpec{
+        .id = "sb.modeling.pattern_linear",
+        .text = "Linear pattern",
+        .menu = "Create",
+        .command = "feature.add_pattern",
+        .args = {{"kind", std::string("linear")}},
+        .fromSelectionList = "steps",
+        .toolbar = true,
+        .buttonText = "Row",
+        .icon = std::string(icons::modeling::pattern_linear_svg),
+        .tip =
+            "Repeat the picked hole, join or cut 3 times along x, 10 mm apart; or copy a picked body. Change "
+            "how many, which way and how far in Properties.",
+        .enabled = patternable});
+    ctx.addAction(ActionSpec{
+        .id = "sb.modeling.pattern_circular",
+        .text = "Circular pattern",
+        .menu = "Create",
+        .command = "feature.add_pattern",
+        .args = {{"kind", std::string("circular")}},
+        .fromSelectionList = "steps",
+        .toolbar = true,
+        .buttonText = "Circle",
+        .icon = std::string(icons::modeling::pattern_circular_svg),
+        .tip =
+            "Repeat the picked hole, join or cut 6 times round the z axis; or copy a picked body. Change how "
+            "many and the axis in Properties.",
+        .enabled = patternable});
     // Fillet and Chamfer: the picked edges of one body. With none picked, the
     // first click starts picking edges.
     ctx.addAction(ActionSpec{

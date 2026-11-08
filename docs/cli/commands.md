@@ -33,6 +33,7 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`feature.add_extrude`](#featureadd_extrude) | Turns a sketch's closed shapes into a solid |
 | [`feature.add_revolve`](#featureadd_revolve) | Turns a sketch's closed shapes around a line into a solid |
 | [`feature.add_hole`](#featureadd_hole) | Drills holes for screws: simple, counterbored or countersunk |
+| [`feature.add_pattern`](#featureadd_pattern) | Repeats holes, joins and cuts, or copies a body, in a row, a grid or round a circle |
 | [`feature.add_fillet`](#featureadd_fillet) | Rounds edges of a body |
 | [`feature.add_chamfer`](#featureadd_chamfer) | Bevels edges of a body |
 | [`feature.set_edges`](#featureset_edges) | Picks a fillet's or chamfer's edges again |
@@ -1720,6 +1721,88 @@ A screw size SketchBillet doesn't know is refused:
 ```console
 $ sketchbillet_cli run --open block.sb feature.add_hole body=Plate edges=9,10 size=M7
 error [hole.size]: SketchBillet doesn't know the screw size M7. Use M2, M2.5, M3, M4, M5, M6 or M8, or give diameter= in mm.
+```
+
+## feature.add_pattern
+
+Repeats what steps did, in a row, a grid or round a circle: a Hole's holes, or
+an Extrude's or Revolve's join or cut. One hole becomes a ring of bolt holes; one
+peg, a row of pegs. Or it copies a whole body. The first copy is the original,
+where it is; the step adds the rest. Change the steps it repeats, and the copies
+change too. See [Patterns](../user-guide/patterns.md).
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `steps` | step names | this or `body` | The steps to repeat, like `Hole1`, or `Hole1,Extrude2`: holes, and extrudes and revolves that join or cut. One step that makes a body of its own, like `Box1`, copies its whole body instead |
+| `body` | step name | this or `steps` | Copies of this whole body, joined where they touch. With `steps`: the body to change, default the body the last step's body became |
+| `kind` | `linear` or `circular` | no | `linear`: in a row, or a grid; `circular`: round an axis. Default `linear` |
+| `count` | whole number | no | How many, the first one included. Default `3` in a row, `6` round a circle |
+| `direction` | x,y,z | no | `linear`: which way the row goes. Default `1,0,0` (along x) |
+| `spacing` | number (mm) | no | `linear`: how far apart. Default `10` |
+| `count2` | whole number | no | `linear`: how many rows, for a grid. Default `1` |
+| `direction2` | x,y,z | no | `linear`: which way the rows go. Default `0,1,0` (along y) |
+| `spacing2` | number (mm) | no | `linear`: how far apart the rows are. Default `10` |
+| `axis` | x,y,z | no | `circular`: the axis's direction. Default `0,0,1` (up) |
+| `center` | x,y,z (mm) | no | `circular`: a point on the axis. Default `0,0,0` |
+| `angle` | number (degrees) | no | `circular`: the angle they spread over. Default `360`: evenly all the way round. Less puts the last one at the end of the angle |
+| `name` | text | no | Step name. Default `Pattern1`, `Pattern2`, ... |
+
+A ring of six M3 bolt holes round the middle of a 60 × 60 × 5 mm plate: one hole
+20 mm out, then a circular pattern of it:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save ring.sb feature.add_box corner=-30,-30,0 size=60,60,5 name=Plate
+ring: 1 step
+  Plate        ok  volume 18000.00 mm^3  mass 22.32 g (PLA)
+wrote ring.sb
+$ sketchbillet_cli run --open ring.sb --save ring.sb feature.add_sketch body=Plate face=6
+ring: 2 steps
+  Plate        ok  volume 18000.00 mm^3  mass 22.32 g (PLA)
+  Sketch1      ok  empty
+wrote ring.sb
+$ sketchbillet_cli run --open ring.sb --save ring.sb sketch.add_point sketch=Sketch1 at=20,0
+ring: 2 steps
+  Plate        ok  volume 18000.00 mm^3  mass 22.32 g (PLA)
+  Sketch1      ok  1 point, 0 constraints, free to move 2 ways
+wrote ring.sb
+$ sketchbillet_cli run --open ring.sb --save ring.sb feature.add_hole sketch=Sketch1
+ring: 3 steps
+  Plate        ok  volume 18000.00 mm^3
+  Sketch1      ok  1 point, 0 constraints, free to move 2 ways
+  Hole1        ok  volume 17954.60 mm^3  mass 22.26 g (PLA)
+wrote ring.sb
+$ sketchbillet_cli run --open ring.sb --save ring.sb feature.add_pattern steps=Hole1 kind=circular
+ring: 4 steps
+  Plate        ok  volume 18000.00 mm^3
+  Sketch1      ok  1 point, 0 constraints, free to move 2 ways
+  Hole1        ok  volume 17954.60 mm^3
+  Pattern1     ok  volume 17727.62 mm^3  mass 21.98 g (PLA)
+wrote ring.sb
+```
+
+Six 3.4 mm holes through 5 mm: 6 × π × 1.7² × 5 = 272.38 mm³ out of 18000 mm³.
+
+Copies of a whole body: three 10 mm cubes, 15 mm apart along x, in one body:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save cubes.sb feature.add_box size=10,10,10
+cubes: 1 step
+  Box1         ok  volume 1000.00 mm^3  mass 1.24 g (PLA)
+wrote cubes.sb
+$ sketchbillet_cli run --open cubes.sb feature.add_pattern body=Box1 spacing=15
+cubes: 2 steps
+  Box1         ok  volume 1000.00 mm^3
+  Pattern1     ok  volume 3000.00 mm^3  mass 3.72 g (PLA)
+```
+
+A sketch can't be repeated:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open ring.sb feature.add_pattern steps=Sketch1
+error [pattern.not_repeatable]: Sketch1 can't be repeated: a pattern of steps repeats holes, and extrudes and revolves that join or cut. For copies of a whole body, use body= instead.
 ```
 
 ## feature.add_fillet

@@ -175,3 +175,5 @@ Print it flat side down. If an M3 screw is tight in its hole, make the hole
   flat head flush.
 - Holes go at a sketch's points (one step drills them all), or in from two edges
   of a face.
+
+Next: [Tutorial 6](06-fan-cover.md) makes many holes from one, with patterns.

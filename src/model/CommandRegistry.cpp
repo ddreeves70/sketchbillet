@@ -13,6 +13,7 @@
 #include "sb/model/Document.h"
 #include "sb/model/Formulas.h"
 #include "sb/model/Holes.h"
+#include "sb/model/Pattern.h"
 
 namespace sb::model {
 
@@ -748,6 +749,131 @@ CommandRegistry makeBuiltin() {
             // screw.)
             step->setFlipped(argBool(a, "flip", false));
             return std::make_unique<AddFeatureCommand>(std::move(step));
+        });
+
+    r.add(
+        {"feature.add_pattern",
+         "Pattern",
+         "Repeats what steps did (holes, and extrudes and revolves that join or cut) in a row, a grid or "
+         "round "
+         "a circle; or makes copies of a whole body. The first copy is the original.",
+         {{"steps",
+           ArgType::FeatureList,
+           "The steps to repeat, like Hole1, or Hole1,Extrude2. One step that makes a body of its own, like "
+           "Box1, copies its whole body, like body=. Give this, or body.",
+           false,
+           {}},
+          {"body",
+           ArgType::FeatureRef,
+           "Copies of this whole body, like Box1. With steps: the body to change, default the body the last "
+           "step's body became.",
+           false,
+           {}},
+          {"kind",
+           ArgType::Choice,
+           "linear (a row or grid) or circular (round an axis). Default linear.",
+           false,
+           {"linear", "circular"}},
+          {"count",
+           ArgType::Integer,
+           "How many, the first one included. Default 3 in a row, 6 round a circle.",
+           false,
+           {}},
+          {"direction",
+           ArgType::Vec3,
+           "linear: which way the row goes. Default 1, 0, 0 (along x).",
+           false,
+           {}},
+          {"spacing", ArgType::Number, "linear: how far apart, in mm. Default 10.", false, {}},
+          {"count2", ArgType::Integer, "linear: how many rows, for a grid. Default 1.", false, {}},
+          {"direction2",
+           ArgType::Vec3,
+           "linear: which way the rows go. Default 0, 1, 0 (along y).",
+           false,
+           {}},
+          {"spacing2", ArgType::Number, "linear: how far apart the rows are, in mm. Default 10.", false, {}},
+          {"axis", ArgType::Vec3, "circular: the axis's direction. Default 0, 0, 1 (up).", false, {}},
+          {"center", ArgType::Vec3, "circular: a point on the axis, in mm. Default 0, 0, 0.", false, {}},
+          {"angle",
+           ArgType::Number,
+           "circular: the angle they spread over, in degrees. Default 360, evenly all the way round; less "
+           "puts "
+           "the last one at the end of the angle.",
+           false,
+           {}},
+          {"name", ArgType::Text, "Step name. Default Pattern1, Pattern2, ...", false, {}}}},
+        [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+            auto problem = [](std::string code, std::string message) {
+                return std::make_unique<ProblemCommand>(
+                    Diagnostic{std::move(code), Severity::Error, std::move(message), {}});
+            };
+            auto steps = argFeatures(a, "steps");
+            FeatureId body = argFeature(a, "body");
+            // One step that makes a body of its own (not a sketch): copies of its body.
+            if (steps.size() == 1 && body.isNil()) {
+                const auto* f = doc.find(steps[0]);
+                const auto* e = dynamic_cast<const ExtrudeFeature*>(f);
+                const auto* rv = dynamic_cast<const RevolveFeature*>(f);
+                const bool repeats = (f && f->type() == FeatureType::Hole) ||
+                                     (e && e->operation() != ExtrudeOp::NewBody) ||
+                                     (rv && rv->operation() != ExtrudeOp::NewBody);
+                if (f && !repeats && f->type() != FeatureType::Sketch) {
+                    body = steps[0];
+                    steps.clear();
+                }
+            }
+            if (steps.empty() && body.isNil()) {
+                return problem(
+                    "pattern.what",
+                    "Say what to repeat: steps=, like steps=Hole1, or body=, for copies of a whole "
+                    "body.");
+            }
+            for (const auto& s : steps) {
+                const auto* f = doc.find(s);
+                const auto* e = dynamic_cast<const ExtrudeFeature*>(f);
+                const auto* rev = dynamic_cast<const RevolveFeature*>(f);
+                const bool ok = (f && f->type() == FeatureType::Hole) ||
+                                (e && e->operation() != ExtrudeOp::NewBody) ||
+                                (rev && rev->operation() != ExtrudeOp::NewBody);
+                if (!ok) {
+                    return problem(
+                        "pattern.not_repeatable",
+                        (f ? f->name() : std::string("A step")) +
+                            " can't be repeated: a pattern of steps repeats holes, and extrudes and "
+                            "revolves that join or cut. For copies of a whole body, use body= "
+                            "instead.");
+                }
+            }
+            if (!steps.empty() && body.isNil()) {
+                // The body the last step's body became: follow each later step that uses it.
+                std::size_t last = 0;
+                for (std::size_t i = 0; i < doc.featureCount(); ++i)
+                    if (std::find(steps.begin(), steps.end(), doc.featureAt(i).id()) != steps.end()) last = i;
+                body = doc.featureAt(last).id();
+                for (std::size_t i = last + 1; i < doc.featureCount(); ++i) {
+                    const auto& f = doc.featureAt(i);
+                    const auto deps = f.dependencies();
+                    const auto refs = f.referenceInputs();
+                    if (std::find(deps.begin(), deps.end(), body) != deps.end() &&
+                        std::find(refs.begin(), refs.end(), body) == refs.end()) {
+                        body = f.id();
+                    }
+                }
+            }
+            PatternLayout l;
+            const bool circular = argText(a, "kind", "linear") == "circular";
+            l.kind = circular ? PatternLayout::Kind::Circular : PatternLayout::Kind::Linear;
+            l.count = a.count("count") ? static_cast<int>(argNumber(a, "count")) : (circular ? 6 : 3);
+            l.direction = argVec3(a, "direction", {1, 0, 0});
+            l.spacing = argNumber(a, "spacing", 10);
+            l.count2 = a.count("count2") ? static_cast<int>(argNumber(a, "count2")) : 1;
+            l.direction2 = argVec3(a, "direction2", {0, 1, 0});
+            l.spacing2 = argNumber(a, "spacing2", 10);
+            l.axis = argVec3(a, "axis", {0, 0, 1});
+            l.center = argVec3(a, "center", {0, 0, 0});
+            l.angle = argNumber(a, "angle", 360) * std::numbers::pi / 180.0;
+            return std::make_unique<AddFeatureCommand>(std::make_unique<PatternFeature>(
+                argText(a, "name", doc.uniqueName("Pattern")), body, std::move(steps), l));
         });
 
     for (const bool fillet : {true, false}) {

@@ -62,6 +62,8 @@ const char* kindName(const model::Feature& f) {
             return "Revolve";
         case model::FeatureType::Hole:
             return "Hole";
+        case model::FeatureType::Pattern:
+            return "Pattern";
         case model::FeatureType::Fillet:
             return "Fillet";
         case model::FeatureType::Chamfer:

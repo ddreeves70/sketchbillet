@@ -20,6 +20,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command feature.add_fillet
            command feature.add_hole
            command feature.add_move
+           command feature.add_pattern
            command feature.add_revolve
            command feature.add_sketch
            command feature.delete
@@ -66,6 +67,8 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            action  Create > Revolve  (feature.add_revolve)
            action  Create > Hole  (feature.add_hole)
            action  Create > Hole from two edges  (feature.add_hole)
+           action  Create > Linear pattern  (feature.add_pattern)
+           action  Create > Circular pattern  (feature.add_pattern)
            action  Modify > Fillet  (feature.add_fillet)
            action  Modify > Chamfer  (feature.add_chamfer)
            action  Edit > Pick edges  (check mark)

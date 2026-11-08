@@ -19,6 +19,7 @@
 #include "sb/core/Version.h"
 #include "sb/model/Commands.h"
 #include "sb/model/Holes.h"
+#include "sb/model/Pattern.h"
 
 // Format (schema 1), as described in docs/file-format.md:
 //
@@ -580,6 +581,27 @@ json featureToJson(const Feature& f) {
             }
             break;
         }
+        case FeatureType::Pattern: {
+            const auto& p = static_cast<const model::PatternFeature&>(f);
+            const auto& l = p.layout();
+            j["type"] = "Pattern";
+            json steps = json::array();
+            for (const auto& s : p.steps()) steps.push_back(s.toString());
+            j["inputs"] = {{"body", p.body().toString()}, {"steps", steps}};
+            if (l.kind == model::PatternLayout::Kind::Linear) {
+                j["params"] = {
+                    {"kind", "linear"},      {"count", l.count},   {"direction", vec3(l.direction)},
+                    {"spacing", l.spacing},  {"count2", l.count2}, {"direction2", vec3(l.direction2)},
+                    {"spacing2", l.spacing2}};
+            } else {
+                j["params"] = {{"kind", "circular"},
+                               {"count", l.count},
+                               {"center", vec3(l.center)},
+                               {"axis", vec3(l.axis)},
+                               {"angle", l.angle}};
+            }
+            break;
+        }
         case FeatureType::Hole: {
             const auto& h = static_cast<const model::HoleFeature&>(f);
             j["type"] = "Hole";
@@ -781,6 +803,56 @@ std::unique_ptr<Feature> stepFromJson(const json& j, const FeatureId& id, std::s
             return bad("operation");
         }
         return step;
+    }
+    if (type == "Pattern") {
+        const auto body = inputs.contains("body") && inputs["body"].is_string()
+                              ? FeatureId::parse(inputs["body"].get<std::string>())
+                              : std::nullopt;
+        if (!body) return bad("input body");
+        std::vector<FeatureId> steps;
+        const json list = inputs.value("steps", json::array());
+        if (!list.is_array()) return bad("input steps");
+        for (const auto& s : list) {
+            const auto step = s.is_string() ? FeatureId::parse(s.get<std::string>()) : std::nullopt;
+            if (!step) return bad("input steps");
+            steps.push_back(*step);
+        }
+        model::PatternLayout l;
+        const std::string kind = params.value("kind", std::string());
+        const json count = params.value("count", json());
+        if (!count.is_number_integer()) return bad("count");
+        l.count = count.get<int>();
+        if (kind == "linear") {
+            const auto direction = readVec3(params.value("direction", json()));
+            const auto spacing = readNumber(params.value("spacing", json()));
+            const auto direction2 = readVec3(params.value("direction2", json()));
+            const auto spacing2 = readNumber(params.value("spacing2", json()));
+            const json count2 = params.value("count2", json());
+            if (!direction) return bad("direction");
+            if (!spacing) return bad("spacing");
+            if (!direction2) return bad("direction2");
+            if (!spacing2) return bad("spacing2");
+            if (!count2.is_number_integer()) return bad("count2");
+            l.direction = *direction;
+            l.spacing = *spacing;
+            l.direction2 = *direction2;
+            l.spacing2 = *spacing2;
+            l.count2 = count2.get<int>();
+        } else if (kind == "circular") {
+            l.kind = model::PatternLayout::Kind::Circular;
+            const auto center = readVec3(params.value("center", json()));
+            const auto axis = readVec3(params.value("axis", json()));
+            const auto angle = readNumber(params.value("angle", json()));
+            if (!center) return bad("center");
+            if (!axis) return bad("axis");
+            if (!angle) return bad("angle");
+            l.center = *center;
+            l.axis = *axis;
+            l.angle = *angle;
+        } else {
+            return bad("kind");
+        }
+        return std::make_unique<model::PatternFeature>(id, name, *body, std::move(steps), l);
     }
     if (type == "Hole") {
         const auto body = inputs.contains("body") && inputs["body"].is_string()

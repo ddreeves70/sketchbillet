@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "sb/model/Holes.h"
+#include "sb/model/Pattern.h"
 #include "sb/sketch/Profiles.h"
 
 namespace sb::model {
@@ -414,9 +415,11 @@ Built ExtrudeFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier
                             [&](const kernel::ShapeHandle& face) { return kernel.extrude(face, sweep); });
     if (!out.op.ok()) return out;
     if (op_ != ExtrudeOp::NewBody) {
+        const StepTool tool{out.op.shape, out.names, op_ == ExtrudeOp::Cut};
         out = combineWithBody(kernel, earlier, std::move(out), op_, body_, name(), id(), "extrude",
                               "try another distance", "Try Flip, to go into it, or a longer distance.");
         if (!out.op.ok()) return out;
+        out.tools = {tool};
     }
     addShapeNotes(out, shapes);
     return out;
@@ -489,9 +492,11 @@ Built RevolveFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier
     });
     if (!out.op.ok()) return out;
     if (op_ != ExtrudeOp::NewBody) {
+        const StepTool tool{out.op.shape, out.names, op_ == ExtrudeOp::Cut};
         out = combineWithBody(kernel, earlier, std::move(out), op_, body_, name(), id(), "revolve",
                               "try another axis or angle", "Check its axis, or try Flip.");
         if (!out.op.ok()) return out;
+        out.tools = {tool};
     }
     addShapeNotes(out, shapes);
     return out;
@@ -870,7 +875,7 @@ struct HoleAt {
     std::string label;  // for messages, like "at Point2"
 };
 
-Built holeFailed(std::string code, std::string message) {
+Built stepFailed(std::string code, std::string message) {
     Built b;
     b.op.issues.push_back({std::move(code), Severity::Error, std::move(message), {}});
     return b;
@@ -881,19 +886,19 @@ Built holeFailed(std::string code, std::string message) {
 Built HoleFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) const {
     const std::string me = shortId(id().toString());
     if (!(diameter_ > 0)) {
-        return holeFailed("hole.diameter",
+        return stepFailed("hole.diameter",
                           name() +
                               " needs a diameter greater than 0 mm. Type one in Properties, or pick a "
                               "screw size like M3.");
     }
     if (!through_ && !(depth_ > 0)) {
-        return holeFailed("hole.depth", name() + " needs a depth greater than 0 mm, or Through all.");
+        return stepFailed("hole.depth", name() + " needs a depth greater than 0 mm, or Through all.");
     }
     const double r = diameter_ / 2;
     double top = 0;  // how deep the counterbore or countersink goes (mm)
     if (kind_ == HoleKind::Counterbore) {
         if (!(cbDiameter_ > diameter_) || !(cbDepth_ > 0)) {
-            return holeFailed("hole.counterbore",
+            return stepFailed("hole.counterbore",
                               name() +
                                   "'s counterbore must be wider than the hole and more than 0 mm deep. "
                                   "Change its diameter or depth in Properties.");
@@ -901,7 +906,7 @@ Built HoleFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) c
         top = cbDepth_;
     } else if (kind_ == HoleKind::Countersink) {
         if (!(csDiameter_ > diameter_) || !(csAngle_ > 0) || !(csAngle_ < std::numbers::pi)) {
-            return holeFailed("hole.countersink",
+            return stepFailed("hole.countersink",
                               name() +
                                   "'s countersink must be wider than the hole, with an angle between 0 "
                                   "and 180 degrees, like 90. Change it in Properties.");
@@ -911,7 +916,7 @@ Built HoleFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) c
     if (!through_ && top >= depth_) {
         char mm[32];
         std::snprintf(mm, sizeof mm, "%g", depth_);
-        return holeFailed("hole.too_shallow",
+        return stepFailed("hole.too_shallow",
                           name() + " is " + mm + " mm deep, but its " +
                               (kind_ == HoleKind::Counterbore ? "counterbore" : "countersink") +
                               " goes deeper than that. Make the hole deeper, or the top smaller.");
@@ -926,7 +931,7 @@ Built HoleFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) c
     if (placement_.kind == HolePlacement::Kind::SketchPoints) {
         const FeatureResult* r0 = earlier.resultOf(placement_.sketch);
         if (!r0 || !r0->sketch || !r0->sketch->ok() || !r0->plane) {
-            return holeFailed("hole.sketch", name() + " needs a sketch that solved. Fix the sketch first.");
+            return stepFailed("hole.sketch", name() + " needs a sketch that solved. Fix the sketch first.");
         }
         const PlaneAxes& axes = *r0->plane;
         kernel::Vec3 into = unit(cross(axes.y, axes.x));  // out of the sketch's back
@@ -937,7 +942,7 @@ Built HoleFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) c
             holes.push_back({toDesign(axes, p->at), into, shortId(e.id.toString()), "at " + e.name});
         }
         if (holes.empty()) {
-            return holeFailed("hole.no_points",
+            return stepFailed("hole.no_points",
                               name() +
                                   "'s sketch has no points to drill at. Add a point where each hole goes "
                                   "(the Point tool), or place the hole from two edges.");
@@ -950,7 +955,7 @@ Built HoleFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) c
         for (int k = 0; k < 2; ++k) {
             const auto where = resolve(*refs[k], *names);
             if (where.status == ResolveStatus::Ambiguous || !where.found()) {
-                return holeFailed(
+                return stepFailed(
                     "hole.edge_missing",
                     name() + " can't find one of the edges it's placed from: an earlier change " +
                         (where.status == ResolveStatus::Ambiguous ? "made several like it" : "took it away") +
@@ -970,7 +975,7 @@ Built HoleFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) c
         const auto& a = el.edges[static_cast<std::size_t>(found[0])];
         const auto& b = el.edges[static_cast<std::size_t>(found[1])];
         if (a.geom != kernel::GeomKind::Line || b.geom != kernel::GeomKind::Line) {
-            return holeFailed("hole.edge_curved",
+            return stepFailed("hole.edge_curved",
                               name() +
                                   " can only be placed from straight edges. Pick two straight edges of a "
                                   "flat face.");
@@ -984,7 +989,7 @@ Built HoleFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) c
             }
         }
         if (face < 0) {
-            return holeFailed("hole.no_face",
+            return stepFailed("hole.no_face",
                               name() +
                                   "'s two edges aren't both on one flat face. Pick two edges of the face "
                                   "the hole goes in.");
@@ -1001,7 +1006,7 @@ Built HoleFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) c
         const kernel::Vec3 pb = plus(b.center, scaled(inward(b), placement_.distanceB));
         const double across = dot(cross(a.direction, b.direction), n);
         if (std::abs(across) < 1e-9) {
-            return holeFailed("hole.edges_parallel",
+            return stepFailed("hole.edges_parallel",
                               name() +
                                   "'s two edges are parallel, so they can't say where along them the hole "
                                   "goes. Pick two edges that meet at a corner.");
@@ -1018,6 +1023,7 @@ Built HoleFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) c
     const double across = std::sqrt(dot(minus(box.max, box.min), minus(box.max, box.min)));
 
     Built out{kernel::OpResult{*shape, {}, {}}, names ? std::make_shared<const ShapeNames>(*names) : nullptr};
+    std::vector<StepTool> tools;
     for (const auto& h : holes) {
         // Half the hole's cross-section, in a plane through its axis: x out from
         // the axis, y down into the body, starting 1 mm above the face.
@@ -1065,9 +1071,10 @@ Built HoleFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) c
         const double before = kernel.massProps(out.op.shape).volume;
         auto cut = kernel.boolean(kernel::BoolOp::Cut, out.op.shape, named.op.shape);
         if (!cut.ok()) {
-            return holeFailed("hole.cut_failed",
+            return stepFailed("hole.cut_failed",
                               name() + " couldn't drill its hole " + h.label + ". Check it's on the body.");
         }
+        tools.push_back({named.op.shape, named.names, true});
         auto next = carried(kernel, std::move(cut), {out.names.get(), named.names.get()}, id());
         if (std::abs(kernel.massProps(next.op.shape).volume - before) < 1e-9) {
             notes.push_back(
@@ -1078,6 +1085,230 @@ Built HoleFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) c
                  {}});
         }
         out = std::move(next);
+    }
+    out.op.issues.insert(out.op.issues.end(), notes.begin(), notes.end());
+    out.tools = std::move(tools);
+    return out;
+}
+
+}  // namespace sb::model
+
+// ---------------------------------------------------------------------------
+// Pattern
+// ---------------------------------------------------------------------------
+
+namespace sb::model {
+
+std::vector<kernel::Motion> patternMotions(const PatternLayout& l) {
+    std::vector<kernel::Motion> out;
+    if (l.kind == PatternLayout::Kind::Linear) {
+        const kernel::Vec3 a = unit(l.direction), b = unit(l.direction2);
+        for (int j = 0; j < std::max(l.count2, 1); ++j) {
+            for (int i = 0; i < std::max(l.count, 1); ++i) {
+                if (i == 0 && j == 0) continue;
+                kernel::Motion m;
+                m.offset = plus(scaled(a, i * l.spacing), scaled(b, j * l.spacing2));
+                out.push_back(m);
+            }
+        }
+        return out;
+    }
+    // Round a circle: evenly all the way round, or spread over the angle with
+    // the last one at its end.
+    const bool full = l.angle > 2 * std::numbers::pi - 1e-9;
+    const int n = std::max(l.count, 1);
+    const double step = full ? 2 * std::numbers::pi / n : (n > 1 ? l.angle / (n - 1) : 0);
+    for (int i = 1; i < n; ++i) {
+        kernel::Motion m;
+        m.center = l.center;
+        m.axis = l.axis;
+        m.angle = i * step;
+        out.push_back(m);
+    }
+    return out;
+}
+
+PatternFeature::PatternFeature(std::string name, FeatureId body, std::vector<FeatureId> steps,
+                               PatternLayout layout)
+    : PatternFeature(FeatureId::generate(), std::move(name), body, std::move(steps), layout) {}
+
+PatternFeature::PatternFeature(FeatureId id, std::string name, FeatureId body, std::vector<FeatureId> steps,
+                               PatternLayout layout)
+    : Feature(id, std::move(name)), body_(body), steps_(std::move(steps)), layout_(layout) {}
+
+std::vector<StepNumber> PatternFeature::numbers() const {
+    std::vector<StepNumber> out{{"count", kPlainNumber, true}};
+    if (layout_.kind == PatternLayout::Kind::Linear) {
+        out.push_back({"spacing", kLength, false});
+        out.push_back({"count2", kPlainNumber, true});
+        out.push_back({"spacing2", kLength, false});
+    } else {
+        out.push_back({"angle", kAngle, true});
+    }
+    return out;
+}
+
+std::optional<double> PatternFeature::number(std::string_view key) const {
+    if (key == "count") return layout_.count;
+    if (key == "count2") return layout_.count2;
+    if (key == "spacing") return layout_.spacing;
+    if (key == "spacing2") return layout_.spacing2;
+    if (key == "angle") return layout_.angle;
+    return std::nullopt;
+}
+
+bool PatternFeature::setNumber(std::string_view key, double value) {
+    // Counts are whole numbers: a formula's 2.6 makes 3 copies.
+    if (key == "count") {
+        layout_.count = static_cast<int>(std::lround(value));
+    } else if (key == "count2") {
+        layout_.count2 = static_cast<int>(std::lround(value));
+    } else if (key == "spacing") {
+        layout_.spacing = value;
+    } else if (key == "spacing2") {
+        layout_.spacing2 = value;
+    } else if (key == "angle") {
+        layout_.angle = value;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+std::vector<FeatureId> PatternFeature::dependencies() const {
+    std::vector<FeatureId> out{body_};
+    for (const auto& s : steps_)
+        if (s != body_) out.push_back(s);
+    return out;
+}
+
+std::vector<FeatureId> PatternFeature::referenceInputs() const {
+    // The steps it repeats are only looked at; the body is what it changes.
+    std::vector<FeatureId> out;
+    for (const auto& s : steps_)
+        if (s != body_) out.push_back(s);
+    return out;
+}
+
+void PatternFeature::remapInputs(const std::map<FeatureId, FeatureId>& map) {
+    if (auto it = map.find(body_); it != map.end()) body_ = it->second;
+    for (auto& s : steps_)
+        if (auto it = map.find(s); it != map.end()) s = it->second;
+}
+
+namespace {
+
+// A copy of a shape moved, its faces named for the copy: "<pattern>/copy<n>:<name>".
+Built movedCopy(kernel::IKernel& kernel, const kernel::ShapeHandle& shape, const ShapeNames* names,
+                const kernel::Motion& motion, const FeatureId& pattern, int n) {
+    std::shared_ptr<const ShapeNames> renamed;
+    if (names) {
+        std::vector<std::string> faces;
+        const std::string prefix = shortId(pattern.toString()) + "/copy" + std::to_string(n) + ":";
+        for (const auto& f : names->faces) faces.push_back(prefix + f);
+        renamed = std::make_shared<const ShapeNames>(nameFromFaces(names->elements, std::move(faces)));
+    }
+    return carried(kernel, kernel.transform(shape, motion), {renamed.get()}, pattern);
+}
+
+}  // namespace
+
+Built PatternFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) const {
+    const auto& l = layout_;
+    if (l.count < 1 || l.count2 < 1) {
+        return stepFailed(
+            "pattern.count",
+            name() + " needs at least 1 of each, the first one included. Type a count in Properties.");
+    }
+    const auto length = [](const kernel::Vec3& v) { return std::sqrt(dot(v, v)); };
+    if (l.kind == PatternLayout::Kind::Linear) {
+        if (length(l.direction) < 1e-12 || (l.count2 > 1 && length(l.direction2) < 1e-12)) {
+            return stepFailed("pattern.direction",
+                              name() + "'s direction can't be 0, 0, 0. Give it one, like 1, 0, 0 along x.");
+        }
+        if ((l.count > 1 && l.spacing == 0) || (l.count2 > 1 && l.spacing2 == 0)) {
+            return stepFailed(
+                "pattern.spacing",
+                name() + "'s copies are 0 mm apart, all in one place. Give a spacing, like 10 mm.");
+        }
+    } else {
+        if (length(l.axis) < 1e-12) {
+            return stepFailed("pattern.axis",
+                              name() + "'s axis can't be 0, 0, 0. Give it a direction, like 0, 0, 1 for up.");
+        }
+        if (!(l.angle > 0) || l.angle > 2 * std::numbers::pi + 1e-9) {
+            return stepFailed("pattern.angle",
+                              name() + " needs an angle more than 0 and at most 360 degrees.");
+        }
+    }
+    const auto motions = patternMotions(l);
+    constexpr std::size_t kMost = 200;
+    if (motions.size() + 1 > kMost) {
+        return stepFailed(
+            "pattern.too_many",
+            name() + " would make " + std::to_string(motions.size() + 1) +
+                " copies. SketchBillet makes up to 200 in one pattern: use fewer, or two patterns.");
+    }
+    const auto* shape = earlier.shapeOf(body_);
+    if (!shape) return missingInput();
+    const ShapeNames* names = namesOf(earlier, body_);
+
+    Built out{
+        kernel::OpResult{*shape, {}, {}}, names ? std::make_shared<const ShapeNames>(*names) : nullptr, {}};
+    Diagnostics notes;
+    if (steps_.empty()) {
+        // Copies of the whole body, joined where they touch.
+        for (std::size_t k = 0; k < motions.size(); ++k) {
+            const int n = static_cast<int>(k) + 2;
+            auto copy = movedCopy(kernel, *shape, names, motions[k], id(), n);
+            if (!copy.op.ok()) return copy;
+            auto joined = kernel.boolean(kernel::BoolOp::Union, out.op.shape, copy.op.shape);
+            if (!joined.ok()) {
+                return stepFailed("pattern.join_failed", name() + " couldn't join copy " + std::to_string(n) +
+                                                             " to the others. Try another spacing.");
+            }
+            out = carried(kernel, std::move(joined), {out.names.get(), copy.names.get()}, id());
+        }
+        return out;
+    }
+
+    // Copies of what the steps did: their holes, joins and cuts, again at each copy.
+    std::vector<const StepTool*> tools;
+    for (const auto& s : steps_) {
+        const FeatureResult* r = earlier.resultOf(s);
+        if (!r || r->status != FeatureStatus::Ok) return missingInput();
+        if (r->tools.empty()) {
+            return stepFailed("pattern.not_repeatable",
+                              name() +
+                                  " can repeat holes, and extrudes and revolves that join or cut. One of its "
+                                  "steps makes a body of its own: pattern that body instead.");
+        }
+        for (const auto& t : r->tools) tools.push_back(&t);
+    }
+    for (std::size_t k = 0; k < motions.size(); ++k) {
+        const int n = static_cast<int>(k) + 2;
+        for (const auto* tool : tools) {
+            auto copy = movedCopy(kernel, tool->shape, tool->names.get(), motions[k], id(), n);
+            if (!copy.op.ok()) return copy;
+            const double before = kernel.massProps(out.op.shape).volume;
+            auto done = kernel.boolean(tool->cut ? kernel::BoolOp::Cut : kernel::BoolOp::Union, out.op.shape,
+                                       copy.op.shape);
+            if (!done.ok()) {
+                return stepFailed("pattern.combine_failed", name() + " couldn't " +
+                                                                (tool->cut ? "cut" : "join") + " copy " +
+                                                                std::to_string(n) + ". Try another spacing.");
+            }
+            auto next = carried(kernel, std::move(done), {out.names.get(), copy.names.get()}, id());
+            if (tool->cut && std::abs(kernel.massProps(next.op.shape).volume - before) < 1e-9) {
+                notes.push_back(
+                    {"pattern.copy_missed",
+                     Severity::Warning,
+                     name() + "'s copy " + std::to_string(n) +
+                         " isn't on the body, so it cut nothing. Check the spacing and direction.",
+                     {}});
+            }
+            out = std::move(next);
+        }
     }
     out.op.issues.insert(out.op.issues.end(), notes.begin(), notes.end());
     return out;

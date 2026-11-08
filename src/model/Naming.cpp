@@ -355,6 +355,9 @@ std::string describeFace(const Document& doc, std::string_view name) {
         what = "side from " + curve + " (" + by + ")";
     } else if (role == "start" || role == "end") {
         what = std::string(role) + " of " + by;
+    } else if (role.starts_with("copy") && role.size() > 4) {
+        // A Pattern's copy of a face: which copy, of what.
+        return "copy " + std::string(role.substr(4)) + " (" + by + ") of " + describeFace(doc, from) + piece;
     } else if (role == "wall" || role == "floor" || role == "counterbore" || role == "step" ||
                role == "countersink") {
         // A hole's faces: which hole, by the sketch point it's at.
