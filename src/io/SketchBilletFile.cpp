@@ -18,6 +18,7 @@
 
 #include "sb/core/Version.h"
 #include "sb/model/Commands.h"
+#include "sb/model/Holes.h"
 
 // Format (schema 1), as described in docs/file-format.md:
 //
@@ -579,6 +580,39 @@ json featureToJson(const Feature& f) {
             }
             break;
         }
+        case FeatureType::Hole: {
+            const auto& h = static_cast<const model::HoleFeature&>(f);
+            j["type"] = "Hole";
+            j["inputs"] = {{"body", h.body().toString()}};
+            const auto& at = h.placement();
+            json params = {{"diameter", h.diameter()},
+                           {"kind", h.kind() == model::HoleKind::Counterbore   ? "counterbore"
+                                    : h.kind() == model::HoleKind::Countersink ? "countersink"
+                                                                               : "simple"},
+                           {"through", h.through()},
+                           {"depth", h.depth()},
+                           {"counterbore_diameter", h.counterboreDiameter()},
+                           {"counterbore_depth", h.counterboreDepth()},
+                           {"countersink_diameter", h.countersinkDiameter()},
+                           {"countersink_angle", h.countersinkAngle()},
+                           {"flip", h.flipped()}};
+            if (!h.size().empty()) {
+                params["size"] = h.size();
+                params["fit"] = h.fit() == model::HoleFit::Tap ? "tap" : "clearance";
+            }
+            if (at.kind == model::HolePlacement::Kind::SketchPoints) {
+                params["placement"] = "points";
+                j["inputs"]["sketch"] = at.sketch.toString();
+            } else {
+                params["placement"] = "edges";
+                params["edge_a"] = refToJson(at.edgeA);
+                params["edge_b"] = refToJson(at.edgeB);
+                params["distance_a"] = at.distanceA;
+                params["distance_b"] = at.distanceB;
+            }
+            j["params"] = params;
+            break;
+        }
         case FeatureType::Revolve: {
             const auto& r = static_cast<const model::RevolveFeature&>(f);
             j["type"] = "Revolve";
@@ -746,6 +780,67 @@ std::unique_ptr<Feature> stepFromJson(const json& j, const FeatureId& id, std::s
         } else if (op != "new") {
             return bad("operation");
         }
+        return step;
+    }
+    if (type == "Hole") {
+        const auto body = inputs.contains("body") && inputs["body"].is_string()
+                              ? FeatureId::parse(inputs["body"].get<std::string>())
+                              : std::nullopt;
+        if (!body) return bad("input body");
+        model::HolePlacement at;
+        const std::string placement = params.value("placement", std::string());
+        if (placement == "points") {
+            const auto sketch = inputs.contains("sketch") && inputs["sketch"].is_string()
+                                    ? FeatureId::parse(inputs["sketch"].get<std::string>())
+                                    : std::nullopt;
+            if (!sketch) return bad("input sketch");
+            at.sketch = *sketch;
+        } else if (placement == "edges") {
+            at.kind = model::HolePlacement::Kind::FromEdges;
+            const auto a = refFromJson(params.value("edge_a", json()));
+            const auto b = refFromJson(params.value("edge_b", json()));
+            const auto da = readNumber(params.value("distance_a", json()));
+            const auto db = readNumber(params.value("distance_b", json()));
+            if (!a) return bad("edge_a");
+            if (!b) return bad("edge_b");
+            if (!da) return bad("distance_a");
+            if (!db) return bad("distance_b");
+            at.edgeA = *a;
+            at.edgeB = *b;
+            at.distanceA = *da;
+            at.distanceB = *db;
+        } else {
+            return bad("placement");
+        }
+        std::optional<double> nums[6];
+        const char* keys[6] = {
+            "diameter",         "depth", "counterbore_diameter", "counterbore_depth", "countersink_diameter",
+            "countersink_angle"};
+        for (int k = 0; k < 6; ++k) {
+            nums[k] = readNumber(params.value(keys[k], json()));
+            if (!nums[k]) return bad(keys[k]);
+        }
+        const json through = params.value("through", json());
+        const json flip = params.value("flip", json(false));
+        if (!through.is_boolean()) return bad("through");
+        if (!flip.is_boolean()) return bad("flip");
+        const std::string kind = params.value("kind", std::string());
+        if (kind != "simple" && kind != "counterbore" && kind != "countersink") return bad("kind");
+        auto step = std::make_unique<model::HoleFeature>(id, name, *body, at, *nums[0]);
+        step->setKind(kind == "counterbore"   ? model::HoleKind::Counterbore
+                      : kind == "countersink" ? model::HoleKind::Countersink
+                                              : model::HoleKind::Simple);
+        step->setDepth(through.get<bool>(), *nums[1]);
+        step->setCounterbore(*nums[2], *nums[3]);
+        step->setCountersink(*nums[4], *nums[5]);
+        // The screw size is only a name: the saved numbers are what it drills.
+        if (params.contains("size") && params["size"].is_string()) {
+            step->setSizeName(params["size"].get<std::string>(),
+                              params.value("fit", std::string("clearance")) == "tap"
+                                  ? model::HoleFit::Tap
+                                  : model::HoleFit::Clearance);
+        }
+        step->setFlipped(flip.get<bool>());
         return step;
     }
     if (type == "Revolve") {

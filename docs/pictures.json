@@ -124,6 +124,21 @@
       "run --open top.sb --save top.sb sketch.add_line sketch=Profile from=3,35 to=0,35",
       "run --open top.sb --save top.sb sketch.add_line sketch=Profile from=0,35 to=0,0",
       "run --open top.sb --save top.sb feature.add_revolve sketch=Profile name=Top"
+    ],
+    "holeplate": [
+      "run --save plate.sb feature.add_box size=60,30,6 name=Plate",
+      "run --open plate.sb --save plate.sb feature.add_sketch body=Plate face=6",
+      "run --open plate.sb --save plate.sb sketch.add_point sketch=Sketch1 at=8,15",
+      "run --open plate.sb --save plate.sb sketch.add_point sketch=Sketch1 at=52,15",
+      "run --open plate.sb --save plate.sb feature.add_hole sketch=Sketch1 kind=counterbore"
+    ],
+    "mountingplate": [
+      "run --save plate.sb feature.add_box size=60,30,6 name=Plate",
+      "run --open plate.sb --save plate.sb feature.add_hole body=Plate edges=9,10 distances=15,30 size=M4 fit=tap depth=5 name=Mount",
+      "run --open plate.sb --save plate.sb feature.add_sketch body=Mount face=8",
+      "run --open plate.sb --save plate.sb sketch.add_point sketch=Sketch1 at=8,15",
+      "run --open plate.sb --save plate.sb sketch.add_point sketch=Sketch1 at=52,15",
+      "run --open plate.sb --save plate.sb feature.add_hole sketch=Sketch1 kind=counterbore name=Screws"
     ]
   },
   "pictures": [
@@ -1501,6 +1516,61 @@
         {
           "file": "top.sb",
           "step": "Top",
+          "color": "blue"
+        }
+      ]
+    },
+    {
+      "out": "docs/user-guide/images/holes-kinds.png",
+      "size": "560x320",
+      "commands": [
+        "run --save kinds.sb feature.add_box size=60,20,6 name=Plate",
+        "run --open kinds.sb --save kinds.sb feature.add_sketch body=Plate face=6",
+        "run --open kinds.sb --save kinds.sb sketch.add_point sketch=Sketch1 at=12,10",
+        "run --open kinds.sb --save kinds.sb feature.add_sketch body=Plate face=6",
+        "run --open kinds.sb --save kinds.sb sketch.add_point sketch=Sketch2 at=30,10",
+        "run --open kinds.sb --save kinds.sb feature.add_sketch body=Plate face=6",
+        "run --open kinds.sb --save kinds.sb sketch.add_point sketch=Sketch3 at=48,10",
+        "run --open kinds.sb --save kinds.sb feature.add_hole sketch=Sketch1 kind=counterbore size=M4",
+        "run --open kinds.sb --save kinds.sb feature.add_hole sketch=Sketch2 body=Hole1 size=M4",
+        "run --open kinds.sb --save kinds.sb feature.add_hole sketch=Sketch3 body=Hole2 kind=countersink size=M4"
+      ],
+      "show": [
+        {
+          "file": "kinds.sb",
+          "step": "Hole3",
+          "color": "blue"
+        }
+      ]
+    },
+    {
+      "out": "docs/user-guide/images/app-hole.png",
+      "size": "1280x800",
+      "script": "holeplate",
+      "app": {
+        "open": "plate.sb",
+        "select": [
+          "Hole1"
+        ],
+        "trigger": [
+          "sb.viewer.fit"
+        ]
+      },
+      "crop": [
+        0,
+        0,
+        1280,
+        800
+      ]
+    },
+    {
+      "out": "docs/tutorials/images/plate-done.png",
+      "size": "560x320",
+      "script": "mountingplate",
+      "show": [
+        {
+          "file": "plate.sb",
+          "step": "Screws",
           "color": "blue"
         }
       ]

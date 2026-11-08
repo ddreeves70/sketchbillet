@@ -32,6 +32,7 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`sketch.delete`](#sketchdelete) | Deletes something from a sketch |
 | [`feature.add_extrude`](#featureadd_extrude) | Turns a sketch's closed shapes into a solid |
 | [`feature.add_revolve`](#featureadd_revolve) | Turns a sketch's closed shapes around a line into a solid |
+| [`feature.add_hole`](#featureadd_hole) | Drills holes for screws: simple, counterbored or countersunk |
 | [`feature.add_fillet`](#featureadd_fillet) | Rounds edges of a body |
 | [`feature.add_chamfer`](#featureadd_chamfer) | Bevels edges of a body |
 | [`feature.set_edges`](#featureset_edges) | Picks a fillet's or chamfer's edges again |
@@ -1637,6 +1638,89 @@ wrote rod.sb
 ```
 
 The groove takes π × (10² − 8²) × 4 = 452.39 mm³ out of the 6283.19 mm³ rod.
+
+## feature.add_hole
+
+Drills round holes into a body, all the same size and kind: at every point of a
+sketch on a face, or one hole a distance in from two straight edges of a flat
+face. Each is simple, counterbored or countersunk, and goes all the way through
+or to a depth with a flat bottom. A screw size sets the diameters for you. See
+[Holes](../user-guide/holes.md).
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `sketch` | step name | this or `edges` | A hole at each point of this sketch (not helper points), going into the face the sketch is on |
+| `edges` | edge numbers | this or `sketch` | Two straight edges of the face the hole goes in, like `9,10`, as [`open --edges`](open.md#a-bodys-edges-and-faces) numbers them. Needs `body` |
+| `distances` | two numbers (mm) | no | With `edges`: how far in from the first edge, then from the second. Default `10,10` |
+| `body` | step name | no | The body it drills. Default the body the sketch is on |
+| `kind` | `simple`, `counterbore` or `countersink` | no | `counterbore`: a wider, flat-bottomed pocket at the top, so a screw head sits below the face. `countersink`: a cone at the top, so a flat head sits flush. Default `simple` |
+| `size` | `M2`, `M2.5`, `M3`, `M4`, `M5`, `M6` or `M8` | no | A metric screw: sets the hole, counterbore and countersink to fit it (see [Screw sizes](../user-guide/holes.md#screw-sizes)). Default `M3`, unless `diameter` is given |
+| `fit` | `clearance` or `tap` | no | With `size`: `clearance`, the screw slides through; `tap`, a smaller hole the screw's thread grips. Default `clearance` |
+| `diameter` | number (mm) | no | The hole's diameter, instead of a screw's |
+| `depth` | number (mm) | no | How deep, to a flat bottom. Default all the way through |
+| `counterbore_diameter`, `counterbore_depth` | numbers (mm) | no | A counterbore's size, instead of the screw's |
+| `countersink_diameter` | number (mm) | no | A countersink's diameter at the face, instead of the screw's |
+| `countersink_angle` | number (degrees) | no | How wide the countersink's cone is, across. Default `90` |
+| `flip` | `true` or `false` | no | Drill the other way: out of the face instead of into it. Default `false` |
+| `name` | text | no | Step name. Default `Hole1`, `Hole2`, ... |
+
+Two counterbored M3 holes in a 60 × 30 × 6 mm plate, at two points of a sketch
+on its top (face 6 of a box is its top):
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save plate.sb feature.add_box size=60,30,6 name=Plate
+plate: 1 step
+  Plate        ok  volume 10800.00 mm^3  mass 13.39 g (PLA)
+wrote plate.sb
+$ sketchbillet_cli run --open plate.sb --save plate.sb feature.add_sketch body=Plate face=6
+plate: 2 steps
+  Plate        ok  volume 10800.00 mm^3  mass 13.39 g (PLA)
+  Sketch1      ok  empty
+wrote plate.sb
+$ sketchbillet_cli run --open plate.sb --save plate.sb sketch.add_point sketch=Sketch1 at=8,15
+plate: 2 steps
+  Plate        ok  volume 10800.00 mm^3  mass 13.39 g (PLA)
+  Sketch1      ok  1 point, 0 constraints, free to move 2 ways
+wrote plate.sb
+$ sketchbillet_cli run --open plate.sb --save plate.sb sketch.add_point sketch=Sketch1 at=52,15
+plate: 2 steps
+  Plate        ok  volume 10800.00 mm^3  mass 13.39 g (PLA)
+  Sketch1      ok  2 points, 0 constraints, free to move 4 ways
+wrote plate.sb
+$ sketchbillet_cli run --open plate.sb --save plate.sb feature.add_hole sketch=Sketch1 kind=counterbore
+plate: 3 steps
+  Plate        ok  volume 10800.00 mm^3
+  Sketch1      ok  2 points, 0 constraints, free to move 4 ways
+  Hole1        ok  volume 10522.32 mm^3  mass 13.05 g (PLA)
+wrote plate.sb
+```
+
+Each takes π × 3.25² × 3.5 (the 6.5 mm counterbore, 3.5 mm deep) + π × 1.7² × 2.5
+(the 3.4 mm hole under it) = 138.84 mm³ out of the 10800 mm³ plate.
+
+One M4 tapped hole, 5 mm deep, 15 mm in from the top's front edge (9) and 30 mm
+in from its left edge (10):
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save block.sb feature.add_box size=60,30,6 name=Plate
+block: 1 step
+  Plate        ok  volume 10800.00 mm^3  mass 13.39 g (PLA)
+wrote block.sb
+$ sketchbillet_cli run --open block.sb feature.add_hole body=Plate edges=9,10 distances=15,30 size=M4 fit=tap depth=5
+block: 2 steps
+  Plate        ok  volume 10800.00 mm^3
+  Hole1        ok  volume 10757.24 mm^3  mass 13.34 g (PLA)
+```
+
+A screw size SketchBillet doesn't know is refused:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open block.sb feature.add_hole body=Plate edges=9,10 size=M7
+error [hole.size]: SketchBillet doesn't know the screw size M7. Use M2, M2.5, M3, M4, M5, M6 or M8, or give diameter= in mm.
+```
 
 ## feature.add_fillet
 

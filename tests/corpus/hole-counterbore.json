@@ -1,0 +1,157 @@
+{
+  "name": "hole-counterbore",
+  "description": "An M3 counterbored hole, as the Hole step makes it: half its cross-section (a 6.5 mm counterbore 3.5 mm deep over a 3.4 mm hole, starting 1 mm above the face) turned about its axis, then cut from the middle of a 40 x 20 x 10 mm block's top. Volume 8000 - pi 3.25^2 3.5 - pi 1.7^2 6.5 = 7824.844429 mm^3, worked out by hand. Area: the block's 2800, less the 3.25 mm circle cut from the top (33.183), plus the counterbore's wall 2 pi 3.25 x 3.5 (71.471), its floor pi (3.25^2 - 1.7^2) (24.104), the hole's wall 2 pi 1.7 x 6.5 (69.429), less the 1.7 mm circle cut from the bottom (9.079): 2922.742 mm^2.",
+  "steps": [
+    {
+      "id": "block",
+      "op": "box",
+      "corner": [
+        0,
+        0,
+        0
+      ],
+      "size": [
+        40,
+        20,
+        10
+      ]
+    },
+    {
+      "id": "section",
+      "op": "face",
+      "plane": {
+        "origin": [
+          20,
+          10,
+          10
+        ],
+        "x": [
+          1,
+          0,
+          0
+        ],
+        "y": [
+          0,
+          0,
+          -1
+        ]
+      },
+      "outer": [
+        {
+          "line": [
+            [
+              0,
+              -1
+            ],
+            [
+              3.25,
+              -1
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              3.25,
+              -1
+            ],
+            [
+              3.25,
+              3.5
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              3.25,
+              3.5
+            ],
+            [
+              1.7,
+              3.5
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              1.7,
+              3.5
+            ],
+            [
+              1.7,
+              11
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              1.7,
+              11
+            ],
+            [
+              0,
+              11
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              0,
+              11
+            ],
+            [
+              0,
+              -1
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tool",
+      "op": "revolve",
+      "face": "section",
+      "about": [
+        20,
+        10,
+        10
+      ],
+      "axis": [
+        0,
+        0,
+        -1
+      ]
+    },
+    {
+      "id": "drilled",
+      "op": "cut",
+      "a": "block",
+      "b": "tool"
+    }
+  ],
+  "expect": {
+    "valid": true,
+    "volume": 7824.844429,
+    "area": 2922.742025,
+    "bounds": [
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        40.0,
+        20.0,
+        10.0
+      ]
+    ],
+    "solids": 1,
+    "faces": 9,
+    "edges": 18,
+    "vertices": 12
+  }
+}

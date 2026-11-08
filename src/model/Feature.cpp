@@ -1,11 +1,14 @@
 #include "sb/model/Feature.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <functional>
 #include <numbers>
 #include <utility>
 
+#include "sb/model/Holes.h"
 #include "sb/sketch/Profiles.h"
 
 namespace sb::model {
@@ -710,6 +713,373 @@ Built EdgeFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) c
         return std::string();
     });
     if (out.op.ok()) out.op.issues.insert(out.op.issues.end(), notes.begin(), notes.end());
+    return out;
+}
+
+}  // namespace sb::model
+
+// ---------------------------------------------------------------------------
+// Hole
+// ---------------------------------------------------------------------------
+
+namespace sb::model {
+
+const std::vector<ScrewSize>& screwSizes() {
+    // Clearance: normal fit; tap: the usual tap drill; counterbore: a socket head
+    // screw's head (ISO 4762) + 1 mm across, its height + 0.5 mm deep;
+    // countersink: a flat head screw's head (ISO 10642, 90 degrees), widest.
+    static const std::vector<ScrewSize> sizes{
+        {"M2", 2.4, 1.6, 4.8, 2.5, 0},      {"M2.5", 2.9, 2.05, 5.5, 3.0, 0},
+        {"M3", 3.4, 2.5, 6.5, 3.5, 6.72},   {"M4", 4.5, 3.3, 8.0, 4.5, 8.96},
+        {"M5", 5.5, 4.2, 9.5, 5.5, 11.2},   {"M6", 6.6, 5.0, 11.0, 6.5, 13.44},
+        {"M8", 9.0, 6.8, 14.0, 8.5, 17.92},
+    };
+    return sizes;
+}
+
+const ScrewSize* findScrewSize(std::string_view name) {
+    for (const auto& s : screwSizes()) {
+        if (s.name.size() == name.size() &&
+            std::equal(s.name.begin(), s.name.end(), name.begin(),
+                       [](char a, char b) { return std::toupper(a) == std::toupper(b); })) {
+            return &s;
+        }
+    }
+    return nullptr;
+}
+
+HoleFeature::HoleFeature(std::string name, FeatureId body, HolePlacement placement, double diameter)
+    : HoleFeature(FeatureId::generate(), std::move(name), body, std::move(placement), diameter) {}
+
+HoleFeature::HoleFeature(FeatureId id, std::string name, FeatureId body, HolePlacement placement,
+                         double diameter)
+    : Feature(id, std::move(name)),
+      body_(body),
+      placement_(std::move(placement)),
+      diameter_(diameter),
+      cbDiameter_(diameter * 1.8),
+      cbDepth_(diameter),
+      csDiameter_(diameter * 2),
+      csAngle_(std::numbers::pi / 2) {}
+
+bool HoleFeature::setSize(std::string_view size, HoleFit fit) {
+    const auto* s = findScrewSize(size);
+    if (!s) return false;
+    diameter_ = fit == HoleFit::Tap ? s->tap : s->clearance;
+    cbDiameter_ = s->counterboreDiameter;
+    cbDepth_ = s->counterboreDepth;
+    if (s->countersinkDiameter > 0) csDiameter_ = s->countersinkDiameter;
+    csAngle_ = std::numbers::pi / 2;
+    size_ = s->name;
+    fit_ = fit;
+    return true;
+}
+
+std::vector<StepNumber> HoleFeature::numbers() const {
+    std::vector<StepNumber> out{{"diameter", kLength, true}};
+    if (!through_) out.push_back({"depth", kLength, true});
+    if (kind_ == HoleKind::Counterbore) {
+        out.push_back({"counterbore_diameter", kLength, true});
+        out.push_back({"counterbore_depth", kLength, true});
+    }
+    if (kind_ == HoleKind::Countersink) {
+        out.push_back({"countersink_diameter", kLength, true});
+        out.push_back({"countersink_angle", kAngle, true});
+    }
+    if (placement_.kind == HolePlacement::Kind::FromEdges) {
+        out.push_back({"distance_a", kLength, false});
+        out.push_back({"distance_b", kLength, false});
+    }
+    return out;
+}
+
+std::optional<double> HoleFeature::number(std::string_view key) const {
+    if (key == "diameter") return diameter_;
+    if (key == "depth") return depth_;
+    if (key == "counterbore_diameter") return cbDiameter_;
+    if (key == "counterbore_depth") return cbDepth_;
+    if (key == "countersink_diameter") return csDiameter_;
+    if (key == "countersink_angle") return csAngle_;
+    if (key == "distance_a") return placement_.distanceA;
+    if (key == "distance_b") return placement_.distanceB;
+    return std::nullopt;
+}
+
+bool HoleFeature::setNumber(std::string_view key, double value) {
+    double* v = key == "diameter"               ? &diameter_
+                : key == "depth"                ? &depth_
+                : key == "counterbore_diameter" ? &cbDiameter_
+                : key == "counterbore_depth"    ? &cbDepth_
+                : key == "countersink_diameter" ? &csDiameter_
+                : key == "countersink_angle"    ? &csAngle_
+                : key == "distance_a"           ? &placement_.distanceA
+                : key == "distance_b"           ? &placement_.distanceB
+                                                : nullptr;
+    if (!v) return false;
+    if (*v != value && key != "depth" && key != "distance_a" && key != "distance_b") size_.clear();
+    *v = value;
+    return true;
+}
+
+std::vector<FeatureId> HoleFeature::dependencies() const {
+    if (placement_.kind == HolePlacement::Kind::SketchPoints) return {body_, placement_.sketch};
+    return {body_};
+}
+
+std::vector<FeatureId> HoleFeature::sketchInputs() const {
+    if (placement_.kind == HolePlacement::Kind::SketchPoints) return {placement_.sketch};
+    return {};
+}
+
+void HoleFeature::remapInputs(const std::map<FeatureId, FeatureId>& map) {
+    if (auto it = map.find(body_); it != map.end()) body_ = it->second;
+    if (auto it = map.find(placement_.sketch); it != map.end()) placement_.sketch = it->second;
+    remapRef(placement_.edgeA, map);
+    remapRef(placement_.edgeB, map);
+}
+
+namespace {
+
+double dot(const kernel::Vec3& a, const kernel::Vec3& b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+kernel::Vec3 scaled(const kernel::Vec3& v, double k) {
+    return {v.x * k, v.y * k, v.z * k};
+}
+
+kernel::Vec3 plus(const kernel::Vec3& a, const kernel::Vec3& b) {
+    return {a.x + b.x, a.y + b.y, a.z + b.z};
+}
+
+kernel::Vec3 minus(const kernel::Vec3& a, const kernel::Vec3& b) {
+    return {a.x - b.x, a.y - b.y, a.z - b.z};
+}
+
+kernel::Vec3 unit(const kernel::Vec3& v) {
+    const double l = std::sqrt(dot(v, v));
+    return l > 0 ? scaled(v, 1 / l) : v;
+}
+
+// One hole to drill: where it starts on the face, which way it goes (a unit
+// vector into the body), and a short id for its faces' names.
+struct HoleAt {
+    kernel::Vec3 at;
+    kernel::Vec3 into;
+    std::string id;
+    std::string label;  // for messages, like "at Point2"
+};
+
+Built holeFailed(std::string code, std::string message) {
+    Built b;
+    b.op.issues.push_back({std::move(code), Severity::Error, std::move(message), {}});
+    return b;
+}
+
+}  // namespace
+
+Built HoleFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) const {
+    const std::string me = shortId(id().toString());
+    if (!(diameter_ > 0)) {
+        return holeFailed("hole.diameter",
+                          name() +
+                              " needs a diameter greater than 0 mm. Type one in Properties, or pick a "
+                              "screw size like M3.");
+    }
+    if (!through_ && !(depth_ > 0)) {
+        return holeFailed("hole.depth", name() + " needs a depth greater than 0 mm, or Through all.");
+    }
+    const double r = diameter_ / 2;
+    double top = 0;  // how deep the counterbore or countersink goes (mm)
+    if (kind_ == HoleKind::Counterbore) {
+        if (!(cbDiameter_ > diameter_) || !(cbDepth_ > 0)) {
+            return holeFailed("hole.counterbore",
+                              name() +
+                                  "'s counterbore must be wider than the hole and more than 0 mm deep. "
+                                  "Change its diameter or depth in Properties.");
+        }
+        top = cbDepth_;
+    } else if (kind_ == HoleKind::Countersink) {
+        if (!(csDiameter_ > diameter_) || !(csAngle_ > 0) || !(csAngle_ < std::numbers::pi)) {
+            return holeFailed("hole.countersink",
+                              name() +
+                                  "'s countersink must be wider than the hole, with an angle between 0 "
+                                  "and 180 degrees, like 90. Change it in Properties.");
+        }
+        top = (csDiameter_ / 2 - r) / std::tan(csAngle_ / 2);
+    }
+    if (!through_ && top >= depth_) {
+        char mm[32];
+        std::snprintf(mm, sizeof mm, "%g", depth_);
+        return holeFailed("hole.too_shallow",
+                          name() + " is " + mm + " mm deep, but its " +
+                              (kind_ == HoleKind::Counterbore ? "counterbore" : "countersink") +
+                              " goes deeper than that. Make the hole deeper, or the top smaller.");
+    }
+    const auto* shape = earlier.shapeOf(body_);
+    if (!shape) return missingInput();
+    const ShapeNames* names = namesOf(earlier, body_);
+
+    // Where each hole goes.
+    std::vector<HoleAt> holes;
+    Diagnostics notes;
+    if (placement_.kind == HolePlacement::Kind::SketchPoints) {
+        const FeatureResult* r0 = earlier.resultOf(placement_.sketch);
+        if (!r0 || !r0->sketch || !r0->sketch->ok() || !r0->plane) {
+            return holeFailed("hole.sketch", name() + " needs a sketch that solved. Fix the sketch first.");
+        }
+        const PlaneAxes& axes = *r0->plane;
+        kernel::Vec3 into = unit(cross(axes.y, axes.x));  // out of the sketch's back
+        if (flip_) into = scaled(into, -1);
+        for (const auto& e : r0->sketch->entities) {
+            const auto* p = std::get_if<sketch::PointShape>(&e.shape);
+            if (!p || e.construction) continue;
+            holes.push_back({toDesign(axes, p->at), into, shortId(e.id.toString()), "at " + e.name});
+        }
+        if (holes.empty()) {
+            return holeFailed("hole.no_points",
+                              name() +
+                                  "'s sketch has no points to drill at. Add a point where each hole goes "
+                                  "(the Point tool), or place the hole from two edges.");
+        }
+    } else {
+        if (!names) return missingInput();
+        // Both edges, found again by name; they must be straight.
+        int found[2] = {-1, -1};
+        const GeometryRef* refs[2] = {&placement_.edgeA, &placement_.edgeB};
+        for (int k = 0; k < 2; ++k) {
+            const auto where = resolve(*refs[k], *names);
+            if (where.status == ResolveStatus::Ambiguous || !where.found()) {
+                return holeFailed(
+                    "hole.edge_missing",
+                    name() + " can't find one of the edges it's placed from: an earlier change " +
+                        (where.status == ResolveStatus::Ambiguous ? "made several like it" : "took it away") +
+                        ". Delete " + name() + " and add it again from two edges.");
+            }
+            if (where.status == ResolveStatus::Matched && notes.empty()) {
+                notes.push_back({"hole.edge_matched",
+                                 Severity::Info,
+                                 name() +
+                                     " found an edge by where it is, because an earlier change renamed it. "
+                                     "Check the hole is in the right place.",
+                                 {}});
+            }
+            found[k] = where.index;
+        }
+        const auto& el = names->elements;
+        const auto& a = el.edges[static_cast<std::size_t>(found[0])];
+        const auto& b = el.edges[static_cast<std::size_t>(found[1])];
+        if (a.geom != kernel::GeomKind::Line || b.geom != kernel::GeomKind::Line) {
+            return holeFailed("hole.edge_curved",
+                              name() +
+                                  " can only be placed from straight edges. Pick two straight edges of a "
+                                  "flat face.");
+        }
+        // The flat face both edges border.
+        int face = -1;
+        for (const int fa : el.edgeFaces[static_cast<std::size_t>(found[0])]) {
+            for (const int fb : el.edgeFaces[static_cast<std::size_t>(found[1])]) {
+                if (fa == fb && el.faces[static_cast<std::size_t>(fa)].geom == kernel::GeomKind::Plane)
+                    face = fa;
+            }
+        }
+        if (face < 0) {
+            return holeFailed("hole.no_face",
+                              name() +
+                                  "'s two edges aren't both on one flat face. Pick two edges of the face "
+                                  "the hole goes in.");
+        }
+        const auto& f = el.faces[static_cast<std::size_t>(face)];
+        const kernel::Vec3 n = unit(f.direction);
+        // Lines a distance in from each edge, toward the face's middle.
+        auto inward = [&](const kernel::ElementInfo& e) {
+            kernel::Vec3 u = unit(cross(n, e.direction));
+            if (dot(u, minus(f.center, e.center)) < 0) u = scaled(u, -1);
+            return u;
+        };
+        const kernel::Vec3 pa = plus(a.center, scaled(inward(a), placement_.distanceA));
+        const kernel::Vec3 pb = plus(b.center, scaled(inward(b), placement_.distanceB));
+        const double across = dot(cross(a.direction, b.direction), n);
+        if (std::abs(across) < 1e-9) {
+            return holeFailed("hole.edges_parallel",
+                              name() +
+                                  "'s two edges are parallel, so they can't say where along them the hole "
+                                  "goes. Pick two edges that meet at a corner.");
+        }
+        // pa + t * a.direction lies on the line through pb along b.direction.
+        const double t = dot(cross(minus(pb, pa), b.direction), n) / across;
+        kernel::Vec3 into = scaled(n, -1);
+        if (flip_) into = n;
+        holes.push_back({plus(pa, scaled(a.direction, t)), into, "edges", "from its edges"});
+    }
+
+    // All the way through: farther than the body is across.
+    const auto box = kernel.bounds(*shape);
+    const double across = std::sqrt(dot(minus(box.max, box.min), minus(box.max, box.min)));
+
+    Built out{kernel::OpResult{*shape, {}, {}}, names ? std::make_shared<const ShapeNames>(*names) : nullptr};
+    for (const auto& h : holes) {
+        // Half the hole's cross-section, in a plane through its axis: x out from
+        // the axis, y down into the body, starting 1 mm above the face.
+        const double deep = through_ ? across + 1 : depth_;
+        std::vector<std::pair<sketch::Point2, std::string>>
+            pts;  // each point, and the face its next line makes
+        pts.push_back({{0, -1}, ""});
+        if (kind_ == HoleKind::Counterbore) {
+            const double R = cbDiameter_ / 2;
+            pts.push_back({{R, -1}, "counterbore"});
+            pts.push_back({{R, cbDepth_}, "step"});
+            pts.push_back({{r, cbDepth_}, "wall"});
+        } else if (kind_ == HoleKind::Countersink) {
+            const double t2 = std::tan(csAngle_ / 2);
+            pts.push_back({{csDiameter_ / 2 + t2, -1}, "countersink"});
+            pts.push_back({{r, top}, "wall"});
+        } else {
+            pts.push_back({{r, -1}, "wall"});
+        }
+        pts.push_back({{r, deep}, "floor"});
+        pts.push_back({{0, deep}, ""});
+        kernel::Loop2 loop;
+        std::vector<std::string> roles;
+        for (std::size_t k = 0; k < pts.size(); ++k) {
+            const auto& p = pts[k].first;
+            const auto& q = pts[(k + 1) % pts.size()].first;
+            loop.push_back(kernel::Edge2{kernel::Line2{{p.x, p.y}, {q.x, q.y}}});
+            roles.push_back(pts[k].second);
+        }
+        // The plane: x square to the axis, y along it (into the body).
+        const kernel::Vec3 helper = std::abs(h.into.z) < 0.9 ? kernel::Vec3{0, 0, 1} : kernel::Vec3{1, 0, 0};
+        const kernel::Vec3 x = unit(cross(helper, h.into));
+        auto face = kernel.makeFace({loop, {}}, kernel::Plane{h.at, x, h.into});
+        if (!face.ok()) return {face, nullptr};
+        auto tool = kernel.revolve(face.shape, h.at, h.into, 2 * std::numbers::pi);
+        if (!tool.ok()) return {tool, nullptr};
+        const auto& edgeCurves = face.history.edges;
+        auto named = carried(kernel, std::move(tool), {}, id(), [&](const kernel::Origin& o) -> std::string {
+            const auto e = static_cast<std::size_t>(o.index);
+            if (o.kind != kernel::OriginKind::Edge || e >= edgeCurves.size() || edgeCurves[e].empty())
+                return {};
+            const auto c = static_cast<std::size_t>(edgeCurves[e].front().index);
+            return c < roles.size() && !roles[c].empty() ? me + "/" + roles[c] + ":" + h.id : std::string();
+        });
+        const double before = kernel.massProps(out.op.shape).volume;
+        auto cut = kernel.boolean(kernel::BoolOp::Cut, out.op.shape, named.op.shape);
+        if (!cut.ok()) {
+            return holeFailed("hole.cut_failed",
+                              name() + " couldn't drill its hole " + h.label + ". Check it's on the body.");
+        }
+        auto next = carried(kernel, std::move(cut), {out.names.get(), named.names.get()}, id());
+        if (std::abs(kernel.massProps(next.op.shape).volume - before) < 1e-9) {
+            notes.push_back(
+                {"hole.missed",
+                 Severity::Warning,
+                 name() + "'s hole " + h.label +
+                     " isn't on the body, so it drilled nothing. Move it onto the body, or try Flip.",
+                 {}});
+        }
+        out = std::move(next);
+    }
+    out.op.issues.insert(out.op.issues.end(), notes.begin(), notes.end());
     return out;
 }
 

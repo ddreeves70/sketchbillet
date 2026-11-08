@@ -355,6 +355,19 @@ std::string describeFace(const Document& doc, std::string_view name) {
         what = "side from " + curve + " (" + by + ")";
     } else if (role == "start" || role == "end") {
         what = std::string(role) + " of " + by;
+    } else if (role == "wall" || role == "floor" || role == "counterbore" || role == "step" ||
+               role == "countersink") {
+        // A hole's faces: which hole, by the sketch point it's at.
+        std::string at;
+        if (const auto sketches = step ? step->sketchInputs() : std::vector<FeatureId>{}; !sketches.empty()) {
+            if (const auto* sk = dynamic_cast<const SketchFeature*>(doc.find(sketches.front()))) {
+                for (const auto& x : sk->sketch().entities) {
+                    if (shortId(x.id.toString()) == from) at = " at " + x.name;
+                }
+            }
+        }
+        const std::string word = role == "step" ? "counterbore floor" : std::string(role);
+        what = word + " of " + by + at;
     } else if (role == "round" || role == "bevel" || role == "corner") {
         what = std::string(role) + " of " + by;
     } else {

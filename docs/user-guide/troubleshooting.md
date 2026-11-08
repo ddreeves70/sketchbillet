@@ -51,7 +51,7 @@ error [command.arg_missing]: Add box needs size: Width, depth and height in mm.
 <!-- cli-example exit=1 -->
 ```console
 $ sketchbillet_cli open missing.sb
-error [file.cant_read]: SketchBillet couldn't open missing.sb. Check that the file is still there and that you're allowed to open it. missing.sb
+error [file.cant_read]: SketchBillet couldn't open missing.sb. Check that the file is still there and that you're allowed to open it. (missing.sb)
 ```
 
 ## Export didn't work

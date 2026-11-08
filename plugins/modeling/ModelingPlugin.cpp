@@ -122,6 +122,37 @@ void registerModeling(plugin::PluginContext& ctx) {
             const auto* f = doc && sel.features().size() == 1 ? doc->find(sel.features()[0]) : nullptr;
             return f && f->type() == model::FeatureType::Sketch;
         }});
+    // Hole: M3 clearance holes, through, at every point of the one sketch picked
+    // (drawn on a face of the body); or one hole 10 mm in from two picked edges.
+    ctx.addAction(ActionSpec{
+        .id = "sb.modeling.hole",
+        .text = "Hole",
+        .menu = "Create",
+        .command = "feature.add_hole",
+        .args = {{"size", std::string("M3")}},
+        .fromSelection = {"sketch"},
+        .toolbar = true,
+        .icon = std::string(icons::modeling::hole_svg),
+        .tip =
+            "Drill an M3 hole through the body at every point of the picked sketch. Change the size, depth "
+            "and kind in Properties.",
+        .enabled = [&ctx] {
+            const auto& sel = ctx.selection();
+            const auto* doc = ctx.documents().find(sel.doc());
+            const auto* f = doc && sel.features().size() == 1 ? doc->find(sel.features()[0]) : nullptr;
+            return f && f->type() == model::FeatureType::Sketch;
+        }});
+    ctx.addAction(ActionSpec{
+        .id = "sb.modeling.hole_edges",
+        .text = "Hole from two edges",
+        .menu = "Create",
+        .command = "feature.add_hole",
+        .args = {{"size", std::string("M3")}, {"distances", sketch::Point2{10, 10}}},
+        .fromEdges = "edges",
+        .fromEdgesBody = "body",
+        .tip =
+            "Drill an M3 hole 10 mm in from two picked edges of a flat face. With no edges picked, click two "
+            "edges first. Change how far in from each in Properties."});
     // Fillet and Chamfer: the picked edges of one body. With none picked, the
     // first click starts picking edges.
     ctx.addAction(ActionSpec{

@@ -39,6 +39,7 @@ sketch-entity ids are shortened to their first 8 characters.
 | Extrude, Revolve | `side:<curve>` for each side, from the sketch line, arc, circle or spline it was swept from; `start:<curve>` and `end:<curve>` for each shape's ends, after the outline curve whose id comes first |
 | Boolean, Move | Each face keeps the name it had on its body. Faces merged into one get their names joined by `+` |
 | Fillet, Chamfer | Faces it kept keep their names; each round or bevel is `round:<edge>` or `bevel:<edge>`, after the edge it replaced; a corner where several meet is `corner:<vertex>` |
+| Hole | Faces it kept keep their names; each hole's `wall`, `floor` (a hole that isn't through), `counterbore`, `step` (the counterbore's floor) and `countersink` are `<role>:<point>`, after the sketch point it's at, or `<role>:edges` for a hole from two edges |
 | Anything else | `<step>/new` |
 
 An edge is `E[<face>|<face>]` (the two names sorted; one name for a seam, where a

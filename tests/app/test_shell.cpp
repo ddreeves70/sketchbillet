@@ -43,6 +43,7 @@
 #include "sb/grid/Grid.h"
 #include "sb/kernel_occt/OcctKernel.h"
 #include "sb/model/Feature.h"
+#include "sb/model/Holes.h"
 #include "sb/plugin/PluginHost.h"
 #include "sb/plugins/Axes.h"
 #include "sb/plugins/FeatureTree.h"
@@ -254,7 +255,7 @@ TEST_CASE("every toolbar button has a picture", "[app][icons]") {
         CHECK_FALSE(a->icon().pixmap(24, 24).isNull());
     }
     CHECK(buttons ==
-          5 + 10 + 2 + 11 + 15);  // SketchBillet's own, sb.modeling, sb.sketcher, sketch tools, constraints
+          5 + 11 + 2 + 11 + 15);  // SketchBillet's own, sb.modeling, sb.sketcher, sketch tools, constraints
     // The menu item shows the same picture as its button.
     CHECK_FALSE(app.shell->action("sb.modeling.box")->icon().isNull());
 }
@@ -1514,6 +1515,135 @@ TEST_CASE("Create > Revolve turns the picked sketch; Properties changes its axis
     settle();
     REQUIRE(docs.lastRebuild(doc)->result(id)->status == model::FeatureStatus::Ok);
     CHECK(docs.kernel()->massProps(*solid()).volume == Approx(std::numbers::pi * 400 * 5 / 2));
+}
+
+TEST_CASE("Create > Hole drills at a sketch's points; Properties changes its kind, size and depth",
+          "[app][hole]") {
+    App app;
+    auto& docs = app.host.documents();
+    const auto doc = app.shell->activeDesign();
+    REQUIRE(docs.run(doc, "feature.add_box", {{"size", kernel::Vec3{40, 20, 10}}}).empty());
+    // A sketch on the ground with two points.
+    REQUIRE(docs.run(doc, "feature.add_sketch", {}).empty());
+    const auto sketchId = app.doc().featureAt(1).id();
+    for (const auto p : {sketch::Point2{10, 10}, sketch::Point2{30, 10}})
+        REQUIRE(docs.run(doc, "sketch.add_point", {{"sketch", sketchId}, {"at", p}}).empty());
+    settle();
+    auto* hole = app.shell->action("sb.modeling.hole");
+    REQUIRE(hole);
+    app.pickRows({0});  // Box1: not a sketch
+    CHECK_FALSE(hole->isEnabled());
+    app.pickRows({1});
+    REQUIRE(hole->isEnabled());
+    // A sketch on a base plane says which body to drill: here the command asks.
+    hole->trigger();
+    settle();
+    CHECK(app.doc().featureCount() == 2);
+
+    // On a face of the block, it knows: put the sketch on the block's top.
+    const auto& names = *docs.lastRebuild(doc)->result(app.doc().featureAt(0).id())->names;
+    int top = -1;
+    for (std::size_t i = 0; i < names.elements.faces.size(); ++i)
+        if (names.elements.faces[i].direction.z > 0.999) top = static_cast<int>(i);
+    REQUIRE(docs.run(doc, "feature.set_sketch_face",
+                     {{"feature", sketchId},
+                      {"body", app.doc().featureAt(0).id()},
+                      {"face", model::referTo(names, kernel::TopoKind::Face, top)}})
+                .empty());
+    settle();
+    app.pickRows({1});
+    app.click("sb.modeling.hole");
+    REQUIRE(app.doc().featureCount() == 3);
+    const auto id = app.doc().featureAt(2).id();
+    CHECK(app.doc().featureAt(2).name() == "Hole1");
+    auto volume = [&] { return docs.kernel()->massProps(*docs.lastRebuild(doc)->shapeOf(id)).volume; };
+    const double m3 = std::numbers::pi * 1.7 * 1.7 * 10;
+    CHECK(volume() == Approx(8000 - 2 * m3));
+
+    // Properties: an M3 hole, all the way through; no counterbore rows yet.
+    CHECK(app.field<QLabel>("placement")->text() == QStringLiteral("At the points of Sketch1 (2 holes)"));
+    CHECK(app.field<QComboBox>("size")->currentText() == QStringLiteral("M3"));
+    CHECK(app.field<QCheckBox>("through")->isChecked());
+    CHECK_FALSE(app.field<QDoubleSpinBox>("depth")->isVisible());
+    CHECK_FALSE(app.field<QDoubleSpinBox>("counterbore_diameter")->isVisible());
+
+    // Counterbore: its rows show, and the screw's sizes are used.
+    auto* kind = app.field<QComboBox>("kind");
+    kind->setCurrentIndex(1);
+    emit kind->activated(1);
+    settle();
+    CHECK(app.field<QDoubleSpinBox>("counterbore_diameter")->isVisible());
+    CHECK(app.field<QDoubleSpinBox>("counterbore_diameter")->value() == Approx(6.5));
+    CHECK(volume() == Approx(8000 - 2 * std::numbers::pi * (3.25 * 3.25 * 3.5 + 1.7 * 1.7 * 6.5)));
+
+    // M4 to tap, then 6 mm deep: one undo step each.
+    auto* size = app.field<QComboBox>("size");
+    const int m4 = size->findText(QStringLiteral("M4"));
+    size->setCurrentIndex(m4);
+    emit size->activated(m4);
+    settle();
+    auto* fit = app.field<QComboBox>("fit");
+    fit->setCurrentIndex(1);
+    emit fit->activated(1);
+    settle();
+    CHECK(static_cast<const model::HoleFeature&>(*app.doc().find(id)).diameter() == 3.3);
+    app.field<QCheckBox>("through")->click();
+    settle();
+    REQUIRE(app.field<QDoubleSpinBox>("depth")->isVisible());
+    app.field<QDoubleSpinBox>("depth")->setValue(6);
+    settle();
+    const auto& step = static_cast<const model::HoleFeature&>(*app.doc().find(id));
+    CHECK_FALSE(step.through());
+    CHECK(step.depth() == 6);
+    CHECK(volume() == Approx(8000 - 2 * std::numbers::pi * (4 * 4 * 4.5 + 3.3 * 3.3 / 4 * 1.5)));
+    CHECK(app.doc().undoLabel() == "Edit Hole1");
+
+    // A diameter of its own: the screw shows "Its own size".
+    app.field<QDoubleSpinBox>("diameter")->setValue(3);
+    settle();
+    CHECK(app.field<QComboBox>("size")->currentIndex() == 0);
+    CHECK_FALSE(app.field<QComboBox>("fit")->isEnabled());
+}
+
+TEST_CASE("Create > Hole from two edges: pick two edges of a face, then click it", "[app][hole]") {
+    App app;
+    auto& docs = app.host.documents();
+    const auto doc = app.shell->activeDesign();
+    REQUIRE(docs.run(doc, "feature.add_box", {{"size", kernel::Vec3{40, 20, 10}}}).empty());
+    settle();
+    const auto box = app.doc().featureAt(0).id();
+    auto& sel = app.host.selection();
+    // With no edges picked, it starts picking edges.
+    app.click("sb.modeling.hole_edges");
+    CHECK(sel.pickMode() == plugin::PickMode::Edges);
+    CHECK(app.doc().featureCount() == 1);
+    const auto edgeAt = [&](kernel::Vec3 p) {
+        const auto& names = *docs.lastRebuild(doc)->result(box)->names;
+        for (std::size_t i = 0; i < names.elements.edges.size(); ++i) {
+            const auto& c = names.elements.edges[i].center;
+            if (std::abs(c.x - p.x) < 1e-9 && std::abs(c.y - p.y) < 1e-9 && std::abs(c.z - p.z) < 1e-9)
+                return plugin::PickedElement{
+                    box, model::referTo(names, kernel::TopoKind::Edge, static_cast<int>(i))};
+        }
+        FAIL("no edge there");
+        return plugin::PickedElement{};
+    };
+    sel.setElements(doc, {edgeAt({20, 0, 10}), edgeAt({0, 10, 10})});  // the top's front and left edges
+    settle();
+    app.click("sb.modeling.hole_edges");
+    REQUIRE(app.doc().featureCount() == 2);
+    const auto id = app.doc().featureAt(1).id();
+    const auto* r = docs.lastRebuild(doc)->result(id);
+    REQUIRE(r->status == model::FeatureStatus::Ok);
+    CHECK(docs.kernel()->massProps(*docs.lastRebuild(doc)->shapeOf(id)).volume ==
+          Approx(8000 - std::numbers::pi * 1.7 * 1.7 * 10));
+    // Properties shows how far in from each edge.
+    CHECK(app.field<QLabel>("placement")->text() == QStringLiteral("In from two edges"));
+    REQUIRE(app.field<QDoubleSpinBox>("distance_a"));
+    CHECK(app.field<QDoubleSpinBox>("distance_a")->value() == Approx(10));
+    app.field<QDoubleSpinBox>("distance_b")->setValue(25);
+    settle();
+    CHECK(static_cast<const model::HoleFeature&>(*app.doc().find(id)).placement().distanceB == 25);
 }
 
 TEST_CASE("Paste explains when the clipboard has no steps", "[app][copy]") {
