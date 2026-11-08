@@ -123,17 +123,19 @@ std::string length(double v, sb::LengthUnit unit) {
 
 // Lists a sketch: each entity where the solver put it, then each constraint.
 // Lengths are in the design's unit.
-void printSketch(const sb::model::SketchFeature& step, const sb::model::FeatureResult& result,
-                 sb::LengthUnit unit) {
+void printSketch(const sb::model::Document& doc, const sb::model::SketchFeature& step,
+                 const sb::model::FeatureResult& result, sb::LengthUnit unit) {
     auto xy = [unit](sb::sketch::Point2 p) { return length(p.x, unit) + ", " + length(p.y, unit); };
     const std::string symbol(sb::unitSymbol(unit));
     namespace ks = sb::sketch;
     const auto& drawn = step.sketch();
     const auto* solved = result.sketch.get();
     const ks::Sketch shown{solved && solved->ok() ? solved->entities : drawn.entities, drawn.constraints};
-    const char* plane = step.plane() == sb::model::SketchPlane::XY   ? "XY"
-                        : step.plane() == sb::model::SketchPlane::XZ ? "XZ"
-                                                                     : "YZ";
+    std::string plane = step.plane() == sb::model::SketchPlane::XY   ? "XY plane"
+                        : step.plane() == sb::model::SketchPlane::XZ ? "XZ plane"
+                                                                     : "YZ plane";
+    if (step.face())
+        plane = "on " + sb::model::describeElement(doc, sb::kernel::TopoKind::Face, step.face()->face.name);
     std::string state = "not solved";
     if (solved && solved->ok()) {
         state = solved->freedom == 0 ? "fully constrained"
@@ -142,7 +144,7 @@ void printSketch(const sb::model::SketchFeature& step, const sb::model::FeatureR
     } else if (solved && solved->status == ks::SolveStatus::Conflicting) {
         state = "constraints conflict";
     }
-    std::printf("%s (%s plane): %s\n", step.name().c_str(), plane, state.c_str());
+    std::printf("%s (%s): %s\n", step.name().c_str(), plane.c_str(), state.c_str());
     for (const auto& e : shown.entities) {
         std::string what;
         if (const auto* p = std::get_if<ks::PointShape>(&e.shape)) {
@@ -342,7 +344,7 @@ int openDesign(int argc, char** argv) {
             std::fprintf(stderr, "error: this design has no sketch called %s.\n", argv[4]);
             return 1;
         }
-        printSketch(static_cast<const sb::model::SketchFeature&>(*found), *report.result(found->id()),
+        printSketch(doc, static_cast<const sb::model::SketchFeature&>(*found), *report.result(found->id()),
                     doc.lengthUnit());
     }
     if (showEdges || showFaces) {

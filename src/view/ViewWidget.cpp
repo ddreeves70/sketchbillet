@@ -268,9 +268,10 @@ struct ViewWidget::Impl {
         bool ghost = false;
         Rgb color;
         Handle(AIS_Shape) object;
-        // The drawn copy's edges, numbered as the design's shape numbers them
-        // (kernel::IKernel::elements()), so a picked edge's number is the design's.
+        // The drawn copy's edges and faces, numbered as the design's shape numbers
+        // them (kernel::IKernel::elements()), so a picked one's number is the design's.
         TopTools_IndexedMapOfShape edges;
+        TopTools_IndexedMapOfShape faces;
     };
 
     ViewController controller;
@@ -281,6 +282,7 @@ struct ViewWidget::Impl {
     std::map<FeatureId, Shown> shown;
     SceneContent content;
     Handle(AIS_Shape) pickedEdges;  // the picked edges, drawn thick on top of their bodies
+    Handle(AIS_Shape) pickedFaces;  // the picked faces, drawn in the picked color
     std::vector<Handle(OverlayObject)> overlays;
     std::vector<ViewHandle> handles;       // as given (lengths may be in pixels)
     std::vector<ViewHandle> shownHandles;  // the same, lengths in mm, as last drawn
@@ -433,17 +435,32 @@ struct ViewWidget::Impl {
 void ViewController::OnSelectionChanged(const Handle(AIS_InteractiveContext) & ctx,
                                         const Handle(V3d_View) &) {
     auto& d = *widget_.impl_;
-    if (d.content.pickEdges) {
-        // The edge clicked: which body's, and its number there.
+    if (d.content.pickEdges || d.content.pickFaces) {
+        // The edge or face clicked: which body's, and its number there.
+        const bool faces = d.content.pickFaces;
+        const auto kind = faces ? kernel::TopoKind::Face : kernel::TopoKind::Edge;
         std::vector<ScenePick> clicked;
         for (ctx->InitSelected(); ctx->MoreSelected(); ctx->NextSelected()) {
             const auto owner = Handle(StdSelect_BRepOwner)::DownCast(ctx->SelectedOwner());
             if (owner.IsNull() || !owner->HasShape()) continue;
             for (const auto& [id, s] : d.shown) {
                 if (s.object != ctx->SelectedInteractive()) continue;
-                const int at = s.edges.FindIndex(owner->Shape());
-                if (at > 0) clicked.push_back({id, at - 1});
+                const int at = (faces ? s.faces : s.edges).FindIndex(owner->Shape());
+                if (at > 0) clicked.push_back({id, at - 1, kind});
             }
+        }
+        if (faces) {
+            // One face at a time: the one clicked, or none.
+            if (clicked.size() > 1) clicked.resize(1);
+            if (clicked == d.content.picked && !clicked.empty()) return;
+            QPointer<ViewWidget> w(&widget_);
+            QMetaObject::invokeMethod(
+                &widget_,
+                [w, clicked] {
+                    if (w) emit w->facesPicked(clicked);
+                },
+                Qt::QueuedConnection);
+            return;
         }
         // Ctrl or Shift adds the edge, or takes it away if it was picked.
         std::vector<ScenePick> now = d.clickAdds ? d.content.picked : std::vector<ScenePick>{};
@@ -561,11 +578,11 @@ void ViewWidget::setContent(const SceneContent& content) {
             // must not change (exports mesh it too, and must not depend on the view).
             BRepBuilderAPI_Copy copier(*shape, false, false);
             Handle(AIS_Shape) obj = new AIS_Shape(copier.Shape());
-            TopTools_IndexedMapOfShape edges;
-            {
+            TopTools_IndexedMapOfShape edges, faces;
+            for (auto [type, into] : {std::pair{TopAbs_EDGE, &edges}, std::pair{TopAbs_FACE, &faces}}) {
                 TopTools_IndexedMapOfShape original;
-                TopExp::MapShapes(*shape, TopAbs_EDGE, original);
-                for (int i = 1; i <= original.Extent(); ++i) edges.Add(copier.ModifiedShape(original(i)));
+                TopExp::MapShapes(*shape, type, original);
+                for (int i = 1; i <= original.Extent(); ++i) into->Add(copier.ModifiedShape(original(i)));
             }
             obj->SetColor(rgb(body.color.r, body.color.g, body.color.b));
             obj->Attributes()->SetDeviationAngle(0.1);  // radians: smooth round edges
@@ -586,44 +603,58 @@ void ViewWidget::setContent(const SceneContent& content) {
             }
             const bool wire = !body.ghost && d.style == DisplayStyle::Wireframe;
             d.context->Display(obj, wire ? AIS_WireFrame : AIS_Shaded, 0, false);
-            next[body.feature] = {body.shape.id(), body.ghost, body.color, obj, std::move(edges)};
+            next[body.feature] = {body.shape.id(),  body.ghost,      body.color, obj,
+                                  std::move(edges), std::move(faces)};
         }
         for (auto& [id, s] : d.shown) d.context->Remove(s.object, false);
         d.shown = std::move(next);
 
-        // Clicking picks whole bodies, or edges of the bodies (not of ghosts).
-        const int edgeMode = AIS_Shape::SelectionMode(TopAbs_EDGE);
+        // Clicking picks whole bodies, or edges or faces of the bodies (not of ghosts).
+        const bool picking = content.pickEdges || content.pickFaces;
+        const int partMode = AIS_Shape::SelectionMode(content.pickFaces ? TopAbs_FACE : TopAbs_EDGE);
         for (const auto& [id, s] : d.shown) {
             d.context->Deactivate(s.object);
-            if (!content.pickEdges) {
+            if (!picking) {
                 d.context->Activate(s.object, 0);
             } else if (!s.ghost) {
-                d.context->Activate(s.object, edgeMode);
+                d.context->Activate(s.object, partMode);
             }
         }
 
         d.context->ClearSelected(false);
-        if (!content.pickEdges) {
+        if (!picking) {
             for (const auto& id : content.selected) {
                 if (auto it = d.shown.find(id); it != d.shown.end())
                     d.context->AddOrRemoveSelected(it->second.object, false);
             }
         }
 
-        // Picked edges, drawn thick in the picked color.
-        if (!d.pickedEdges.IsNull()) {
-            d.context->Remove(d.pickedEdges, false);
-            d.pickedEdges.Nullify();
+        // Picked edges, drawn thick in the picked color; picked faces, filled with it.
+        for (auto* old : {&d.pickedEdges, &d.pickedFaces}) {
+            if (old->IsNull()) continue;
+            d.context->Remove(*old, false);
+            old->Nullify();
         }
-        TopoDS_Compound picked;
+        TopoDS_Compound picked, pickedFaces;
         BRep_Builder builder;
         builder.MakeCompound(picked);
-        bool anyPicked = false;
+        builder.MakeCompound(pickedFaces);
+        bool anyPicked = false, anyFace = false;
         for (const auto& p : content.picked) {
             auto it = d.shown.find(p.body);
-            if (it == d.shown.end() || p.index < 0 || p.index >= it->second.edges.Extent()) continue;
-            builder.Add(picked, it->second.edges(p.index + 1));
-            anyPicked = true;
+            if (it == d.shown.end() || p.index < 0) continue;
+            const bool face = p.kind == kernel::TopoKind::Face;
+            const auto& map = face ? it->second.faces : it->second.edges;
+            if (p.index >= map.Extent()) continue;
+            builder.Add(face ? pickedFaces : picked, map(p.index + 1));
+            (face ? anyFace : anyPicked) = true;
+        }
+        if (anyFace) {
+            d.pickedFaces = new AIS_Shape(pickedFaces);
+            d.pickedFaces->SetColor(kSelected);
+            // Drawn after the bodies with their depth, so the picked face shows over its body.
+            d.pickedFaces->SetZLayer(Graphic3d_ZLayerId_Top);
+            d.context->Display(d.pickedFaces, AIS_Shaded, -1, false);  // -1: never picked itself
         }
         if (anyPicked) {
             d.pickedEdges = new AIS_Shape(picked);

@@ -73,7 +73,7 @@ public:
     PickMode pickMode() const { return mode_; }
 
     /// Changes what clicking a body picks. Sends PickModeChanged if it differs,
-    /// and clears picked edges when going back to bodies.
+    /// and clears picked edges or faces when it does.
     /// @param mode Bodies or edges.
     void setPickMode(PickMode mode);
 

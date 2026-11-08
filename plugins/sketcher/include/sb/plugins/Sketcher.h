@@ -25,9 +25,11 @@ plugin::BuiltinPlugin sketcherPlugin();
 
 /// Works out the lines that draw a sketch in the design: each line, and each
 /// circle and arc as short straight pieces.
-/// @param plane The sketch's plane.
+/// @param plane Where the sketch's plane sits (a base plane, or a face's plane:
+///        model::FeatureResult::plane).
 /// @param entities Its entities (solved, or as drawn).
 /// @return Pairs of points, in mm: each pair is one line.
-std::vector<kernel::Vec3> sketchLines(model::SketchPlane plane, const std::vector<sketch::Entity>& entities);
+std::vector<kernel::Vec3> sketchLines(const model::PlaneAxes& plane,
+                                      const std::vector<sketch::Entity>& entities);
 
 }  // namespace sb::plugins

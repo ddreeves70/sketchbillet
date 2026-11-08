@@ -7,6 +7,7 @@
 //                                      sb.viewer.layout.fourpanes (for screenshots)
 //   sketchbillet --edges Extrude1:9,12       then pick edges of a body, numbered as
 //                                      `sketchbillet_cli open --edges` lists them (for screenshots)
+//   sketchbillet --faces Extrude1:6          ... or a face, as `open --faces` lists them
 //   sketchbillet --settings file.ini         keep layouts in this file instead of the user's settings
 //   sketchbillet --screenshot out.png        save a picture of the window and quit
 //   sketchbillet --smoke-test                build the window, check it, and quit (CI)
@@ -183,19 +184,23 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (const auto edges = option(args, QStringLiteral("--edges")); !edges.isEmpty()) {
-        const auto colon = edges.lastIndexOf(QLatin1Char(':'));
+    for (const auto& [flag, kind] : {std::pair{QStringLiteral("--edges"), sb::kernel::TopoKind::Edge},
+                                     std::pair{QStringLiteral("--faces"), sb::kernel::TopoKind::Face}}) {
+        const auto picks = option(args, flag);
+        if (picks.isEmpty()) continue;
+        const auto colon = picks.lastIndexOf(QLatin1Char(':'));
         QList<int> numbers;
         bool ok = colon > 0;
-        for (const auto& n : edges.mid(colon + 1).split(QLatin1Char(','))) {
+        for (const auto& n : picks.mid(colon + 1).split(QLatin1Char(','))) {
             bool isNumber = false;
             numbers << n.toInt(&isNumber);
             ok = ok && isNumber;
         }
-        if (!ok || !shell.selectEdges(edges.left(colon), numbers)) {
+        if (!ok || !shell.selectElements(picks.left(colon), kind, numbers)) {
             std::fprintf(stderr,
-                         "--edges must be a body's name and its edge numbers, like Extrude1:9,12 (see "
-                         "sketchbillet_cli open <design.sb> --edges <body>).\n");
+                         "%s must be a body's name and its numbers, like Extrude1:9,12 (see "
+                         "sketchbillet_cli open <design.sb> %s <body>).\n",
+                         qPrintable(flag), qPrintable(flag));
             return 1;
         }
         QApplication::processEvents();

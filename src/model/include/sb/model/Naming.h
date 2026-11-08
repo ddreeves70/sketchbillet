@@ -5,10 +5,12 @@
 /// result that stay the same when the design changes, and references to them.
 
 #include <functional>
+#include <map>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "sb/core/Id.h"
 #include "sb/kernel/Types.h"
 
 namespace sb::model {
@@ -126,6 +128,12 @@ std::vector<int> listingOrder(const kernel::Elements& elements, kernel::TopoKind
 /// @param id The id's text (a UUID).
 /// @return Its first 8 characters.
 std::string shortId(const std::string& id);
+
+/// Rewrites the step ids in a reference's name for a copy: a copied step's
+/// faces are named for the copy, not the step it was copied from.
+/// @param ref The reference to change.
+/// @param map Each copied step's id, and its copy's id.
+void remapRef(GeometryRef& ref, const std::map<FeatureId, FeatureId>& map);
 
 /// Names every element of a result, given a name for each face. Faces that
 /// share a name get "#1", "#2", ... (by where their middles are); then each edge

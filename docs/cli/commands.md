@@ -34,6 +34,7 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`feature.add_fillet`](#featureadd_fillet) | Rounds edges of a body |
 | [`feature.add_chamfer`](#featureadd_chamfer) | Bevels edges of a body |
 | [`feature.set_edges`](#featureset_edges) | Picks a fillet's or chamfer's edges again |
+| [`feature.set_sketch_face`](#featureset_sketch_face) | Puts a sketch on a face of a body |
 | [`document.set_units`](#documentset_units) | Changes the unit the design shows lengths in |
 | [`material.define`](#materialdefine) | Adds a material of your own, or changes one |
 | [`material.delete`](#materialdelete) | Removes a material you added |
@@ -582,6 +583,8 @@ it has no volume, and it's solved again every time the design rebuilds.
 | Setting | Kind | Needed | Meaning |
 | --- | --- | --- | --- |
 | `plane` | `xy`, `xz` or `yz` | no | `xy` (the ground, the default), `xz` (standing, facing the front) or `yz` (standing, facing the right) |
+| `body` | step name | no | To draw on a face of a body: the step that made the body, like `Extrude1` |
+| `face` | face number | no | With `body`: which flat face, as [`sketchbillet_cli open <design.sb> --faces <body>`](open.md#a-bodys-edges-and-faces) numbers them |
 | `name` | text | no | Step name. Default `Sketch1`, `Sketch2`, ... |
 
 <!-- cli-example -->
@@ -590,6 +593,70 @@ $ sketchbillet_cli run --save s.sb feature.add_sketch plane=xz
 s: 1 step
   Sketch1      ok  empty
 wrote s.sb
+```
+
+**On a face.** A sketch can be drawn on a flat face of a body instead, like the
+top of a block, to put a boss or a hole there. It stays on the face: when the
+block gets taller, the sketch (and what's made from it) moves up with the top.
+The sketch's x and y are the design's x and y on a top face, so a circle at
+20,10 is above the point 20,10 of the ground. See
+[Sketching on a face](../user-guide/sketch-on-face.md).
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save top.sb feature.add_box size=40,20,10
+top: 1 step
+  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+wrote top.sb
+$ sketchbillet_cli open top.sb --faces Box1
+top: 1 step
+  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+faces of Box1: 6
+   1  flat        800.00 mm^2  at 20.00,10.00,0.00  bottom of Box1
+   2  flat        400.00 mm^2  at 20.00,0.00,5.00  front side of Box1
+   3  flat        200.00 mm^2  at 0.00,10.00,5.00  left side of Box1
+   4  flat        200.00 mm^2  at 40.00,10.00,5.00  right side of Box1
+   5  flat        400.00 mm^2  at 20.00,20.00,5.00  back side of Box1
+   6  flat        800.00 mm^2  at 20.00,10.00,10.00  top of Box1
+```
+
+The top is face 6:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open top.sb --save top.sb feature.add_sketch body=Box1 face=6
+top: 2 steps
+  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+  Sketch1      ok  empty
+wrote top.sb
+$ sketchbillet_cli run --open top.sb --save top.sb sketch.add_circle sketch=Sketch1 center=20,10 radius=5
+top: 2 steps
+  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+  Sketch1      ok  1 circle, 0 constraints, free to move 3 ways
+wrote top.sb
+$ sketchbillet_cli run --open top.sb --save top.sb feature.add_extrude sketch=Sketch1 distance=8
+top: 3 steps
+  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+  Sketch1      ok  1 circle, 0 constraints, free to move 3 ways
+  Extrude1     ok  volume 628.32 mm^3  mass 0.78 g (PLA)
+wrote top.sb
+$ sketchbillet_cli open top.sb --sketch Sketch1
+top: 3 steps
+  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+  Sketch1      ok  1 circle, 0 constraints, free to move 3 ways
+  Extrude1     ok  volume 628.32 mm^3  mass 0.78 g (PLA)
+Sketch1 (on top of Box1): free to move 3 ways
+  Circle1        circle  center 20.00, 10.00  radius 5.00
+closed shapes: 1
+  shape 1  Circle1  area 78.54 mm^2
+```
+
+A sketch needs a flat face. A face number the body doesn't have says so:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open top.sb feature.add_sketch body=Box1 face=9
+error: face must be a face number of Box1 from 1 to 6 (9 isn't one). To see them: sketchbillet_cli open <design.sb> --faces Box1
 ```
 
 ## sketch.add_point
@@ -1529,6 +1596,55 @@ block: 3 steps
 ```console
 $ sketchbillet_cli run --open block.sb feature.set_edges feature=Extrude1 edges=1
 error: Extrude1 isn't a Fillet or Chamfer, so it has no edges to pick. Pick a Fillet or Chamfer.
+```
+
+## feature.set_sketch_face
+
+Puts a sketch on a flat face of a body, or picks its face again. Use it when a
+sketch says it can't find the face it's on, because an earlier change took the
+face away. What's drawn keeps its sketch x and y.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `feature` | step name | yes | The sketch |
+| `body` | step name | yes | The step whose body has the face. It must come before the sketch |
+| `face` | face number | yes | Which flat face, as `sketchbillet_cli open <design.sb> --faces <body>` numbers them |
+
+The circle on the block's top, moved to its front (face 2), sticks out toward
+the front instead:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open top.sb feature.set_sketch_face feature=Sketch1 body=Box1 face=2
+top: 3 steps
+  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+  Sketch1      ok  1 circle, 0 constraints, free to move 3 ways
+  Extrude1     ok  volume 628.32 mm^3  mass 0.78 g (PLA)
+```
+
+A curved face can't hold a sketch:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --save pin.sb feature.add_cylinder radius=5 height=10
+pin: 1 step
+  Cylinder1    ok  volume 785.40 mm^3  mass 0.97 g (PLA)
+wrote pin.sb
+$ sketchbillet_cli run --open pin.sb --save pin.sb feature.add_sketch
+pin: 2 steps
+  Cylinder1    ok  volume 785.40 mm^3  mass 0.97 g (PLA)
+  Sketch1      ok  empty
+wrote pin.sb
+$ sketchbillet_cli open pin.sb --faces Cylinder1
+pin: 2 steps
+  Cylinder1    ok  volume 785.40 mm^3  mass 0.97 g (PLA)
+  Sketch1      ok  empty
+faces of Cylinder1: 3
+   1  flat         78.54 mm^2  at 0.00,0.00,0.00  bottom of Cylinder1
+   2  cylinder    314.16 mm^2  at 0.00,0.00,5.00  side of Cylinder1
+   3  flat         78.54 mm^2  at 0.00,0.00,10.00  top of Cylinder1
+$ sketchbillet_cli run --open pin.sb feature.set_sketch_face feature=Sketch1 body=Cylinder1 face=2
+error [sketch.face_curved]: A sketch needs a flat face, and that face is curved. Pick a flat face of Cylinder1.
 ```
 
 ## document.set_units

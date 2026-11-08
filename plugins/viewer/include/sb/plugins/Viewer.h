@@ -33,11 +33,11 @@ plugin::BuiltinPlugin viewerPlugin();
 /// @return The bodies and selection, empty if no design is open or it hasn't built.
 view::SceneContent viewerScene(const plugin::DocumentList& docs, const plugin::Selection& selection);
 
-/// Turns edges clicked in a view (numbers in the latest rebuild of the active
-/// design) into lasting references, for Selection::setElements().
+/// Turns edges or faces clicked in a view (numbers in the latest rebuild of the
+/// active design) into lasting references, for Selection::setElements().
 /// @param docs The open designs.
-/// @param picks The clicked edges.
-/// @return One reference per edge whose body has names; others are left out.
+/// @param picks The clicked edges or faces.
+/// @return One reference per element whose body has names; others are left out.
 std::vector<plugin::PickedElement> pickedEdges(const plugin::DocumentList& docs,
                                                const std::vector<view::ScenePick>& picks);
 

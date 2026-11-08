@@ -68,11 +68,14 @@ public:
     // Selects steps by name in the active design (for --select and tests).
     void selectSteps(const QStringList& names);
 
-    // Picks edges of one body, by their numbers (from 1) in the order
-    // `sketchbillet_cli open --edges` lists them, as clicking them would
-    // (for screenshots). Returns false, with nothing picked, if the body or a
-    // number isn't there.
-    bool selectEdges(const QString& body, const QList<int>& numbers);
+    // Picks edges (or faces) of one body, by their numbers (from 1) in the order
+    // `sketchbillet_cli open --edges` (or --faces) lists them, as clicking them
+    // would (for screenshots). Returns false, with nothing picked, if the body or
+    // a number isn't there.
+    bool selectElements(const QString& body, kernel::TopoKind kind, const QList<int>& numbers);
+
+    // True if edges (not faces) are picked.
+    bool pickedEdges() const;
 
     // Plugin actions by id, e.g. "sb.modeling.box"; nullptr if there is none.
     QAction* action(const std::string& id) const;

@@ -550,6 +550,11 @@ json featureToJson(const Feature& f) {
             j["type"] = "Sketch";
             j["params"] = sketchToJson(sk.sketch());
             j["params"]["plane"] = planeName(sk.plane());
+            if (sk.face()) {
+                // A sketch on a face: the body, and the face by name (see "Edge references").
+                j["inputs"] = {{"body", sk.face()->body.toString()}};
+                j["params"]["face"] = refToJson(sk.face()->face);
+            }
             break;
         }
         case FeatureType::Move: {
@@ -673,7 +678,17 @@ std::unique_ptr<Feature> stepFromJson(const json& j, const FeatureId& id, std::s
             why = "step " + name + ": " + why;
             return nullptr;
         }
-        return std::make_unique<model::SketchFeature>(id, name, *plane, std::move(*s));
+        auto step = std::make_unique<model::SketchFeature>(id, name, *plane, std::move(*s));
+        if (params.contains("face")) {
+            const auto body = inputs.contains("body") && inputs["body"].is_string()
+                                  ? FeatureId::parse(inputs["body"].get<std::string>())
+                                  : std::nullopt;
+            const auto face = refFromJson(params["face"]);
+            if (!body) return bad("input body");
+            if (!face) return bad("face");
+            step->setFace(model::SketchFace{*body, *face});
+        }
+        return step;
     }
     if (type == "Move") {
         const auto body = inputs.contains("body") && inputs["body"].is_string()

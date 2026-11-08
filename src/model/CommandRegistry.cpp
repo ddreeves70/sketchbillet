@@ -39,6 +39,8 @@ const char* typeName(ArgType t) {
             return "points (x, y), at least one";
         case ArgType::GeometryList:
             return "edges or faces of a body, at least one";
+        case ArgType::Face:
+            return "a face of a body";
         case ArgType::FeatureRef:
             return "a step in the design";
         case ArgType::FeatureList:
@@ -70,6 +72,8 @@ bool matches(ArgType t, const ArgValue& v) {
             return std::holds_alternative<std::vector<sketch::Point2>>(v);
         case ArgType::GeometryList:
             return std::holds_alternative<std::vector<GeometryRef>>(v);
+        case ArgType::Face:
+            return std::holds_alternative<GeometryRef>(v);
         case ArgType::FeatureRef:
             return std::holds_alternative<FeatureId>(v);
         case ArgType::FeatureList:
@@ -584,22 +588,59 @@ CommandRegistry makeBuiltin() {
 
     // --- Sketches ------------------------------------------------------------
 
-    r.add({"feature.add_sketch",
-           "Add sketch",
-           "Adds an empty sketch on a plane. Draw in it with sketch.add_line and the other sketch commands.",
-           {{"plane",
-             ArgType::Choice,
-             "xy (the ground), xz (standing, facing the front) or yz (standing, facing "
-             "the right). Default xy.",
-             false,
-             {"xy", "xz", "yz"}},
-            {"name", ArgType::Text, "Step name. Default Sketch1, Sketch2, ...", false, {}}}},
-          [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
-              const auto p = argText(a, "plane", "xy");
-              const auto plane = p == "xz" ? SketchPlane::XZ : p == "yz" ? SketchPlane::YZ : SketchPlane::XY;
-              return std::make_unique<AddFeatureCommand>(
-                  std::make_unique<SketchFeature>(argText(a, "name", doc.uniqueName("Sketch")), plane));
-          });
+    r.add(
+        {"feature.add_sketch",
+         "Add sketch",
+         "Adds an empty sketch on a plane, or on a flat face of a body. Draw in it with sketch.add_line and "
+         "the other sketch commands.",
+         {{"plane",
+           ArgType::Choice,
+           "xy (the ground), xz (standing, facing the front) or yz (standing, facing "
+           "the right). Default xy.",
+           false,
+           {"xy", "xz", "yz"}},
+          {"body",
+           ArgType::FeatureRef,
+           "To draw on a face: the step whose body has it, like Extrude1.",
+           false,
+           {}},
+          {"face",
+           ArgType::Face,
+           "To draw on a face: a flat face of the body, picked in the app; on the command line its number as "
+           "`sketchbillet_cli open <design.sb> --faces <body>` lists it, like 6. The sketch stays on the "
+           "face "
+           "when the body changes.",
+           false,
+           {}},
+          {"name", ArgType::Text, "Step name. Default Sketch1, Sketch2, ...", false, {}}}},
+        [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+            const auto p = argText(a, "plane", "xy");
+            auto plane = p == "xz" ? SketchPlane::XZ : p == "yz" ? SketchPlane::YZ : SketchPlane::XY;
+            const auto face = argFace(a, "face");
+            if (face) plane = nearestPlane(face->signature.direction);
+            auto step = std::make_unique<SketchFeature>(argText(a, "name", doc.uniqueName("Sketch")), plane);
+            if (face) step->setFace(SketchFace{argFeature(a, "body"), *face});
+            return std::make_unique<AddFeatureCommand>(std::move(step));
+        });
+
+    r.add(
+        {"feature.set_sketch_face",
+         "Move sketch to a face",
+         "Puts a sketch on a flat face of a body, or picks its face again after an earlier change took it "
+         "away. What's drawn keeps its sketch x and y.",
+         {{"feature", ArgType::FeatureRef, "The sketch, like Sketch2.", true, {}},
+          {"body", ArgType::FeatureRef, "The step whose body has the face, like Extrude1.", true, {}},
+          {"face",
+           ArgType::Face,
+           "A flat face of the body, picked in the app; on the command line its number as `sketchbillet_cli "
+           "open <design.sb> --faces <body>` lists it.",
+           true,
+           {}}}},
+        [](const Document&, const Args& a) -> std::unique_ptr<Command> {
+            return std::make_unique<SetSketchFaceCommand>(
+                argFeature(a, "feature"),
+                SketchFace{argFeature(a, "body"), argFace(a, "face").value_or(GeometryRef{})});
+        });
 
     const ArgSpec sketchArg{"sketch", ArgType::FeatureRef, "The sketch, like Sketch1.", true, {}};
     const ArgSpec constructionArg{"construction",
@@ -1525,6 +1566,13 @@ std::vector<GeometryRef> argGeometry(const Args& args, const std::string& name) 
     if (it == args.end()) return {};
     if (const auto* refs = std::get_if<std::vector<GeometryRef>>(&it->second)) return *refs;
     return {};
+}
+
+std::optional<GeometryRef> argFace(const Args& args, const std::string& name) {
+    auto it = args.find(name);
+    if (it == args.end()) return std::nullopt;
+    if (const auto* ref = std::get_if<GeometryRef>(&it->second)) return *ref;
+    return std::nullopt;
 }
 
 FolderId argFolder(const Args& args, const std::string& name) {

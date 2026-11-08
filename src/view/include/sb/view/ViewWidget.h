@@ -185,6 +185,11 @@ signals:
     /// @param picks The picked edges, in order; empty when empty space was clicked.
     void edgesPicked(const std::vector<sb::view::ScenePick>& picks);
 
+    /// A face was picked by clicking, while SceneContent::pickFaces is on: the
+    /// face clicked (one face is picked at a time).
+    /// @param picks The picked face, or empty when empty space was clicked.
+    void facesPicked(const std::vector<sb::view::ScenePick>& picks);
+
     /// The student clicked or focused this view (so it becomes the active pane).
     void activated();
 

@@ -2907,3 +2907,105 @@ TEST_CASE("Fillet: click it, pick edges, click it again; Chamfer the same", "[ap
     REQUIRE(app.field<QDoubleSpinBox>("distance"));
     CHECK(docs.lastRebuild(doc)->result(app.doc().featureAt(3).id())->status == model::FeatureStatus::Ok);
 }
+
+TEST_CASE("New sketch on a face: click it, pick a face, click it again; Move to a face",
+          "[app][sketch][face]") {
+    App app;
+    const auto doc = app.shell->activeDesign();
+    auto& docs = app.host.documents();
+    REQUIRE(docs.run(doc, "feature.add_box", {{"size", kernel::Vec3{40, 20, 10}}}).empty());
+    REQUIRE(
+        docs.run(doc, "feature.add_cylinder", {{"base", kernel::Vec3{60, 0, 0}}, {"radius", 5.0}, {"height", 10.0}}).empty());
+    settle();
+    const auto box = app.doc().featureAt(0).id(), pin = app.doc().featureAt(1).id();
+    auto& sel = app.host.selection();
+    // A face of a body, by which way it faces (or the curved one), as clicking it picks it.
+    const auto faceOf = [&](const FeatureId& body, std::optional<kernel::Vec3> facing) {
+        const auto& names = *docs.lastRebuild(doc)->result(body)->names;
+        for (std::size_t i = 0; i < names.faces.size(); ++i) {
+            const auto& f = names.elements.faces[i];
+            const bool want = facing ? f.geom == kernel::GeomKind::Plane && f.direction.x == facing->x &&
+                                           f.direction.y == facing->y && f.direction.z == facing->z
+                                     : f.geom == kernel::GeomKind::Cylinder;
+            if (want)
+                return plugin::PickedElement{body, model::referTo(names, kernel::TopoKind::Face, int(i))};
+        }
+        FAIL("no such face");
+        return plugin::PickedElement{};
+    };
+
+    // Nothing picked: the first click starts picking faces.
+    app.menu("sb.sketcher.new_face")->trigger();
+    settle();
+    CHECK(sel.pickMode() == plugin::PickMode::Faces);
+    CHECK(app.shell->statusBar()->currentMessage().contains(QStringLiteral("Click a flat face")));
+    CHECK(app.doc().featureCount() == 2);
+
+    // A curved face can't hold a sketch: Properties says so, and nothing is added.
+    sel.setElements(doc, {faceOf(pin, std::nullopt)});
+    settle();
+    CHECK(app.properties()
+              ->findChild<QLabel*>(QStringLiteral("sb.properties.status"))
+              ->text()
+              .contains(QStringLiteral("curved")));
+    CHECK_FALSE(app.shell->action("sb.modeling.fillet")->isEnabled() ==
+                false);  // Fillet would pick edges instead
+    app.menu("sb.sketcher.new_face")->trigger();
+    settle();
+    CHECK(app.doc().featureCount() == 2);
+
+    // The box's top: the sketch goes on it, and drawing starts.
+    sel.setElements(doc, {faceOf(box, kernel::Vec3{0, 0, 1})});
+    settle();
+    CHECK(app.properties()->findChild<QLabel*>(QStringLiteral("sb.properties.title"))->text() ==
+          QStringLiteral("Face picked: top of Box1"));
+    app.menu("sb.sketcher.new_face")->trigger();
+    settle();
+    REQUIRE(app.doc().featureCount() == 3);
+    const auto& sketch = static_cast<const model::SketchFeature&>(app.doc().featureAt(2));
+    REQUIRE(sketch.face());
+    CHECK(sketch.face()->body == box);
+    CHECK(sel.pickMode() == plugin::PickMode::Bodies);
+    CHECK(app.shell->action("sb.sketcher.finish")->isEnabled());  // drawing in it
+    CHECK(docs.lastRebuild(doc)->result(sketch.id())->plane->origin.z == 10);
+    app.menu("sb.sketcher.finish")->trigger();
+    settle();
+
+    // Move it to the box's front: pick the sketch, click, pick the face, click again.
+    sel.set(doc, {sketch.id()});
+    settle();
+    app.menu("sb.sketcher.move_to_face")->trigger();
+    settle();
+    CHECK(sel.pickMode() == plugin::PickMode::Faces);
+    CHECK(app.shell->statusBar()->currentMessage().contains(QStringLiteral("for Sketch1")));
+    sel.setElements(doc, {faceOf(box, kernel::Vec3{0, -1, 0})});
+    settle();
+    REQUIRE(app.shell->action("sb.sketcher.move_to_face")->isEnabled());
+    app.menu("sb.sketcher.move_to_face")->trigger();
+    settle();
+    const auto& moved = static_cast<const model::SketchFeature&>(app.doc().featureAt(2));
+    REQUIRE(moved.face());
+    CHECK(moved.plane() == model::SketchPlane::XY);                     // its base plane stays as it was made
+    CHECK(docs.lastRebuild(doc)->result(moved.id())->plane->y.z == 1);  // now standing, on the front
+    CHECK(sel.features() == std::vector{moved.id()});
+
+    // The toolbar's New sketch draws on a picked flat face too.
+    app.menu("sb.modeling.pick_edges")->trigger();  // any picking mode, then back to faces
+    sel.setPickMode(plugin::PickMode::Faces);
+    sel.setElements(doc, {faceOf(box, kernel::Vec3{1, 0, 0})});
+    settle();
+    app.click("sb.sketcher.new_xy");
+    REQUIRE(app.doc().featureCount() == 4);
+    CHECK(static_cast<const model::SketchFeature&>(app.doc().featureAt(3)).face().has_value());
+    app.menu("sb.sketcher.finish")->trigger();
+    settle();
+
+    // Picked faces aren't edges: Fillet then starts picking edges instead.
+    sel.setPickMode(plugin::PickMode::Faces);
+    sel.setElements(doc, {faceOf(box, kernel::Vec3{0, 0, 1})});
+    settle();
+    app.click("sb.modeling.fillet");
+    CHECK(sel.pickMode() == plugin::PickMode::Edges);
+    CHECK(sel.elements().empty());
+    CHECK(app.doc().featureCount() == 4);
+}

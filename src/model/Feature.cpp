@@ -147,16 +147,61 @@ PlaneAxes planeAxes(SketchPlane plane) {
     return {{0, 0, 0}, {1, 0, 0}, {0, 1, 0}};
 }
 
-kernel::Vec3 toDesign(SketchPlane plane, const sketch::Point2& p) {
-    const auto a = planeAxes(plane);
+kernel::Vec3 toDesign(const PlaneAxes& a, const sketch::Point2& p) {
     return {a.origin.x + p.x * a.x.x + p.y * a.y.x, a.origin.y + p.x * a.x.y + p.y * a.y.y,
             a.origin.z + p.x * a.x.z + p.y * a.y.z};
 }
 
-sketch::Point2 toSketch(SketchPlane plane, const kernel::Vec3& p) {
-    const auto a = planeAxes(plane);
+sketch::Point2 toSketch(const PlaneAxes& a, const kernel::Vec3& p) {
     const kernel::Vec3 d{p.x - a.origin.x, p.y - a.origin.y, p.z - a.origin.z};
     return {d.x * a.x.x + d.y * a.x.y + d.z * a.x.z, d.x * a.y.x + d.y * a.y.y + d.z * a.y.z};
+}
+
+kernel::Vec3 toDesign(SketchPlane plane, const sketch::Point2& p) {
+    return toDesign(planeAxes(plane), p);
+}
+
+sketch::Point2 toSketch(SketchPlane plane, const kernel::Vec3& p) {
+    return toSketch(planeAxes(plane), p);
+}
+
+SketchPlane nearestPlane(const kernel::Vec3& n) {
+    const double x = std::abs(n.x), y = std::abs(n.y), z = std::abs(n.z);
+    if (z >= x && z >= y) return SketchPlane::XY;
+    return y >= x ? SketchPlane::XZ : SketchPlane::YZ;
+}
+
+std::optional<PlaneAxes> faceAxes(const kernel::ElementInfo& face) {
+    const auto& n = face.direction;
+    const double len = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+    if (face.geom != kernel::GeomKind::Plane || len < 0.5) return std::nullopt;
+    const kernel::Vec3 z{n.x / len, n.y / len, n.z / len};
+    auto cross = [](const kernel::Vec3& a, const kernel::Vec3& b) {
+        return kernel::Vec3{a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
+    };
+    kernel::Vec3 x{1, 0, 0};
+    if (std::abs(z.z) < 1 - 1e-9) {
+        // Level: square to the design's z and to the normal.
+        const auto h = cross({0, 0, 1}, z);
+        const double l = std::sqrt(h.x * h.x + h.y * h.y + h.z * h.z);
+        x = {h.x / l, h.y / l, h.z / l};
+    }
+    const auto y = cross(z, x);
+    const double d = face.center.x * z.x + face.center.y * z.y + face.center.z * z.z;
+    // Snap tiny rounding to 0, so a top face's axes are exactly the design's.
+    auto clean = [](kernel::Vec3 v) {
+        for (double* c : {&v.x, &v.y, &v.z}) {
+            if (std::abs(*c) < 1e-12) *c = 0;
+        }
+        return v;
+    };
+    return PlaneAxes{clean({z.x * d, z.y * d, z.z * d}), clean(x), clean(y)};
+}
+
+void SketchFeature::remapInputs(const std::map<FeatureId, FeatureId>& map) {
+    if (!face_) return;
+    if (auto it = map.find(face_->body); it != map.end()) face_->body = it->second;
+    remapRef(face_->face, map);
 }
 
 }  // namespace sb::model
@@ -238,7 +283,7 @@ Built ExtrudeFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier
 
     // Which way: the sketch's front (the side it's seen from) unless flipped; for
     // both sides, start half the distance behind the sketch.
-    const PlaneAxes axes = planeAxes(*r->plane);
+    const PlaneAxes axes = *r->plane;
     const kernel::Vec3 n{axes.x.y * axes.y.z - axes.x.z * axes.y.y, axes.x.z * axes.y.x - axes.x.x * axes.y.z,
                          axes.x.x * axes.y.y - axes.x.y * axes.y.x};
     const double sign = side_ == ExtrudeSide::Flip ? -1 : 1;
@@ -426,14 +471,7 @@ void EdgeFeature::remapInputs(const std::map<FeatureId, FeatureId>& map) {
     if (auto it = map.find(body_); it != map.end()) body_ = it->second;
     // Edge names hold the ids of the steps that made their faces: a copy's edges
     // are on the copied steps' faces.
-    for (auto& ref : edges_) {
-        for (const auto& [from, to] : map) {
-            const std::string a = shortId(from.toString()), b = shortId(to.toString());
-            for (auto at = ref.name.find(a); at != std::string::npos; at = ref.name.find(a, at + b.size())) {
-                ref.name.replace(at, a.size(), b);
-            }
-        }
-    }
+    for (auto& ref : edges_) remapRef(ref, map);
 }
 
 Built EdgeFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) const {

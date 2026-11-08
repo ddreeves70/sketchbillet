@@ -96,7 +96,16 @@ class PluginContext;
 /// SelectionChanged::elements and the PickModeChanged event; actions filled from
 /// picked edges (ActionSpec::fromEdges, fromEdgesBody); and edges picked in a
 /// view (view::SceneContent::pickEdges and picked, view::ViewWidget::edgesPicked).
-inline constexpr int kPluginApiVersion = 35;
+/// Version 36 added sketching on a face: model::SketchFeature::face() and
+/// setFace() (model::SketchFace), model::faceAxes(), model::nearestPlane(),
+/// Feature::referenceInputs(), PlaneAxes versions of model::toDesign() and
+/// toSketch(), and the feature.set_sketch_face command, with faces as command
+/// arguments (model::ArgType::Face). model::FeatureResult::plane is now where the
+/// plane sits (model::PlaneAxes), not which base plane, and sketcher::sketchLines()
+/// takes one too. Faces can be picked: plugin::PickMode::Faces,
+/// view::SceneContent::pickFaces, view::ScenePick::kind and
+/// view::ViewWidget::facesPicked.
+inline constexpr int kPluginApiVersion = 36;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

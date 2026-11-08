@@ -94,7 +94,7 @@ Phase 2 started Oct 31, 2026, with the parameter table.
 - Feature graph with incremental recompute; timeline bar with rollback, edit, suppress.
 - Features: extrude (new/join/cut), revolve, fillet, chamfer, hole, shell, mirror, linear and circular pattern, construction planes. (Extrude, new body only, one side, flipped or both: built Oct 29, 2026, as the sketcher's step 6; join and cut go through Combine for now. See [The sketcher](sketcher.md). Fillet and chamfer: built Nov 6, 2026, in the app and with `sketchbillet_cli`; see the [user's guide](../user-guide/fillet-chamfer.md).)
 - Linked copies: a copy that follows its original when it changes (a Move that keeps its input), built with the patterns.
-- Topological naming v1 (history-based names plus geometric fallback); ambiguous references flagged, never guessed. (Built Nov 6, 2026: every face, edge and vertex named from the kernel's history, references found again or reported; see [Naming faces and edges](naming.md). Picking edges in the 3D view: built Nov 6, 2026. Next: picking faces, and sketching on a face.)
+- Topological naming v1 (history-based names plus geometric fallback); ambiguous references flagged, never guessed. (Built Nov 6, 2026: every face, edge and vertex named from the kernel's history, references found again or reported; see [Naming faces and edges](naming.md). Picking edges in the 3D view: built Nov 6, 2026. Picking faces and sketching on a face: built Nov 7, 2026; see [Sketching on a face](../user-guide/sketch-on-face.md). Next: extrude that joins or cuts.)
 - Geometry regression corpus started: every bug becomes a test model.
 - **Exit:** 20 reference parts (brackets, enclosures, knobs, mounts) model cleanly, and changing an upstream sketch dimension breaks none of them.
 

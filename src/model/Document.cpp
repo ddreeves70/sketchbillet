@@ -251,6 +251,54 @@ bool Document::isModified() const {
     return currentSerial() != savedSerial_;
 }
 
+namespace {
+
+// Where a sketch's plane is in this rebuild: its base plane, or its face as the
+// body is now. A face that can't be found, or isn't flat, stops the sketch.
+struct SketchWhere {
+    std::optional<PlaneAxes> axes;  // empty if it can't be worked out
+    Diagnostic why;                 // then, why
+};
+
+SketchWhere sketchAxes(const SketchFeature& step, const RebuildReport& report) {
+    if (!step.face()) return {planeAxes(step.plane()), {}};
+    const auto& on = *step.face();
+    const auto* body = report.result(on.body);
+    const auto pickAgain = " Pick a flat face for it again: pick the sketch, then Sketch > Move to a face.";
+    if (!body || !body->names) {
+        return {std::nullopt,
+                Diagnostic{"sketch.face_missing",
+                           Severity::Error,
+                           step.name() + " is on a face of a body that isn't there." + pickAgain,
+                           {}}};
+    }
+    const auto found = resolve(on.face, *body->names);
+    if (!found.found()) {
+        return {std::nullopt,
+                Diagnostic{"sketch.face_missing",
+                           Severity::Error,
+                           step.name() +
+                               (found.status == ResolveStatus::Ambiguous
+                                    ? " can't tell which face it's on: an earlier change split it into faces "
+                                      "that look alike."
+                                    : " can't find the face it's on: an earlier change took it away.") +
+                               pickAgain,
+                           {}}};
+    }
+    const auto& info = body->names->elements.faces.at(static_cast<std::size_t>(found.index));
+    const auto axes = faceAxes(info);
+    if (!axes) {
+        return {std::nullopt,
+                Diagnostic{"sketch.face_curved",
+                           Severity::Error,
+                           step.name() + " is on a curved face, and a sketch needs a flat one." + pickAgain,
+                           {}}};
+    }
+    return {axes, {}};
+}
+
+}  // namespace
+
 RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolver* solver) const {
     RebuildReport report;
     std::set<FeatureId> usedAsInput;
@@ -266,8 +314,11 @@ RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolve
             std::optional<std::string> blocker;  // the message, once one input is found
             Diagnostics formulaIssues;           // warnings about formulas that don't work
             const auto sketchInputs = f->sketchInputs();
+            const auto lookedAt = f->referenceInputs();
             for (const auto& dep : f->dependencies()) {
-                usedAsInput.insert(dep);
+                // A body only looked at (sketched on) stays a body of the design.
+                if (std::find(lookedAt.begin(), lookedAt.end(), dep) == lookedAt.end())
+                    usedAsInput.insert(dep);
                 if (blocker) continue;
                 const Feature* d = find(dep);
                 if (std::find(sketchInputs.begin(), sketchInputs.end(), dep) != sketchInputs.end()) {
@@ -330,6 +381,10 @@ RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolve
                                         Severity::Error,
                                         "This copy of SketchBillet can't solve sketches.",
                                         {}});
+                } else if (auto where = sketchAxes(static_cast<const SketchFeature&>(*f), report);
+                           !where.axes) {
+                    r.status = FeatureStatus::Failed;
+                    r.issues.push_back(where.why);
                 } else {
                     auto solved = std::make_shared<sketch::SolveResult>(
                         solver->solve(static_cast<const SketchFeature&>(*f).sketch()));
@@ -353,7 +408,7 @@ RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolve
                                             {}});
                     }
                     r.sketch = std::move(solved);
-                    r.plane = static_cast<const SketchFeature&>(*f).plane();
+                    r.plane = *where.axes;
                 }
             } else {
                 auto built = f->build(kernel, report);

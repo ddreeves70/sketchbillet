@@ -535,7 +535,7 @@ void Shell::refreshActions() {
         if (!spec.fromSelectionList.empty()) {
             ok = ok && sel.doc() == activeDesign() && !sel.features().empty();
         }
-        if (!spec.fromEdges.empty() && !sel.elements().empty()) {
+        if (!spec.fromEdges.empty() && pickedEdges()) {
             // Picked edges must all be on one body; with none picked, it starts picking.
             const auto& first = sel.elements().front().body;
             ok = ok && sel.doc() == activeDesign() &&
@@ -709,8 +709,8 @@ void Shell::runAction(const plugin::ActionSpec& spec) {
     }
     auto& sel = host_.selection();
     if (!spec.fromEdges.empty()) {
-        if (sel.elements().empty() || sel.doc() != doc) {
-            // Nothing picked yet: pick edges, then click this again.
+        if (!pickedEdges() || sel.doc() != doc) {
+            // No edges picked yet: pick edges, then click this again.
             sel.setPickMode(plugin::PickMode::Edges);
             statusBar()->showMessage(
                 tr("Click the edges for %1 in the 3D view (Ctrl-click to pick more), then click %1 again.")
@@ -739,6 +739,13 @@ void Shell::runAction(const plugin::ActionSpec& spec) {
     if (design && design->featureCount() > before) {
         host_.selection().set(doc, {design->featureAt(design->featureCount() - 1).id()});
     }
+}
+
+bool Shell::pickedEdges() const {
+    const auto& picked = host_.selection().elements();
+    return !picked.empty() && std::all_of(picked.begin(), picked.end(), [](const plugin::PickedElement& e) {
+        return e.ref.kind == kernel::TopoKind::Edge;
+    });
 }
 
 QAction* Shell::action(const std::string& id) const {
@@ -993,7 +1000,7 @@ void Shell::selectSteps(const QStringList& names) {
     host_.selection().set(activeDesign(), ids);
 }
 
-bool Shell::selectEdges(const QString& body, const QList<int>& numbers) {
+bool Shell::selectElements(const QString& body, kernel::TopoKind kind, const QList<int>& numbers) {
     const auto& docs = host_.documents();
     const auto* doc = docs.find(activeDesign());
     const auto* report = docs.lastRebuild(activeDesign());
@@ -1003,13 +1010,15 @@ bool Shell::selectEdges(const QString& body, const QList<int>& numbers) {
         if (qs(f.name()) != body) continue;
         const auto* r = report->result(f.id());
         if (!r || !r->names) return false;
-        const auto order = model::listingOrder(r->names->elements, kernel::TopoKind::Edge);
+        const auto order = model::listingOrder(r->names->elements, kind);
         std::vector<plugin::PickedElement> picked;
         for (const int n : numbers) {
             if (n < 1 || n > static_cast<int>(order.size())) return false;
-            picked.push_back({f.id(), model::referTo(*r->names, kernel::TopoKind::Edge,
-                                                     order[static_cast<std::size_t>(n - 1)])});
+            picked.push_back(
+                {f.id(), model::referTo(*r->names, kind, order[static_cast<std::size_t>(n - 1)])});
         }
+        host_.selection().setPickMode(kind == kernel::TopoKind::Face ? plugin::PickMode::Faces
+                                                                     : plugin::PickMode::Edges);
         host_.selection().setElements(activeDesign(), std::move(picked));
         return true;
     }
