@@ -1,8 +1,9 @@
 # Sketching on a face
 
 A sketch can be drawn on a flat face of a body, like the top of a block, as well
-as on the ground or a standing plane. Extrude it to add a boss, a tab or a
-peg right where it belongs; combine it to cut a pocket or a hole.
+as on the ground or a standing plane. Extrude it to add a boss, a tab or a peg
+right where it belongs, or to cut a pocket or a hole: the extrude joins the
+body, or cuts into it, in one step.
 
 ![A 40 × 20 × 10 mm block with a round peg, 10 mm across and 8 mm tall, made from a circle sketched on its top](images/sketch-face-boss.png)
 
@@ -73,24 +74,16 @@ peg: 2 steps
 wrote peg.sb
 $ sketchbillet_cli run --open peg.sb --save peg.sb feature.add_extrude sketch=Sketch1 distance=8
 peg: 3 steps
-  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
-  Sketch1      ok  1 circle, 0 constraints, free to move 3 ways
-  Extrude1     ok  volume 628.32 mm^3  mass 0.78 g (PLA)
-wrote peg.sb
-```
-
-The peg is its own body. [Combine](combining.md) it with the block to make one part:
-
-<!-- cli-example -->
-```console
-$ sketchbillet_cli run --open peg.sb --save peg.sb feature.add_boolean operation=union a=Box1 b=Extrude1
-peg: 4 steps
   Box1         ok  volume 8000.00 mm^3
   Sketch1      ok  1 circle, 0 constraints, free to move 3 ways
-  Extrude1     ok  volume 628.32 mm^3
-  Union1       ok  volume 8628.32 mm^3  mass 10.70 g (PLA)
+  Extrude1     ok  volume 8628.32 mm^3  mass 10.70 g (PLA)
 wrote peg.sb
 ```
+
+Because the sketch is on the block, the peg **joins** the block: Extrude1 is the
+whole part, 8000 + π × 5² × 8 = 8628.32 mm³, and Box1 is no longer a body of its
+own (it has no mass). To cut a pocket instead, see
+[Extrude: join and cut](extrude.md#join-and-cut).
 
 Now make the block 25 mm tall. The peg moves up with the top, and the part grows
 by 20 × 40 × 15 = 12000 mm³:
@@ -98,11 +91,10 @@ by 20 × 40 × 15 = 12000 mm³:
 <!-- cli-example -->
 ```console
 $ sketchbillet_cli run --open peg.sb --save peg.sb feature.set_value feature=Box1 setting=size_z value=25
-peg: 4 steps
+peg: 3 steps
   Box1         ok  volume 20000.00 mm^3
   Sketch1      ok  1 circle, 0 constraints, free to move 3 ways
-  Extrude1     ok  volume 628.32 mm^3
-  Union1       ok  volume 20628.32 mm^3  mass 25.58 g (PLA)
+  Extrude1     ok  volume 20628.32 mm^3  mass 25.58 g (PLA)
 wrote peg.sb
 ```
 
@@ -122,7 +114,7 @@ with `sketchbillet_cli`.
 
 - **Which face is which?** In the app, Properties names the face you picked. On
   the command line, `open --faces` lists them all, with where each one's middle is.
-- **Cut a pocket:** sketch on the top, extrude down into the block with
-  **Flip**, then **Combine > Cut** the extrude out of the block.
+- **Cut a pocket:** sketch on the top, extrude it, and set its **Operation** to
+  **Cut** in Properties. A cut from a face goes into the body.
 - **Copies bring their face along.** Duplicating a peg also duplicates the block
   it's sketched on, so the copy has a face to stand on.

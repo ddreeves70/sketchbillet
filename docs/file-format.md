@@ -81,7 +81,7 @@ Every step has `id`, `type` and `name`. Steps that use other steps list them und
 | `Boolean` | `a`, `b`: step ids | `operation`: `"union"`, `"cut"` or `"intersect"` |
 | `Sketch` | none; `body`: step id for a sketch on a face | `plane`: `"xy"`, `"xz"` or `"yz"`; `entities` and `constraints` (below); for a sketch on a flat face of a body, `face`: the face, as a [reference](#edge-references) with `"kind": "face"`. Its `plane` is then the base plane nearest the face, which an older SketchBillet draws it on |
 | `Move` | `body`: step id | `offset` [x, y, z] mm, `center` [x, y, z] mm, `axis` [x, y, z] direction, `angle` radians. Turns by `angle` about the line through `center` along `axis`, then slides by `offset` |
-| `Extrude` | `sketch`: a Sketch step's id | `distance` mm (the whole thickness), `side`: `"one"` (out of the sketch's front, the side its plane is seen from), `"flip"` (the other way) or `"both"` (half each way). Every closed shape of the sketch is swept; holes go through |
+| `Extrude` | `sketch`: a Sketch step's id; `body`: step id, for a join or cut | `distance` mm (the whole thickness), `side`: `"one"` (out of the sketch's front, the side its plane is seen from), `"flip"` (the other way) or `"both"` (half each way). Every closed shape of the sketch is swept; holes go through. `operation` (if there): `"join"` (added to `body`) or `"cut"` (taken out of `body`); without it, a new body |
 | `Fillet` | `body`: step id | `radius` mm, `edges`: the edges it rounds, as [edge references](#edge-references) |
 | `Chamfer` | `body`: step id | `distance` mm (how far back from the edge, on both faces), `edges`: the edges it bevels, as [edge references](#edge-references) |
 
@@ -344,7 +344,8 @@ failed save never damages the last good copy.
   are new step types in schema 1: an older SketchBillet won't open a design that
   has them, and says the design has a step of a kind it doesn't know. A sketch's
   `face` (Nov 2026) is new too: an older SketchBillet opens the design and draws
-  the sketch on its `plane` instead.
+  the sketch on its `plane` instead. So is an Extrude's `operation`: an older
+  SketchBillet makes a body of its own instead of joining or cutting.
 - Anything an older SketchBillet would read wrongly bumps `schema` (in
   `src/core/include/sb/core/Version.h`) and adds a migration from the old schema.
 - `tests/files/` holds files saved with each schema. They are checked in and never

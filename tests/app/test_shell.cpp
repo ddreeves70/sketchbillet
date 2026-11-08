@@ -2914,8 +2914,9 @@ TEST_CASE("New sketch on a face: click it, pick a face, click it again; Move to 
     const auto doc = app.shell->activeDesign();
     auto& docs = app.host.documents();
     REQUIRE(docs.run(doc, "feature.add_box", {{"size", kernel::Vec3{40, 20, 10}}}).empty());
-    REQUIRE(
-        docs.run(doc, "feature.add_cylinder", {{"base", kernel::Vec3{60, 0, 0}}, {"radius", 5.0}, {"height", 10.0}}).empty());
+    REQUIRE(docs.run(doc, "feature.add_cylinder",
+                     {{"base", kernel::Vec3{60, 0, 0}}, {"radius", 5.0}, {"height", 10.0}})
+                .empty());
     settle();
     const auto box = app.doc().featureAt(0).id(), pin = app.doc().featureAt(1).id();
     auto& sel = app.host.selection();
@@ -3008,4 +3009,60 @@ TEST_CASE("New sketch on a face: click it, pick a face, click it again; Move to 
     CHECK(sel.pickMode() == plugin::PickMode::Edges);
     CHECK(sel.elements().empty());
     CHECK(app.doc().featureCount() == 4);
+}
+
+TEST_CASE("Extrude's Operation and Body in Properties: join, then cut into the block", "[app][extrude]") {
+    App app;
+    const auto doc = app.shell->activeDesign();
+    auto& docs = app.host.documents();
+    REQUIRE(docs.run(doc, "feature.add_box", {{"size", kernel::Vec3{40, 20, 10}}}).empty());
+    settle();
+    const auto box = app.doc().featureAt(0).id();
+    const auto& names = *docs.lastRebuild(doc)->result(box)->names;
+    int top = -1;
+    for (std::size_t i = 0; i < names.faces.size(); ++i) {
+        if (names.elements.faces[i].direction.z > 0.999) top = static_cast<int>(i);
+    }
+    REQUIRE(docs.run(doc, "feature.add_sketch",
+                     {{"body", box}, {"face", model::referTo(names, kernel::TopoKind::Face, top)}})
+                .empty());
+    const auto sketch = app.doc().featureAt(1).id();
+    REQUIRE(docs.run(doc, "sketch.add_rectangle",
+                     {{"sketch", sketch}, {"from", sketch::Point2{10, 5}}, {"to", sketch::Point2{30, 15}}})
+                .empty());
+    // Extrude the picked sketch from the toolbar: it joins the block it's drawn on.
+    app.host.selection().set(doc, {sketch});
+    settle();
+    app.click("sb.modeling.extrude");
+    REQUIRE(app.doc().featureCount() == 3);
+    const auto extrude = app.doc().featureAt(2).id();
+    auto step = [&] { return static_cast<const model::ExtrudeFeature&>(*app.doc().find(extrude)); };
+    CHECK(step().operation() == model::ExtrudeOp::Join);
+    auto* op = app.field<QComboBox>("operation");
+    auto* body = app.field<QComboBox>("body");
+    REQUIRE(op);
+    REQUIRE(body);
+    CHECK(op->currentText() == QStringLiteral("Join (add to a body)"));
+    CHECK(body->currentText() == QStringLiteral("Box1"));
+    CHECK(body->isEnabled());
+    CHECK(docs.lastRebuild(doc)->bodies() == std::vector{extrude});
+
+    // Cut: it goes into the block (Side flips), and takes 20 x 10 x 10 out of it.
+    op->setCurrentIndex(op->findData(static_cast<int>(model::ExtrudeOp::Cut)));
+    emit op->activated(op->currentIndex());
+    settle();
+    CHECK(step().operation() == model::ExtrudeOp::Cut);
+    CHECK(step().side() == model::ExtrudeSide::Flip);
+    CHECK(app.doc().undoLabel() == "Edit Extrude1");
+    const auto* r = docs.lastRebuild(doc)->result(extrude);
+    REQUIRE(r->status == model::FeatureStatus::Ok);
+    CHECK(app.kernel->massProps(r->shape).volume == Catch::Approx(8000 - 2000));
+
+    // A new body: the block is a body again, and Body can't be picked.
+    op->setCurrentIndex(op->findData(static_cast<int>(model::ExtrudeOp::NewBody)));
+    emit op->activated(op->currentIndex());
+    settle();
+    CHECK(step().operation() == model::ExtrudeOp::NewBody);
+    CHECK_FALSE(app.field<QComboBox>("body")->isEnabled());
+    CHECK(docs.lastRebuild(doc)->bodies() == std::vector{box, extrude});
 }

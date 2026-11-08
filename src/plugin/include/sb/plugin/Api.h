@@ -105,7 +105,10 @@ class PluginContext;
 /// takes one too. Faces can be picked: plugin::PickMode::Faces,
 /// view::SceneContent::pickFaces, view::ScenePick::kind and
 /// view::ViewWidget::facesPicked.
-inline constexpr int kPluginApiVersion = 36;
+/// Version 37 added Extrude that joins or cuts: model::ExtrudeOp,
+/// ExtrudeFeature::operation(), body() and setOperation(); and
+/// model::ProblemCommand, for a command factory to report a plain problem.
+inline constexpr int kPluginApiVersion = 37;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

@@ -572,6 +572,11 @@ json featureToJson(const Feature& f) {
             j["type"] = "Extrude";
             j["inputs"] = {{"sketch", e.sketch().toString()}};
             j["params"] = {{"distance", e.distance()}, {"side", sideName(e.side())}};
+            if (e.operation() != model::ExtrudeOp::NewBody) {
+                // Joined onto or cut from a body (an older SketchBillet makes a new body).
+                j["params"]["operation"] = e.operation() == model::ExtrudeOp::Join ? "join" : "cut";
+                j["inputs"]["body"] = e.body().toString();
+            }
             break;
         }
         case FeatureType::Fillet:
@@ -715,7 +720,18 @@ std::unique_ptr<Feature> stepFromJson(const json& j, const FeatureId& id, std::s
         if (!sketch) return bad("input sketch");
         if (!distance) return bad("distance");
         if (!side) return bad("side");
-        return std::make_unique<model::ExtrudeFeature>(id, name, *sketch, *distance, *side);
+        auto step = std::make_unique<model::ExtrudeFeature>(id, name, *sketch, *distance, *side);
+        const std::string op = params.value("operation", std::string("new"));
+        if (op == "join" || op == "cut") {
+            const auto body = inputs.contains("body") && inputs["body"].is_string()
+                                  ? FeatureId::parse(inputs["body"].get<std::string>())
+                                  : std::nullopt;
+            if (!body) return bad("input body");
+            step->setOperation(op == "join" ? model::ExtrudeOp::Join : model::ExtrudeOp::Cut, *body);
+        } else if (op != "new") {
+            return bad("operation");
+        }
+        return step;
     }
     if (type == "Fillet" || type == "Chamfer") {
         const bool fillet = type == "Fillet";

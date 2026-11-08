@@ -447,24 +447,57 @@ CommandRegistry makeBuiltin() {
     r.add({"feature.add_extrude",
            "Extrude",
            "Turns every closed shape of a sketch into a solid, by sweeping it straight out of the sketch. "
-           "Holes in a shape go all the way through.",
+           "Holes in a shape go all the way through. The solid can be a new body, or join onto a body, or be "
+           "cut out of one.",
            {{"sketch", ArgType::FeatureRef, "The sketch, like Sketch1.", true, {}},
             {"distance", ArgType::Number, "How far, in mm. Default 10.", false, {}},
             {"side",
              ArgType::Choice,
              "Which way: one (out of the sketch's front: up for XY), flip (the other way) or both (half "
-             "each way). Default one.",
+             "each way). Default one; for a cut from a sketch on a face, flip (into the body).",
              false,
              {"one", "flip", "both"}},
+            {"operation",
+             ArgType::Choice,
+             "new (a body of its own), join (added to a body) or cut (taken out of a body). Default join for "
+             "a sketch on a face of a body, otherwise new.",
+             false,
+             {"new", "join", "cut"}},
+            {"body",
+             ArgType::FeatureRef,
+             "For join or cut: the body, like Box1. Default the body the sketch is on.",
+             false,
+             {}},
             {"name", ArgType::Text, "Step name. Default Extrude1, Extrude2, ...", false, {}}}},
           [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
-              const std::string side = argText(a, "side", "one");
+              // A sketch on a face joins onto (or cuts) that face's body unless told otherwise.
+              const auto* sketch = dynamic_cast<const SketchFeature*>(doc.find(argFeature(a, "sketch")));
+              const bool onFace = sketch && sketch->face();
+              const std::string op = argText(a, "operation", onFace ? "join" : "new");
+              const auto operation = op == "join"  ? ExtrudeOp::Join
+                                     : op == "cut" ? ExtrudeOp::Cut
+                                                   : ExtrudeOp::NewBody;
+              const std::string side =
+                  argText(a, "side", operation == ExtrudeOp::Cut && onFace ? "flip" : "one");
               const auto s = side == "flip"   ? ExtrudeSide::Flip
                              : side == "both" ? ExtrudeSide::Both
                                               : ExtrudeSide::One;
               const double distance = a.count("distance") ? argNumber(a, "distance") : 10.0;
-              return std::make_unique<AddFeatureCommand>(std::make_unique<ExtrudeFeature>(
-                  argText(a, "name", doc.uniqueName("Extrude")), argFeature(a, "sketch"), distance, s));
+              FeatureId body = argFeature(a, "body");
+              if (body.isNil() && onFace) body = sketch->face()->body;
+              if (body.isNil() && operation != ExtrudeOp::NewBody) {
+                  return std::make_unique<ProblemCommand>(
+                      Diagnostic{"extrude.no_body",
+                                 Severity::Error,
+                                 std::string("To ") + (operation == ExtrudeOp::Join ? "join" : "cut") +
+                                     ", say which body with body=, like body=Box1, or draw the sketch on a "
+                                     "face of the body.",
+                                 {}});
+              }
+              auto step = std::make_unique<ExtrudeFeature>(argText(a, "name", doc.uniqueName("Extrude")),
+                                                           argFeature(a, "sketch"), distance, s);
+              step->setOperation(operation, body);
+              return std::make_unique<AddFeatureCommand>(std::move(step));
           });
 
     for (const bool fillet : {true, false}) {

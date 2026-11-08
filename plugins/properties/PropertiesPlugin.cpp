@@ -570,6 +570,74 @@ private:
             const int want = static_cast<int>(static_cast<const model::ExtrudeFeature&>(g).side());
             side->setCurrentIndex(side->findData(want));
         });
+
+        // What it does with its solid, and to which body.
+        auto* op = new QComboBox(form_);
+        op->setObjectName(QStringLiteral("operation"));
+        op->addItem(tr("New body"), static_cast<int>(model::ExtrudeOp::NewBody));
+        op->addItem(tr("Join (add to a body)"), static_cast<int>(model::ExtrudeOp::Join));
+        op->addItem(tr("Cut (take out of a body)"), static_cast<int>(model::ExtrudeOp::Cut));
+        op->setToolTip(
+            tr("Make a body of its own, add the shape to a body (a peg, a tab), or cut it out of one "
+               "(a pocket, a hole)."));
+        form->addRow(tr("Operation"), op);
+        auto* body = new QComboBox(form_);
+        body->setObjectName(QStringLiteral("body"));
+        body->setToolTip(tr("The body it joins onto or cuts from: one made before this step."));
+        form->addRow(tr("Body"), body);
+        connect(op, &QComboBox::activated, this, [this, op](int index) {
+            const auto want = static_cast<model::ExtrudeOp>(op->itemData(index).toInt());
+            const auto* d = design();
+            edit(QStringLiteral("operation"), [want, d](model::Feature& g) {
+                auto& e = static_cast<model::ExtrudeFeature&>(g);
+                // Keep its body; or the body its sketch is on; or the last body before it.
+                FeatureId target = e.body();
+                const auto* sk = d ? dynamic_cast<const model::SketchFeature*>(d->find(e.sketch())) : nullptr;
+                if (target.isNil() && sk && sk->face()) target = sk->face()->body;
+                if (target.isNil() && d) {
+                    for (const auto& id : bodiesBefore(*d, e.id())) target = id;
+                }
+                // A cut from a face goes into the body.
+                if (want == model::ExtrudeOp::Cut && sk && sk->face() &&
+                    e.side() == model::ExtrudeSide::One) {
+                    e.setSide(model::ExtrudeSide::Flip);
+                }
+                e.setOperation(want, target);
+            });
+        });
+        connect(body, &QComboBox::activated, this, [this, body](int index) {
+            const auto id = FeatureId::parse(body->itemData(index).toString().toStdString());
+            if (!id) return;
+            edit(QStringLiteral("body"), [id](model::Feature& g) {
+                auto& e = static_cast<model::ExtrudeFeature&>(g);
+                e.setOperation(e.operation(), *id);
+            });
+        });
+        updaters_.push_back([this, op, body](const model::Feature& g) {
+            const auto& e = static_cast<const model::ExtrudeFeature&>(g);
+            op->setCurrentIndex(op->findData(static_cast<int>(e.operation())));
+            body->clear();
+            const auto* d = design();
+            if (d) {
+                for (const auto& id : bodiesBefore(*d, e.id())) {
+                    body->addItem(QString::fromStdString(d->find(id)->name()),
+                                  QString::fromStdString(id.toString()));
+                }
+            }
+            body->setCurrentIndex(body->findData(QString::fromStdString(e.body().toString())));
+            body->setEnabled(e.operation() != model::ExtrudeOp::NewBody);
+        });
+    }
+
+    // The steps before `step` that make a body (any step but a sketch), in order.
+    static std::vector<FeatureId> bodiesBefore(const model::Document& d, const FeatureId& step) {
+        std::vector<FeatureId> out;
+        for (std::size_t i = 0; i < d.featureCount(); ++i) {
+            const auto& f = d.featureAt(i);
+            if (f.id() == step) break;
+            if (f.type() != model::FeatureType::Sketch) out.push_back(f.id());
+        }
+        return out;
     }
 
     // The material, and what it makes of the body: mass, weight and cost.
