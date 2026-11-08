@@ -51,9 +51,16 @@ int usage() {
     return 2;
 }
 
-void printIssues(const sb::Diagnostics& issues) {
+// Problems, each with how bad it is, as `run` prints them. A step's go under it,
+// indented.
+void printIssues(const sb::Diagnostics& issues, const char* indent = "") {
     for (const auto& d : issues) {
-        std::fprintf(stderr, "error [%s]: %s %s\n", d.code.c_str(), d.message.c_str(), d.detail.c_str());
+        const char* kind = d.severity == sb::Severity::Error     ? "error"
+                           : d.severity == sb::Severity::Warning ? "warning"
+                                                                 : "note";
+        std::fprintf(stderr, "%s%s [%s]: %s", indent, kind, d.code.c_str(), d.message.c_str());
+        if (!d.detail.empty()) std::fprintf(stderr, " (%s)", d.detail.c_str());
+        std::fprintf(stderr, "\n");
     }
 }
 
@@ -332,7 +339,7 @@ int openDesign(int argc, char** argv) {
         }
         std::printf("\n");
         sb::cli::printFormulas(f, doc.lengthUnit(), folder ? "      " : "    ");
-        printIssues(r->issues);
+        printIssues(r->issues, folder ? "      " : "    ");
     }
     sb::cli::printParameters(doc);
     if (showSketch) {

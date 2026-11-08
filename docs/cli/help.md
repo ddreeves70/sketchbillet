@@ -25,6 +25,7 @@ Commands for sketchbillet_cli run:
   feature.add_cylinder     Add cylinder
   feature.add_extrude      Extrude
   feature.add_fillet       Fillet
+  feature.add_hole         Hole
   feature.add_move         Move body
   feature.add_revolve      Revolve
   feature.add_sketch       Add sketch

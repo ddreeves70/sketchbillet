@@ -200,3 +200,5 @@ and finger.
 - The shape may touch the axis (a line on it makes no face) but not cross it.
 - An angle less than 360° makes a cutaway, to see the shape inside.
 - Rounding a corner of the profile rounds a whole ring of the part.
+
+Next: [Tutorial 5](05-mounting-plate.md) drills holes for screws.

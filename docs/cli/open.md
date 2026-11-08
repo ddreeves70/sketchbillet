@@ -196,7 +196,7 @@ error: this design has no step called Missing.
 <!-- cli-example exit=1 -->
 ```console
 $ sketchbillet_cli open missing.sb
-error [file.cant_read]: SketchBillet couldn't open missing.sb. Check that the file is still there and that you're allowed to open it. missing.sb
+error [file.cant_read]: SketchBillet couldn't open missing.sb. Check that the file is still there and that you're allowed to open it. (missing.sb)
 ```
 
 The [file format page](../file-format.md) lists every reason a file can be refused.

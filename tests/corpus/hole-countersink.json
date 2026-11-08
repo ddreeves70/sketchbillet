@@ -1,0 +1,145 @@
+{
+  "name": "hole-countersink",
+  "description": "An M3 countersunk hole, as the Hole step makes it: a 90 degree cone 6.72 mm across at the face, narrowing to the 3.4 mm hole 1.66 mm down, then the hole through a 40 x 20 x 10 mm block. Volume 8000 - (the cone's frustum, pi 1.66/3 (3.36^2 + 3.36 x 1.7 + 1.7^2)) - pi 1.7^2 8.34 = 7889.700927 mm^3, worked out by hand. Area: 2800, less the 3.36 mm circle cut from the top (35.467), plus the cone's side pi (3.36 + 1.7) x 1.66 sqrt 2 (37.318), the hole's wall 2 pi 1.7 x 8.34 (89.083), less the 1.7 mm circle at the bottom (9.079): 2881.855 mm^2.",
+  "steps": [
+    {
+      "id": "block",
+      "op": "box",
+      "corner": [
+        0,
+        0,
+        0
+      ],
+      "size": [
+        40,
+        20,
+        10
+      ]
+    },
+    {
+      "id": "section",
+      "op": "face",
+      "plane": {
+        "origin": [
+          20,
+          10,
+          10
+        ],
+        "x": [
+          1,
+          0,
+          0
+        ],
+        "y": [
+          0,
+          0,
+          -1
+        ]
+      },
+      "outer": [
+        {
+          "line": [
+            [
+              0,
+              -1
+            ],
+            [
+              4.359999999999999,
+              -1
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              4.359999999999999,
+              -1
+            ],
+            [
+              1.7,
+              1.66
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              1.7,
+              1.66
+            ],
+            [
+              1.7,
+              11
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              1.7,
+              11
+            ],
+            [
+              0,
+              11
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              0,
+              11
+            ],
+            [
+              0,
+              -1
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tool",
+      "op": "revolve",
+      "face": "section",
+      "about": [
+        20,
+        10,
+        10
+      ],
+      "axis": [
+        0,
+        0,
+        -1
+      ]
+    },
+    {
+      "id": "drilled",
+      "op": "cut",
+      "a": "block",
+      "b": "tool"
+    }
+  ],
+  "expect": {
+    "valid": true,
+    "volume": 7889.700927,
+    "area": 2881.854914,
+    "bounds": [
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        40.0,
+        20.0,
+        10.0
+      ]
+    ],
+    "solids": 1,
+    "faces": 8,
+    "edges": 17,
+    "vertices": 11
+  }
+}

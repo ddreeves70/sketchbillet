@@ -1,5 +1,6 @@
 #include "sb/plugins/Properties.h"
 
+#include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDialog>
@@ -29,6 +30,7 @@
 
 #include "sb/model/Commands.h"
 #include "sb/model/Document.h"
+#include "sb/model/Holes.h"
 #include "sb/model/Material.h"
 #include "sb/plugin/Events.h"
 #include "sb/ui/UiRegistry.h"
@@ -534,6 +536,7 @@ private:
             }
             case model::FeatureType::Extrude:  // see addExtrude()
             case model::FeatureType::Revolve:  // see addRevolve()
+            case model::FeatureType::Hole:     // see addHole()
                 break;
             case model::FeatureType::Fillet:
             case model::FeatureType::Chamfer: {
@@ -630,6 +633,7 @@ private:
         }
         if (f.type() == model::FeatureType::Extrude) addExtrude(form);
         if (f.type() == model::FeatureType::Revolve) addRevolve(form);
+        if (f.type() == model::FeatureType::Hole) addHole(form, static_cast<const model::HoleFeature&>(f));
         if (f.type() != model::FeatureType::Sketch) addMaterial(form);  // a sketch isn't a body
     }
 
@@ -716,6 +720,169 @@ private:
             form, {tr("One way"), tr("Flipped (the other way)"), tr("Both ways (half each way)")},
             tr("Which way the shape turns from its sketch, for less than a full turn."));
         addOperation<model::RevolveFeature>(form, tr("(a groove)"));
+    }
+
+    void addHole(QFormLayout* form, const model::HoleFeature& first) {
+        using model::HoleFeature;
+        auto hole = [](const model::Feature& g) -> const HoleFeature& {
+            return static_cast<const HoleFeature&>(g);
+        };
+        auto* body = new QLabel(form_);
+        body->setObjectName(QStringLiteral("body"));
+        form->addRow(tr("Body"), body);
+        auto* where = new QLabel(form_);
+        where->setObjectName(QStringLiteral("placement"));
+        where->setWordWrap(true);
+        form->addRow(tr("Where"), where);
+        updaters_.push_back([this, body, where, hole](const model::Feature& g) {
+            const auto& h = hole(g);
+            const auto* d = design();
+            const auto* b = d ? d->find(h.body()) : nullptr;
+            body->setText(b ? qs(b->name()) : tr("(missing)"));
+            if (h.placement().kind == model::HolePlacement::Kind::FromEdges) {
+                where->setText(tr("In from two edges"));
+                return;
+            }
+            const auto* sk =
+                d ? dynamic_cast<const model::SketchFeature*>(d->find(h.placement().sketch)) : nullptr;
+            int points = 0;
+            if (sk) {
+                for (const auto& e : sk->sketch().entities)
+                    points += std::holds_alternative<sketch::PointShape>(e.shape) && !e.construction;
+            }
+            where->setText(sk ? tr("At the points of %1 (%n holes)", "", points).arg(qs(sk->name()))
+                              : tr("(missing sketch)"));
+        });
+        if (first.placement().kind == model::HolePlacement::Kind::FromEdges) {
+            addNumber(
+                form, QStringLiteral("distance_a"), tr("From edge 1"),
+                [hole](const model::Feature& g) { return hole(g).placement().distanceA; },
+                [](model::Feature& g, double v) { static_cast<HoleFeature&>(g).setNumber("distance_a", v); });
+            addNumber(
+                form, QStringLiteral("distance_b"), tr("From edge 2"),
+                [hole](const model::Feature& g) { return hole(g).placement().distanceB; },
+                [](model::Feature& g, double v) { static_cast<HoleFeature&>(g).setNumber("distance_b", v); });
+        }
+
+        // Kind, and the screw it's sized for.
+        auto* kind = new QComboBox(form_);
+        kind->setObjectName(QStringLiteral("kind"));
+        kind->addItem(tr("Simple"), static_cast<int>(model::HoleKind::Simple));
+        kind->addItem(tr("Counterbore (screw head below the face)"),
+                      static_cast<int>(model::HoleKind::Counterbore));
+        kind->addItem(tr("Countersink (flat head, flush)"), static_cast<int>(model::HoleKind::Countersink));
+        form->addRow(tr("Kind"), kind);
+        connect(kind, &QComboBox::activated, this, [this, kind](int index) {
+            const auto k = static_cast<model::HoleKind>(kind->itemData(index).toInt());
+            edit(QStringLiteral("kind"), [k](model::Feature& g) { static_cast<HoleFeature&>(g).setKind(k); });
+        });
+        auto* size = new QComboBox(form_);
+        size->setObjectName(QStringLiteral("size"));
+        size->addItem(tr("Its own size"), QString());
+        for (const auto& s : model::screwSizes()) size->addItem(qs(s.name), qs(s.name));
+        size->setToolTip(tr("A metric screw: sets the hole, counterbore and countersink to fit it."));
+        form->addRow(tr("Screw"), size);
+        auto* fit = new QComboBox(form_);
+        fit->setObjectName(QStringLiteral("fit"));
+        fit->addItem(tr("Clearance (the screw slides through)"), static_cast<int>(model::HoleFit::Clearance));
+        fit->addItem(tr("Tap (the screw's thread grips)"), static_cast<int>(model::HoleFit::Tap));
+        form->addRow(tr("Fit"), fit);
+        auto resize = [this, size, fit] {
+            const auto name = size->currentData().toString().toStdString();
+            const auto f = static_cast<model::HoleFit>(fit->currentData().toInt());
+            if (name.empty()) return;
+            edit(QStringLiteral("size"),
+                 [name, f](model::Feature& g) { static_cast<HoleFeature&>(g).setSize(name, f); });
+        };
+        connect(size, &QComboBox::activated, this, resize);
+        connect(fit, &QComboBox::activated, this, resize);
+
+        addNumber(
+            form, QStringLiteral("diameter"), tr("Diameter"),
+            [hole](const model::Feature& g) { return hole(g).diameter(); },
+            [](model::Feature& g, double v) { static_cast<HoleFeature&>(g).setDiameter(v); });
+        auto* through = new QCheckBox(tr("All the way through"), form_);
+        through->setObjectName(QStringLiteral("through"));
+        form->addRow(tr("Depth"), through);
+        connect(through, &QCheckBox::clicked, this, [this](bool on) {
+            edit(QStringLiteral("through"), [on](model::Feature& g) {
+                auto& h = static_cast<HoleFeature&>(g);
+                h.setDepth(on, h.depth());
+            });
+        });
+        addNumber(
+            form, QStringLiteral("depth"), QString(),
+            [hole](const model::Feature& g) { return hole(g).depth(); },
+            [](model::Feature& g, double v) {
+                auto& h = static_cast<HoleFeature&>(g);
+                h.setDepth(false, v);
+            });
+        addNumber(
+            form, QStringLiteral("counterbore_diameter"), tr("Counterbore"),
+            [hole](const model::Feature& g) { return hole(g).counterboreDiameter(); },
+            [](model::Feature& g, double v) {
+                auto& h = static_cast<HoleFeature&>(g);
+                h.setCounterbore(v, h.counterboreDepth());
+            });
+        addNumber(
+            form, QStringLiteral("counterbore_depth"), tr("Counterbore depth"),
+            [hole](const model::Feature& g) { return hole(g).counterboreDepth(); },
+            [](model::Feature& g, double v) {
+                auto& h = static_cast<HoleFeature&>(g);
+                h.setCounterbore(h.counterboreDiameter(), v);
+            });
+        addNumber(
+            form, QStringLiteral("countersink_diameter"), tr("Countersink"),
+            [hole](const model::Feature& g) { return hole(g).countersinkDiameter(); },
+            [](model::Feature& g, double v) {
+                auto& h = static_cast<HoleFeature&>(g);
+                h.setCountersink(v, h.countersinkAngle());
+            });
+        auto* angle = new QDoubleSpinBox(form_);
+        angle->setObjectName(QStringLiteral("countersink_angle"));
+        angle->setDecimals(1);
+        angle->setRange(1.0, 179.0);
+        angle->setSuffix(QStringLiteral("°"));
+        angle->setKeyboardTracking(false);
+        angle->setToolTip(
+            tr("How wide the countersink's cone is, across: 90 degrees for metric flat head screws."));
+        form->addRow(tr("Countersink angle"), angle);
+        connect(angle, &QDoubleSpinBox::valueChanged, this, [this](double degrees) {
+            edit(QStringLiteral("countersink_angle"), [degrees](model::Feature& g) {
+                auto& h = static_cast<HoleFeature&>(g);
+                h.setCountersink(h.countersinkDiameter(), degrees * std::numbers::pi / 180.0);
+            });
+        });
+        auto* flip = new QCheckBox(tr("Drill the other way"), form_);
+        flip->setObjectName(QStringLiteral("flip"));
+        form->addRow(tr("Flip"), flip);
+        connect(flip, &QCheckBox::clicked, this, [this](bool on) {
+            edit(QStringLiteral("flip"),
+                 [on](model::Feature& g) { static_cast<HoleFeature&>(g).setFlipped(on); });
+        });
+
+        // Show what fits this hole: the depth when it isn't through, and the top's sizes.
+        updaters_.push_back(
+            [this, form, hole, kind, size, fit, through, angle, flip](const model::Feature& g) {
+                const auto& h = hole(g);
+                kind->setCurrentIndex(kind->findData(static_cast<int>(h.kind())));
+                size->setCurrentIndex(std::max(0, size->findData(qs(h.size()))));
+                fit->setCurrentIndex(fit->findData(static_cast<int>(h.fit())));
+                fit->setEnabled(!h.size().empty());
+                through->setChecked(h.through());
+                angle->setValue(h.countersinkAngle() * 180.0 / std::numbers::pi);
+                flip->setChecked(h.flipped());
+                auto show = [&](const char* key, bool on) {
+                    if (auto* w = form_->findChild<QWidget*>(QLatin1String(key))) form->setRowVisible(w, on);
+                };
+                show("depth", !h.through());
+                const bool cb = h.kind() == model::HoleKind::Counterbore,
+                           cs = h.kind() == model::HoleKind::Countersink;
+                show("counterbore_diameter", cb);
+                show("counterbore_depth", cb);
+                show("countersink_diameter", cs);
+                show("countersink_angle", cs);
+            });
     }
 
     // A sketch step's sketch, by name.

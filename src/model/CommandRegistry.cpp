@@ -12,6 +12,7 @@
 #include "sb/model/Commands.h"
 #include "sb/model/Document.h"
 #include "sb/model/Formulas.h"
+#include "sb/model/Holes.h"
 
 namespace sb::model {
 
@@ -595,6 +596,157 @@ CommandRegistry makeBuiltin() {
                           : side == "both" ? ExtrudeSide::Both
                                            : ExtrudeSide::One);
             step->setOperation(operation, body);
+            return std::make_unique<AddFeatureCommand>(std::move(step));
+        });
+
+    r.add(
+        {"feature.add_hole",
+         "Hole",
+         "Drills round holes into a body: at every point of a sketch on a face, or one hole a distance in "
+         "from two straight edges of a face. Simple, counterbored or countersunk; all the way through or to "
+         "a depth.",
+         {{"sketch",
+           ArgType::FeatureRef,
+           "Holes at this sketch's points, like Sketch2. Give this, or edges.",
+           false,
+           {}},
+          {"edges",
+           ArgType::GeometryList,
+           "Instead of a sketch: two straight edges of the face the hole goes in, like 9,12, as "
+           "sketchbillet_cli open <design.sb> --edges <body> lists them.",
+           false,
+           {}},
+          {"distances",
+           ArgType::Vec2,
+           "With edges: how far in from the first edge and from the second, in mm. Default 10,10.",
+           false,
+           {}},
+          {"body",
+           ArgType::FeatureRef,
+           "The body it drills, like Extrude1. Default the body the sketch is on.",
+           false,
+           {}},
+          {"kind",
+           ArgType::Choice,
+           "simple, counterbore (a wider pocket at the top, for a screw head) or countersink (a cone at the "
+           "top, for a flat head). Default simple.",
+           false,
+           {"simple", "counterbore", "countersink"}},
+          {"size",
+           ArgType::Text,
+           "A metric screw size, which sets the diameters: M2, M2.5, M3, M4, M5, M6 or M8. Default M3, "
+           "unless "
+           "diameter is given.",
+           false,
+           {}},
+          {"fit",
+           ArgType::Choice,
+           "With size: clearance (the screw slides through) or tap (its thread grips). Default clearance.",
+           false,
+           {"clearance", "tap"}},
+          {"diameter", ArgType::Number, "The hole's diameter, in mm, instead of a screw size.", false, {}},
+          {"depth",
+           ArgType::Number,
+           "How deep, in mm, to a flat bottom. Default all the way through.",
+           false,
+           {}},
+          {"counterbore_diameter", ArgType::Number, "A counterbore's diameter, in mm.", false, {}},
+          {"counterbore_depth", ArgType::Number, "A counterbore's depth, in mm.", false, {}},
+          {"countersink_diameter",
+           ArgType::Number,
+           "A countersink's diameter at the face, in mm.",
+           false,
+           {}},
+          {"countersink_angle",
+           ArgType::Number,
+           "A countersink's angle across, in degrees. Default 90.",
+           false,
+           {}},
+          {"flip",
+           ArgType::Bool,
+           "true to drill the other way (out of the sketch's front, or out of the face). Default false.",
+           false,
+           {}},
+          {"name", ArgType::Text, "Step name. Default Hole1, Hole2, ...", false, {}}}},
+        [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+            auto problem = [](std::string code, std::string message) {
+                return std::make_unique<ProblemCommand>(
+                    Diagnostic{std::move(code), Severity::Error, std::move(message), {}});
+            };
+            HolePlacement at;
+            FeatureId body = argFeature(a, "body");
+            const bool bySketch = a.count("sketch") > 0, byEdges = a.count("edges") > 0;
+            if (bySketch == byEdges) {
+                return problem(
+                    "hole.where",
+                    "Say where the holes go: sketch=, a sketch with a point for each hole, or edges= "
+                    "and distances=, two edges of the face and how far in from each.");
+            }
+            if (bySketch) {
+                const auto* sk = dynamic_cast<const SketchFeature*>(doc.find(argFeature(a, "sketch")));
+                if (!sk) return problem("hole.sketch", "sketch= must be a sketch, like sketch=Sketch2.");
+                at.sketch = sk->id();
+                if (body.isNil() && sk->face()) body = sk->face()->body;
+                if (body.isNil()) {
+                    return problem(
+                        "hole.no_body",
+                        "Say which body to drill with body=, like body=Box1, or draw the sketch on a "
+                        "face of the body.");
+                }
+            } else {
+                const auto edges = argGeometry(a, "edges");
+                if (edges.size() != 2) {
+                    return problem("hole.two_edges",
+                                   "A hole from edges needs exactly two edges of the face it goes in, like "
+                                   "edges=9,12.");
+                }
+                at.kind = HolePlacement::Kind::FromEdges;
+                at.edgeA = edges[0];
+                at.edgeB = edges[1];
+                const auto d = argVec2(a, "distances", {10, 10});
+                at.distanceA = d.x;
+                at.distanceB = d.y;
+            }
+            auto step =
+                std::make_unique<HoleFeature>(argText(a, "name", doc.uniqueName("Hole")), body, at, 3.4);
+            const std::string kind = argText(a, "kind", "simple");
+            step->setKind(kind == "counterbore"   ? HoleKind::Counterbore
+                          : kind == "countersink" ? HoleKind::Countersink
+                                                  : HoleKind::Simple);
+            const std::string size = argText(a, "size", a.count("diameter") ? "" : "M3");
+            if (!size.empty()) {
+                const auto fit = argText(a, "fit", "clearance") == "tap" ? HoleFit::Tap : HoleFit::Clearance;
+                if (!step->setSize(size, fit)) {
+                    return problem("hole.size", "SketchBillet doesn't know the screw size " + size +
+                                                    ". Use M2, M2.5, M3, M4, M5, M6 or M8, or give "
+                                                    "diameter= in mm.");
+                }
+                const auto* s = findScrewSize(size);
+                if (kind == "countersink" && s->countersinkDiameter == 0 &&
+                    !a.count("countersink_diameter")) {
+                    return problem("hole.size",
+                                   "There's no standard countersink for " + s->name +
+                                       " here. Give countersink_diameter= in mm, or use M3 or bigger.");
+                }
+            }
+            if (a.count("diameter")) step->setDiameter(argNumber(a, "diameter"));
+            if (a.count("depth")) step->setDepth(false, argNumber(a, "depth"));
+            if (a.count("counterbore_diameter") || a.count("counterbore_depth")) {
+                step->setCounterbore(a.count("counterbore_diameter") ? argNumber(a, "counterbore_diameter")
+                                                                     : step->counterboreDiameter(),
+                                     a.count("counterbore_depth") ? argNumber(a, "counterbore_depth")
+                                                                  : step->counterboreDepth());
+            }
+            if (a.count("countersink_diameter") || a.count("countersink_angle")) {
+                step->setCountersink(a.count("countersink_diameter") ? argNumber(a, "countersink_diameter")
+                                                                     : step->countersinkDiameter(),
+                                     a.count("countersink_angle")
+                                         ? argNumber(a, "countersink_angle") * std::numbers::pi / 180.0
+                                         : step->countersinkAngle());
+            }
+            // (Diameters given by hand make it a size of its own: setDiameter() and the like forget the
+            // screw.)
+            step->setFlipped(argBool(a, "flip", false));
             return std::make_unique<AddFeatureCommand>(std::move(step));
         });
 

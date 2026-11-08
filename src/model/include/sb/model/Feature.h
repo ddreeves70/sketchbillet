@@ -31,6 +31,7 @@ enum class FeatureType {
     Fillet,    ///< A FilletFeature.
     Chamfer,   ///< A ChamferFeature.
     Revolve,   ///< A RevolveFeature.
+    Hole,      ///< A HoleFeature (sb/model/Holes.h).
 };
 
 /// The flat plane a sketch is drawn on.

@@ -112,7 +112,10 @@ class PluginContext;
 /// setPickOnly().
 /// Version 39 added Revolve: kernel::IKernel::revolve(), model::RevolveFeature,
 /// model::RevolveAxis, FeatureType::Revolve and the feature.add_revolve command.
-inline constexpr int kPluginApiVersion = 39;
+/// Version 40 added holes: sb/model/Holes.h (model::HoleFeature,
+/// model::HolePlacement, model::HoleKind, model::HoleFit, model::ScrewSize,
+/// model::screwSizes()), FeatureType::Hole and the feature.add_hole command.
+inline constexpr int kPluginApiVersion = 40;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.
