@@ -24,7 +24,7 @@ Sometimes a change really does take an edge away: the hole you rounded no
 longer reaches the top, say. Then the fillet stops and says so:
 
 ```text
-Fillet1 can't find an edge it rounds: an earlier change took it away. Edit Fillet1 and pick its edges again.
+Fillet1 can't find an edge it rounds: an earlier change took it away. Pick Fillet1, then Modify > Change edges.
 ```
 
 SketchBillet never guesses which edge you meant. If an edge was split in two
@@ -43,7 +43,7 @@ tells you to check; if two pieces look alike, it asks you to pick again.
 3. Click **Fillet** again. SketchBillet adds **Fillet1**, with a radius of 1 mm,
    and picks it, so **Properties** shows it. Type the radius you want there.
 
-![Fillet1 picked: Properties shows its body, how many edges it rounds, and its radius](images/app-fillet.png)
+![Fillet1 picked: Properties shows its body, how many edges it rounds with a Change edges button, and its radius](images/app-fillet.png)
 
 **Chamfer** works the same way, with a **Distance** instead of a radius.
 
@@ -51,10 +51,26 @@ tells you to check; if two pieces look alike, it asks you to pick again.
 first and then click Fillet or Chamfer. Each new fillet or chamfer is one undo
 step, and so is each change of its radius or distance.
 
-If a fillet can't find its edges after a change, delete it and add it again
-with the edges you want. (Picking a fillet's edges again in the app comes next;
+### Picking a fillet's edges again
+
+When a fillet can't find its edges after a change, or you want it on other
+edges, pick its edges again:
+
+1. Click **Fillet1** in the tree (or in the 3D view). **Properties** shows a
+   **Change edges** button next to its edges.
+2. Click **Change edges** (or **Modify > Change edges**). The 3D view shows only
+   the body as it was before the fillet, with nothing rounded yet, ready to pick
+   edges. Properties says "Changing the edges of Fillet1".
+
+   ![Changing Fillet1's edges: the block before the fillet, two edges picked in orange, and Done in Properties](images/app-fillet-change.png)
+
+3. Click the edges you want (Ctrl-click for more), then click **Done**. The
+   fillet rounds the new edges, as one undo step. **Cancel** keeps the edges it
+   had.
+
+A chamfer works the same way.
 [`feature.set_edges`](../cli/commands.md#featureset_edges) does it with
-`sketchbillet_cli`.)
+`sketchbillet_cli`.
 
 ## Example with sketchbillet_cli
 

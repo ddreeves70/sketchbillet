@@ -1323,6 +1323,30 @@
       ]
     },
     {
+      "out": "docs/user-guide/images/app-fillet-change.png",
+      "size": "1280x800",
+      "script": "block",
+      "commands": [
+        "run --open block.sb --save block.sb feature.add_fillet body=Extrude1 edges=9 radius=3"
+      ],
+      "app": {
+        "open": "block.sb",
+        "select": [
+          "Fillet1"
+        ],
+        "trigger": [
+          "sb.properties.change_edges"
+        ],
+        "edges": "Extrude1:9,12"
+      },
+      "crop": [
+        0,
+        0,
+        1280,
+        800
+      ]
+    },
+    {
       "out": "docs/user-guide/images/sketch-face-boss.png",
       "size": "560x340",
       "script": "facesketch",

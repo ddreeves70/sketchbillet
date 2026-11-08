@@ -536,14 +536,14 @@ Built EdgeFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) c
             return failed("edges.ambiguous", name() + " can't tell which edge to " +
                                                  (fillet ? "round" : "bevel") + ": an earlier change made " +
                                                  std::to_string(where.candidates.size()) +
-                                                 " edges that look alike where one was. Edit " + name() +
-                                                 " and pick its edges again.");
+                                                 " edges that look alike where one was. Pick " + name() +
+                                                 ", then Modify > Change edges.");
         }
         if (!where.found()) {
             return failed("edges.missing", name() + " can't find an edge it " +
                                                (fillet ? "rounds" : "bevels") +
-                                               ": an earlier change took it away. Edit " + name() +
-                                               " and pick its edges again.");
+                                               ": an earlier change took it away. Pick " + name() +
+                                               ", then Modify > Change edges.");
         }
         if (where.status == ResolveStatus::Matched && notes.empty()) {
             notes.push_back({"edges.matched",

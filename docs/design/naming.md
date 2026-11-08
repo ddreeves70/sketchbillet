@@ -68,7 +68,9 @@ separators.
 
 A *Matched* reference builds, with a note ("found an edge by where it is ...
 check it's the right one"). [`feature.set_edges`](../cli/commands.md#featureset_edges)
-picks edges again.
+picks edges again; in the app, **Modify > Change edges** (or Properties' **Change
+edges** button) shows only the step's body, as it was before the step
+(`plugin::Selection::pickOnly()`), to pick them on.
 
 ## Sketching on a face
 
@@ -116,8 +118,6 @@ Names are for matching. People see:
 
 ## Not yet
 
-- **Picking a fillet's edges again in the app** (the command line has
-  `feature.set_edges`).
 - **Fuzzing:** random edits on corpus models, checking every reference stays
   Exact or Matched, or is reported (the [design model](design-model.md#threading-errors-and-testing-hooks)
   asks for it).

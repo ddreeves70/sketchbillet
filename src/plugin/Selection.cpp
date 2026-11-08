@@ -65,9 +65,16 @@ void Selection::setElements(const DocId& doc, std::vector<PickedElement> element
     bus_.publish(SelectionChanged{doc_, features_, false, elements_});
 }
 
+void Selection::setPickOnly(const FeatureId& body) {
+    if (body == only_) return;
+    only_ = body;
+    bus_.publish(PickModeChanged{mode_});
+}
+
 void Selection::setPickMode(PickMode mode) {
     if (mode == mode_) return;
     mode_ = mode;
+    if (mode == PickMode::Bodies) only_ = FeatureId{};
     if (!elements_.empty()) clear();  // picked edges aren't faces, and the other way round
     bus_.publish(PickModeChanged{mode_});
 }

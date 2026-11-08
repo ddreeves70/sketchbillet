@@ -108,7 +108,9 @@ class PluginContext;
 /// Version 37 added Extrude that joins or cuts: model::ExtrudeOp,
 /// ExtrudeFeature::operation(), body() and setOperation(); and
 /// model::ProblemCommand, for a command factory to report a plain problem.
-inline constexpr int kPluginApiVersion = 37;
+/// Version 38 added picking on one body only: plugin::Selection::pickOnly() and
+/// setPickOnly().
+inline constexpr int kPluginApiVersion = 38;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

@@ -12,6 +12,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPointer>
 #include <QPushButton>
 #include <QVBoxLayout>
 
@@ -135,6 +136,22 @@ public:
         outer->addWidget(title_);
         form_ = new QWidget(this);
         outer->addWidget(form_);
+        // While picking a Fillet's or Chamfer's edges again: Done and Cancel.
+        changing_ = new QWidget(this);
+        changing_->setObjectName(QStringLiteral("sb.properties.changing"));
+        auto* buttons = new QHBoxLayout(changing_);
+        buttons->setContentsMargins(0, 0, 0, 0);
+        done_ = new QPushButton(tr("Done"), changing_);
+        done_->setObjectName(QStringLiteral("edgesdone"));
+        auto* cancel = new QPushButton(tr("Cancel"), changing_);
+        cancel->setObjectName(QStringLiteral("edgescancel"));
+        buttons->addWidget(done_);
+        buttons->addWidget(cancel);
+        buttons->addStretch(1);
+        connect(done_, &QPushButton::clicked, this, [this] { finishChanging(true); });
+        connect(cancel, &QPushButton::clicked, this, [this] { finishChanging(false); });
+        changing_->hide();
+        outer->addWidget(changing_);
         status_ = new QLabel(this);
         status_->setObjectName(QStringLiteral("sb.properties.status"));
         status_->setWordWrap(true);
@@ -147,7 +164,54 @@ public:
         subs_.push_back(ctx_.events().subscribe<ActiveDocumentChanged>([this](const auto&) { schedule(); }));
         subs_.push_back(ctx_.events().subscribe<DocumentChanged>([this](const auto&) { schedule(); }));
         subs_.push_back(ctx_.events().subscribe<RebuildFinished>([this](const auto&) { schedule(); }));
+        subs_.push_back(ctx_.events().subscribe<PickModeChanged>([this](const auto& e) {
+            // Leaving edge picking some other way stops changing edges.
+            if (e.mode != plugin::PickMode::Edges) changingStep_ = FeatureId{};
+            schedule();
+        }));
         refresh();
+    }
+
+    // Starts picking a Fillet's or Chamfer's edges again: the view shows only its
+    // body (as it was before the step) and picks edges, until Done or Cancel.
+    void startChanging(const FeatureId& step) {
+        const auto* design = ctx_.documents().find(ctx_.selection().doc());
+        const auto* e = design ? dynamic_cast<const model::EdgeFeature*>(design->find(step)) : nullptr;
+        if (!e) return;
+        changingDoc_ = ctx_.selection().doc();
+        auto& sel = ctx_.selection();
+        sel.setPickMode(plugin::PickMode::Edges);  // clears the selection's edges, if any
+        changingStep_ = step;
+        sel.setPickOnly(e->body());
+        ui_.showMessage(tr("Click the edges for %1, then click Done in Properties. Ctrl-click picks more.")
+                            .arg(QString::fromStdString(e->name())));
+        schedule();
+    }
+
+    void finishChanging(bool keep) {
+        const FeatureId step = changingStep_;
+        const DocId doc = changingDoc_;
+        if (step.isNil()) return;
+        std::vector<model::GeometryRef> edges;
+        for (const auto& p : ctx_.selection().elements()) edges.push_back(p.ref);
+        changingStep_ = FeatureId{};
+        ctx_.selection().setPickMode(plugin::PickMode::Bodies);
+        if (keep && !edges.empty()) {
+            const auto problems =
+                ctx_.documents().run(doc, "feature.set_edges", {{"feature", step}, {"edges", edges}});
+            if (!problems.empty()) ui_.showProblems(problems);
+        }
+        ctx_.selection().set(doc, {step});
+    }
+
+public:
+    // Modify > Change edges: for the picked Fillet or Chamfer.
+    bool canChange() const {
+        const auto* f = selected();
+        return f && (f->type() == model::FeatureType::Fillet || f->type() == model::FeatureType::Chamfer);
+    }
+    void changePicked() {
+        if (const auto* f = selected(); f && canChange()) startChanging(f->id());
     }
 
 private:
@@ -174,6 +238,24 @@ private:
             showDesign();
             return;
         }
+        changing_->setVisible(!changingStep_.isNil());
+        if (!changingStep_.isNil()) {
+            // Picking a Fillet's or Chamfer's edges again.
+            shown_ = FeatureId{};
+            clearForm();
+            const auto* design = ctx_.documents().find(changingDoc_);
+            const auto* step = design ? design->find(changingStep_) : nullptr;
+            const auto n = static_cast<int>(ctx_.selection().elements().size());
+            const QString name = step ? QString::fromStdString(step->name()) : QString();
+            title_->setText(tr("Changing the edges of %1").arg(name));
+            status_->setStyleSheet(QStringLiteral("color: #57606a"));
+            status_->setText(n == 0   ? tr("Click the edges to use.")
+                             : n == 1 ? tr("1 edge picked.")
+                                      : tr("%1 edges picked.").arg(n));
+            done_->setEnabled(n > 0);
+            return;
+        }
+        status_->setStyleSheet(QStringLiteral("color: #c42b1c"));
         if (!f) {
             shown_ = FeatureId{};
             clearForm();
@@ -457,7 +539,15 @@ private:
                 form->addRow(tr("Body"), body);
                 auto* edges = new QLabel(form_);
                 edges->setObjectName(QStringLiteral("edges"));
-                form->addRow(tr("Edges"), edges);
+                auto* change = new QPushButton(tr("Change edges"), form_);
+                change->setObjectName(QStringLiteral("changeedges"));
+                change->setToolTip(
+                    tr("Pick this step's edges again, on its body as it was before this step."));
+                connect(change, &QPushButton::clicked, this, [this, id = f.id()] { startChanging(id); });
+                auto* row = new QHBoxLayout;
+                row->addWidget(edges, 1);
+                row->addWidget(change);
+                form->addRow(tr("Edges"), row);
                 updaters_.push_back([this, body, edges](const model::Feature& g) {
                     const auto& e = static_cast<const model::EdgeFeature&>(g);
                     const auto* design = ctx_.documents().find(ctx_.selection().doc());
@@ -888,6 +978,10 @@ private:
     plugin::PluginContext& ctx_;
     ui::UiRegistry& ui_;
     QLabel* title_ = nullptr;
+    QWidget* changing_ = nullptr;
+    QPushButton* done_ = nullptr;
+    FeatureId changingStep_{};
+    DocId changingDoc_{};
     QWidget* form_ = nullptr;
     QLabel* status_ = nullptr;
     FeatureId shown_;
@@ -906,10 +1000,26 @@ void registerProperties(plugin::PluginContext& ctx) {
         ctx.log("No desktop app here, so the Properties panel isn't shown.");
         return;
     }
+    // The panel, once made, for Modify > Change edges.
+    auto panel = std::make_shared<QPointer<Properties>>();
     ui::PanelSpec spec{"sb.properties.panel", QObject::tr("Properties"), ui::PanelArea::Right,
-                       [&ctx, ui] { return new Properties(ctx, *ui); }};
+                       [&ctx, ui, panel] {
+                           auto* p = new Properties(ctx, *ui);
+                           *panel = p;
+                           return p;
+                       }};
     spec.floatsOverView = true;  // at the view's top right
     ui->addPanel(std::move(spec));
+    ctx.addAction(plugin::ActionSpec{.id = "sb.properties.change_edges",
+                                     .text = "Change edges",
+                                     .menu = "Modify",
+                                     .tip = "Pick the edges of the picked Fillet or Chamfer again, for when "
+                                            "an earlier change took them away.",
+                                     .run =
+                                         [panel] {
+                                             if (*panel) (*panel)->changePicked();
+                                         },
+                                     .enabled = [panel] { return *panel && (*panel)->canChange(); }});
 }
 
 }  // namespace
