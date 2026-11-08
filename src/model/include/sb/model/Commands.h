@@ -267,6 +267,23 @@ Diagnostics trim(sketch::Sketch& sketch, const EntityId& entity, sketch::Point2 
 /// @return The first free name of "Line1", "Line2", ...
 std::string uniqueSketchName(const sketch::Sketch& sketch, const std::string& base);
 
+/// A command that changes nothing and reports a problem: for a command factory
+/// whose arguments don't work together (like a join with no body), so the
+/// student gets a plain message instead of a vague one.
+class ProblemCommand final : public Command {
+public:
+    /// Prepares it.
+    /// @param problem What's wrong, and how to fix it.
+    explicit ProblemCommand(Diagnostic problem) : problem_(std::move(problem)) {}
+
+    std::string label() const override { return "Problem"; }
+    Diagnostics apply(DocumentEditor&) override { return {problem_}; }
+    void revert(DocumentEditor&) override {}
+
+private:
+    Diagnostic problem_;
+};
+
 /// Puts a sketch on a flat face of a body (feature.set_sketch_face), or picks
 /// its face again after an earlier change took the face away. What's drawn keeps
 /// its sketch x and y.

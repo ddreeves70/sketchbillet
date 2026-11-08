@@ -21,12 +21,14 @@ the sketch (drag a line, change a dimension) and the solid rebuilds to match.
 SketchBillet adds `Extrude1`, 10 mm thick. Pick it to change it in **Properties** (the name tag from
 [Tutorial 3](../tutorials/03-name-tag.md), 3 mm thick):
 
-![The name tag's Extrude1 picked: Properties shows its sketch, distance and side](images/app-extrude.png)
+![The name tag's Extrude1 picked: Properties shows its sketch, distance, side, operation and body](images/app-extrude.png)
 
 | Setting | What it does |
 | --- | --- |
 | **Distance** | How far the shape is swept, in mm. |
 | **Side** | **One**: out of the front of the sketch (up, for a sketch on XY). **Flipped**: the other way. **Both**: half the distance each way, so the sketch is in the middle of the solid. |
+| **Operation** | **New body**: a body of its own. **Join**: added to a body. **Cut**: taken out of a body. See [Join and cut](#join-and-cut). |
+| **Body** | For Join or Cut: which body. |
 
 Each change is one undo step.
 
@@ -73,6 +75,51 @@ The volume is the shape's area times the distance: (40 × 20 − π × 4²) × 5
 for every setting (the distance can also come from a
 [parameter](parameters.md#using-parameters-in-steps), like `wall * 2`), and [Tutorial 3](../tutorials/03-name-tag.md) for a whole
 part made this way.
+
+## Join and cut
+
+An extrude doesn't have to make a body of its own. Its **Operation** can
+**join** the solid onto a body (a peg, a tab, a boss) or **cut** it out of one (a
+pocket, a slot, a hole), in one step.
+
+![A block with a pocket 4 mm deep cut into its top](images/extrude-pocket.png)
+
+When the sketch is [on a face of a body](sketch-on-face.md), the extrude joins
+that body by default, and choosing **Cut** sends it into the body (it sets
+**Side** to **Flipped**). For a sketch on a base plane, pick the **Body** in
+Properties. The body joined or cut is used up: the extrude is the part now.
+
+A cut that doesn't reach the body changes nothing, and says so:
+
+```text
+Extrude2 doesn't reach the body, so nothing was cut. Try Flip, to go into it, or a longer distance.
+```
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save pocket.sb feature.add_box size=40,20,10
+pocket: 1 step
+  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+wrote pocket.sb
+$ sketchbillet_cli run --open pocket.sb --save pocket.sb feature.add_sketch body=Box1 face=6
+pocket: 2 steps
+  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+  Sketch1      ok  empty
+wrote pocket.sb
+$ sketchbillet_cli run --open pocket.sb --save pocket.sb sketch.add_rectangle sketch=Sketch1 from=10,5 to=30,15
+pocket: 2 steps
+  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+  Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
+wrote pocket.sb
+$ sketchbillet_cli run --open pocket.sb --save pocket.sb feature.add_extrude sketch=Sketch1 distance=4 operation=cut
+pocket: 3 steps
+  Box1         ok  volume 8000.00 mm^3
+  Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
+  Extrude1     ok  volume 7200.00 mm^3  mass 8.93 g (PLA)
+wrote pocket.sb
+```
+
+The pocket takes 20 × 10 × 4 = 800 mm³ out of the 8000 mm³ block.
 
 ## What gets extruded
 

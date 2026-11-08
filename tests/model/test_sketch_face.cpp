@@ -70,15 +70,16 @@ struct Design {
         return {};
     }
 
-    // A 40 x 20 mm block, 10 mm tall, with its height in Extrude1; and a sketch
-    // on its top with a 5 mm circle at (20, 10), extruded 8 mm up.
+    // A 40 x 20 mm block, 10 mm tall; and a sketch on its top with a 5 mm
+    // circle at (20, 10), extruded 8 mm up as a body of its own.
     std::pair<FeatureId, FeatureId> blockWithBoss() {
         run("feature.add_box", {{"size", kernel::Vec3{40, 20, 10}}, {"name", std::string("Block")}});
         const auto block = last();
         run("feature.add_sketch", {{"body", block}, {"face", faceFacing(block, {0, 0, 1})}});
         const auto sketch = last();
         run("sketch.add_circle", {{"sketch", sketch}, {"center", sketch::Point2{20, 10}}, {"radius", 5.0}});
-        run("feature.add_extrude", {{"sketch", sketch}, {"distance", 8.0}});
+        run("feature.add_extrude",
+            {{"sketch", sketch}, {"distance", 8.0}, {"operation", std::string("new")}});
         return {block, last()};
     }
 };
@@ -164,7 +165,7 @@ TEST_CASE("a sketch on the block's front draws upright, and extrudes out of the 
     CHECK(static_cast<const SketchFeature*>(d.doc.find(sketch))->plane() == SketchPlane::XZ);
     d.run("sketch.add_rectangle",
           {{"sketch", sketch}, {"from", sketch::Point2{5, 2}}, {"to", sketch::Point2{15, 8}}});
-    d.run("feature.add_extrude", {{"sketch", sketch}, {"distance", 3.0}});
+    d.run("feature.add_extrude", {{"sketch", sketch}, {"distance", 3.0}, {"operation", std::string("new")}});
     const auto tab = d.last();
     const auto report = d.rebuild();
     REQUIRE(report.ok());
@@ -190,7 +191,7 @@ TEST_CASE("a sketch whose face is gone says so, and works again on a face picked
     d.run("feature.add_sketch", {{"body", both}, {"face", d.faceFacing(both, {0, 0, 1})}});
     const auto sketch = d.last();
     d.run("sketch.add_circle", {{"sketch", sketch}, {"center", sketch::Point2{20, 10}}, {"radius", 3.0}});
-    d.run("feature.add_extrude", {{"sketch", sketch}, {"distance", 5.0}});
+    d.run("feature.add_extrude", {{"sketch", sketch}, {"distance", 5.0}, {"operation", std::string("new")}});
     const auto boss = d.last();
     REQUIRE(d.rebuild().ok());
 

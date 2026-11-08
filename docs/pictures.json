@@ -1327,13 +1327,12 @@
       "size": "560x340",
       "script": "facesketch",
       "commands": [
-        "run --open block.sb --save block.sb feature.add_extrude sketch=Sketch2 distance=8",
-        "run --open block.sb --save block.sb feature.add_boolean operation=union a=Extrude1 b=Extrude2"
+        "run --open block.sb --save block.sb feature.add_extrude sketch=Sketch2 distance=8"
       ],
       "show": [
         {
           "file": "block.sb",
-          "step": "Union1",
+          "step": "Extrude2",
           "color": "blue"
         }
       ]
@@ -1374,6 +1373,23 @@
         0,
         1280,
         800
+      ]
+    },
+    {
+      "out": "docs/user-guide/images/extrude-pocket.png",
+      "size": "560x340",
+      "script": "block",
+      "commands": [
+        "run --open block.sb --save block.sb feature.add_sketch body=Extrude1 face=6",
+        "run --open block.sb --save block.sb sketch.add_rectangle sketch=Sketch2 from=10,5 to=30,15",
+        "run --open block.sb --save block.sb feature.add_extrude sketch=Sketch2 distance=4 operation=cut"
+      ],
+      "show": [
+        {
+          "file": "block.sb",
+          "step": "Extrude2",
+          "color": "blue"
+        }
       ]
     }
   ]

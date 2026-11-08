@@ -47,9 +47,9 @@ enum class ArgType {
 };
 
 /// One argument value. Which alternative is allowed depends on the ArgSpec's ArgType.
-using ArgValue =
-    std::variant<double, std::int64_t, bool, std::string, kernel::Vec3, FeatureId, std::vector<FeatureId>,
-                 FolderId, sketch::Point2, std::vector<sketch::Point2>, std::vector<GeometryRef>, GeometryRef>;
+using ArgValue = std::variant<double, std::int64_t, bool, std::string, kernel::Vec3, FeatureId,
+                              std::vector<FeatureId>, FolderId, sketch::Point2, std::vector<sketch::Point2>,
+                              std::vector<GeometryRef>, GeometryRef>;
 
 /// Arguments for one command, by argument name.
 using Args = std::map<std::string, ArgValue>;

@@ -116,8 +116,6 @@ Names are for matching. People see:
 
 ## Not yet
 
-- **Extrude that joins or cuts** in one step, so a sketch on a face makes a boss
-  or a pocket without a separate Combine (the next piece of Phase 2).
 - **Picking a fillet's edges again in the app** (the command line has
   `feature.set_edges`).
 - **Fuzzing:** random edits on corpus models, checking every reference stays

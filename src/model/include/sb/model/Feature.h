@@ -627,8 +627,16 @@ enum class ExtrudeSide {
     Both,  ///< Half the distance each way.
 };
 
+/// What an Extrude does with the solid it makes.
+enum class ExtrudeOp {
+    NewBody,  ///< Makes a body of its own.
+    Join,     ///< Adds the solid to a body (a boss, a peg, a tab).
+    Cut,      ///< Takes the solid away from a body (a pocket, a hole, a slot).
+};
+
 /// An Extrude step: every closed shape of a sketch, swept straight out of its
 /// plane into a solid. Holes in a shape go through; several shapes make one body.
+/// The solid is a new body, or joins onto a body, or is cut out of one.
 ///
 /// @code
 /// // A 40 x 20 mm plate, 5 mm thick, from the closed rectangle in Sketch1.
@@ -667,6 +675,22 @@ public:
     /// @param d The distance (mm).
     void setDistance(double d) { distance_ = d; }
 
+    /// Gives what it does with its solid: a new body, or join or cut.
+    /// @return The operation.
+    ExtrudeOp operation() const { return op_; }
+
+    /// Gives the body it joins onto or cuts from (nil for a new body).
+    /// @return The step that made the body.
+    const FeatureId& body() const { return body_; }
+
+    /// Changes what it does with its solid. Use on a copy, or from a Command.
+    /// @param op New body, join or cut.
+    /// @param body The body to join onto or cut from; ignored for a new body.
+    void setOperation(ExtrudeOp op, FeatureId body) {
+        op_ = op;
+        body_ = op == ExtrudeOp::NewBody ? FeatureId{} : body;
+    }
+
     /// Changes which way it goes. Use on a copy, or from a Command.
     /// @param s The side.
     void setSide(ExtrudeSide s) { side_ = s; }
@@ -678,10 +702,14 @@ public:
     std::vector<StepNumber> numbers() const override;
     std::optional<double> number(std::string_view key) const override;
     bool setNumber(std::string_view key, double value) override;
-    std::vector<FeatureId> dependencies() const override { return {sketch_}; }
+    std::vector<FeatureId> dependencies() const override {
+        if (op_ == ExtrudeOp::NewBody) return {sketch_};
+        return {sketch_, body_};
+    }
     std::vector<FeatureId> sketchInputs() const override { return {sketch_}; }
     void remapInputs(const std::map<FeatureId, FeatureId>& map) override {
         if (auto it = map.find(sketch_); it != map.end()) sketch_ = it->second;
+        if (auto it = map.find(body_); it != map.end()) body_ = it->second;
     }
     Built build(kernel::IKernel& kernel, const ResultLookup& earlier) const override;
 
@@ -689,6 +717,8 @@ private:
     FeatureId sketch_;
     double distance_;
     ExtrudeSide side_;
+    ExtrudeOp op_ = ExtrudeOp::NewBody;
+    FeatureId body_{};
 };
 
 /// A step that changes some edges of a body: the base of Fillet and Chamfer.

@@ -636,15 +636,15 @@ top: 2 steps
 wrote top.sb
 $ sketchbillet_cli run --open top.sb --save top.sb feature.add_extrude sketch=Sketch1 distance=8
 top: 3 steps
-  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+  Box1         ok  volume 8000.00 mm^3
   Sketch1      ok  1 circle, 0 constraints, free to move 3 ways
-  Extrude1     ok  volume 628.32 mm^3  mass 0.78 g (PLA)
+  Extrude1     ok  volume 8628.32 mm^3  mass 10.70 g (PLA)
 wrote top.sb
 $ sketchbillet_cli open top.sb --sketch Sketch1
 top: 3 steps
-  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+  Box1         ok  volume 8000.00 mm^3
   Sketch1      ok  1 circle, 0 constraints, free to move 3 ways
-  Extrude1     ok  volume 628.32 mm^3  mass 0.78 g (PLA)
+  Extrude1     ok  volume 8628.32 mm^3  mass 10.70 g (PLA)
 Sketch1 (on top of Box1): free to move 3 ways
   Circle1        circle  center 20.00, 10.00  radius 5.00
 closed shapes: 1
@@ -1389,7 +1389,9 @@ the solid. See [Extrude](../user-guide/extrude.md).
 | --- | --- | --- | --- |
 | `sketch` | step name | yes | The sketch |
 | `distance` | number (mm) | no | How far. Default `10` |
-| `side` | `one`, `flip` or `both` | no | `one`: out of the sketch's front (up, for a sketch on XY); `flip`: the other way; `both`: half the distance each way. Default `one` |
+| `side` | `one`, `flip` or `both` | no | `one`: out of the sketch's front (up, for a sketch on XY); `flip`: the other way; `both`: half the distance each way. Default `one`, but `flip` for a cut from a sketch on a face (into the body) |
+| `operation` | `new`, `join` or `cut` | no | `new`: a body of its own; `join`: added to a body (a peg, a tab); `cut`: taken out of a body (a pocket, a hole). Default `join` for a [sketch on a face](#featureadd_sketch) of a body, otherwise `new` |
+| `body` | step name | no | For `join` or `cut`: the body. Default the body the sketch is on |
 | `name` | text | no | Step name. Default `Extrude1`, `Extrude2`, ... |
 
 A 40 × 20 mm rectangle with a hole of radius 4 mm in it, extruded 5 mm into a plate:
@@ -1457,6 +1459,73 @@ open: 2 steps
   Sketch1      ok  1 line, 0 constraints, free to move 4 ways
   Extrude1     failed
     error [extrude.no_shape]: The sketch has no closed shape to extrude. These ends aren't joined: Line1's start, Line1's end. Join them so the lines go all the way round.
+```
+
+**Join and cut.** A pocket 4 mm deep in the top of a block: a rectangle
+sketched on the top, cut into the block. A cut that misses the body (going the
+wrong way, say) says so:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save pocket.sb feature.add_box size=40,20,10
+pocket: 1 step
+  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+wrote pocket.sb
+$ sketchbillet_cli run --open pocket.sb --save pocket.sb feature.add_sketch body=Box1 face=6
+pocket: 2 steps
+  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+  Sketch1      ok  empty
+wrote pocket.sb
+$ sketchbillet_cli run --open pocket.sb --save pocket.sb sketch.add_rectangle sketch=Sketch1 from=10,5 to=30,15
+pocket: 2 steps
+  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+  Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
+wrote pocket.sb
+$ sketchbillet_cli run --open pocket.sb --save pocket.sb feature.add_extrude sketch=Sketch1 distance=4 operation=cut
+pocket: 3 steps
+  Box1         ok  volume 8000.00 mm^3
+  Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
+  Extrude1     ok  volume 7200.00 mm^3  mass 8.93 g (PLA)
+wrote pocket.sb
+$ sketchbillet_cli run --open pocket.sb feature.add_extrude sketch=Sketch1 distance=4 operation=cut side=one
+pocket: 4 steps
+  Box1         ok  volume 8000.00 mm^3
+  Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
+  Extrude1     ok  volume 7200.00 mm^3  mass 8.93 g (PLA)
+  Extrude2     ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+    warning [extrude.cut_missed]: Extrude2 doesn't reach the body, so nothing was cut. Try Flip, to go into it, or a longer distance.
+```
+
+That's 8000 − 20 × 10 × 4 = 7200 mm³. To join or cut with a sketch on a base
+plane, say which body:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --save pin.sb feature.add_box size=40,20,10
+pin: 1 step
+  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+wrote pin.sb
+$ sketchbillet_cli run --open pin.sb --save pin.sb feature.add_sketch
+pin: 2 steps
+  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+  Sketch1      ok  empty
+wrote pin.sb
+$ sketchbillet_cli run --open pin.sb --save pin.sb sketch.add_circle sketch=Sketch1 center=20,10 radius=3
+pin: 2 steps
+  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+  Sketch1      ok  1 circle, 0 constraints, free to move 3 ways
+wrote pin.sb
+$ sketchbillet_cli run --open pin.sb feature.add_extrude sketch=Sketch1 operation=cut
+error [extrude.no_body]: To cut, say which body with body=, like body=Box1, or draw the sketch on a face of the body.
+```
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open pin.sb feature.add_extrude sketch=Sketch1 operation=cut body=Box1
+pin: 3 steps
+  Box1         ok  volume 8000.00 mm^3
+  Sketch1      ok  1 circle, 0 constraints, free to move 3 ways
+  Extrude1     ok  volume 7717.26 mm^3  mass 9.57 g (PLA)
 ```
 
 ## feature.add_fillet
@@ -1617,9 +1686,9 @@ the front instead:
 ```console
 $ sketchbillet_cli run --open top.sb feature.set_sketch_face feature=Sketch1 body=Box1 face=2
 top: 3 steps
-  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+  Box1         ok  volume 8000.00 mm^3
   Sketch1      ok  1 circle, 0 constraints, free to move 3 ways
-  Extrude1     ok  volume 628.32 mm^3  mass 0.78 g (PLA)
+  Extrude1     ok  volume 8628.32 mm^3  mass 10.70 g (PLA)
 ```
 
 A curved face can't hold a sketch:

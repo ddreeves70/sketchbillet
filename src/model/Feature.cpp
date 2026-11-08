@@ -331,6 +331,38 @@ Built ExtrudeFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier
         }
         out = std::move(named);
     }
+    // Join onto a body, or cut out of it: every face keeps its name.
+    if (op_ != ExtrudeOp::NewBody) {
+        const auto* target = earlier.shapeOf(body_);
+        if (!target) {
+            return extrudeFailed("extrude.no_body", name() + " needs a body to " +
+                                                        (op_ == ExtrudeOp::Join ? "join onto" : "cut from") +
+                                                        ". Pick one in Properties, or make it a new body.");
+        }
+        const bool cut = op_ == ExtrudeOp::Cut;
+        auto combined =
+            kernel.boolean(cut ? kernel::BoolOp::Cut : kernel::BoolOp::Union, *target, out.op.shape);
+        if (!combined.ok()) {
+            return extrudeFailed(
+                "extrude.combine_failed",
+                name() + (cut ? " couldn't cut its shape out of the body." : " couldn't join the body.") +
+                    " Check that they touch, or try another distance.");
+        }
+        Diagnostics notes;
+        if (cut &&
+            std::abs(kernel.massProps(combined.shape).volume - kernel.massProps(*target).volume) < 1e-9) {
+            // A cut that misses changes nothing: usually it goes the wrong way.
+            notes.push_back({"extrude.cut_missed",
+                             Severity::Warning,
+                             name() +
+                                 " doesn't reach the body, so nothing was cut. Try Flip, to go into it, or a "
+                                 "longer distance.",
+                             {}});
+        }
+        auto named = carried(kernel, std::move(combined), {namesOf(earlier, body_), out.names.get()}, id());
+        named.op.issues.insert(named.op.issues.end(), notes.begin(), notes.end());
+        out = std::move(named);
+    }
     // Pieces that weren't in any shape (three lines meeting, shapes crossing) are worth knowing about.
     for (const auto& d : found.issues)
         out.op.issues.push_back({d.code, Severity::Warning, d.message, d.detail});
