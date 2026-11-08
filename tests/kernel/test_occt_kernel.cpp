@@ -4,6 +4,7 @@
 #include <cmath>
 #include <filesystem>
 #include <numbers>
+#include <set>
 
 #include "sb/kernel_occt/OcctKernel.h"
 
@@ -428,4 +429,94 @@ TEST_CASE("weights pull a spline edge; splines that can't be made say why",
     const Loop2 mixed{Edge2{Spline2{{{0, 0}, {10, 0}, {10, 10}, {0, 10}}, {}, 3, true}},
                       Edge2{Line2{{0, 0}, {1, 0}}}};
     CHECK(k->makeFace({mixed, {}}, kGround).issues.at(0).message.find("on its own") != std::string::npos);
+}
+
+// --- Revolve ------------------------------------------------------------------------
+
+TEST_CASE("a rectangle beside an axis turns into a tube, or part of one", "[kernel][occt][revolve]") {
+    auto k = sb::kernel::makeOcctKernel();
+    // x 10 to 15, y 0 to 20, about the y axis.
+    const auto face = k->makeFace({rectangle(10, 0, 5, 20), {}}, kGround);
+    REQUIRE(face.ok());
+
+    SECTION("a full turn has no ends; each side face comes from an edge") {
+        const auto tube = k->revolve(face.shape, {0, 0, 0}, {0, 1, 0}, 2 * kPi);
+        REQUIRE(tube.ok());
+        CHECK(k->validate(tube.shape).empty());
+        CHECK(k->massProps(tube.shape).volume == Approx(kPi * (225 - 100) * 20));
+        const auto parts = k->elements(tube.shape);
+        REQUIRE(parts.faces.size() == 4);
+        REQUIRE(tube.history.faces.size() == 4);
+        std::set<int> edges;
+        for (const auto& from : tube.history.faces) {
+            REQUIRE(from.size() == 1);
+            CHECK(from[0].kind == OriginKind::Edge);
+            edges.insert(from[0].index);
+        }
+        CHECK(edges.size() == 4);  // one face per edge of the rectangle
+    }
+    SECTION("less than a full turn has a start and an end") {
+        const auto part = k->revolve(face.shape, {0, 0, 0}, {0, 1, 0}, kPi / 2);
+        REQUIRE(part.ok());
+        CHECK(k->massProps(part.shape).volume == Approx(100 * 12.5 * kPi / 2));  // area x path of its middle
+        int starts = 0, ends = 0;
+        for (const auto& from : part.history.faces) {
+            REQUIRE(from.size() == 1);
+            starts += from[0].kind == OriginKind::Start;
+            ends += from[0].kind == OriginKind::End;
+        }
+        CHECK(starts == 1);
+        CHECK(ends == 1);
+        // The right-hand way about +y takes +x toward -z.
+        const auto b = k->bounds(part.shape);
+        CHECK(b.min.z == Approx(-15).margin(1e-6));
+        CHECK(b.max.z == Approx(0).margin(1e-6));
+    }
+}
+
+TEST_CASE("an edge on the axis makes no face: a half disc turns into a ball", "[kernel][occt][revolve]") {
+    auto k = sb::kernel::makeOcctKernel();
+    const Loop2 half{Edge2{Arc2{{0, 0}, 10, -kPi / 2, kPi / 2}}, Edge2{Line2{{0, 10}, {0, -10}}}};
+    const auto ball = k->revolve(k->makeFace({half, {}}, kGround).shape, {0, 0, 0}, {0, 1, 0}, 2 * kPi);
+    REQUIRE(ball.ok());
+    CHECK(k->massProps(ball.shape).volume == Approx(4.0 / 3 * kPi * 1000));
+    REQUIRE(ball.history.faces.size() == 1);
+    REQUIRE(ball.history.faces[0].size() == 1);
+    CHECK(ball.history.faces[0][0].index == 0);  // from the arc
+}
+
+TEST_CASE("revolves that can't be made say why", "[kernel][occt][revolve]") {
+    auto k = sb::kernel::makeOcctKernel();
+    const auto face = k->makeFace({rectangle(-5, 0, 10, 10), {}}, kGround);
+    const auto crosses = k->revolve(face.shape, {0, 0, 0}, {0, 1, 0}, 2 * kPi);
+    REQUIRE_FALSE(crosses.ok());
+    CHECK(crosses.issues[0].code == "kernel.revolve.crosses");
+    CHECK(crosses.issues[0].message.find("all on one side of the line") != std::string::npos);
+    const auto beside = k->makeFace({rectangle(10, 0, 5, 5), {}}, kGround);
+    CHECK(k->revolve(beside.shape, {0, 0, 0}, {0, 0, 0}, kPi).issues.at(0).code == "kernel.revolve.axis");
+    CHECK(k->revolve(beside.shape, {0, 0, 0}, {0, 0, 1}, kPi).issues.at(0).code ==
+          "kernel.revolve.axis");  // not in the face's plane
+    CHECK(k->revolve(beside.shape, {0, 0, 3}, {0, 1, 0}, kPi).issues.at(0).code ==
+          "kernel.revolve.axis");  // beside the plane
+    CHECK(k->revolve(beside.shape, {0, 0, 0}, {0, 1, 0}, 0).issues.at(0).code == "kernel.revolve.angle");
+    CHECK(k->revolve(beside.shape, {0, 0, 0}, {0, 1, 0}, 7).issues.at(0).code == "kernel.revolve.angle");
+    const auto box = k->makeBox({0, 0, 0}, 1, 1, 1);
+    CHECK(k->revolve(box.shape, {0, 0, 0}, {0, 1, 0}, kPi).issues.at(0).code == "kernel.revolve.input");
+    // Touching the axis is fine: a rectangle along it turns into a solid cylinder.
+    const auto rod =
+        k->revolve(k->makeFace({rectangle(0, 0, 5, 10), {}}, kGround).shape, {0, 0, 0}, {0, 1, 0}, 2 * kPi);
+    REQUIRE(rod.ok());
+    CHECK(k->massProps(rod.shape).volume == Approx(kPi * 25 * 10));
+}
+
+TEST_CASE("turning the same face twice gives the same solid", "[kernel][occt][revolve]") {
+    auto k = sb::kernel::makeOcctKernel();
+    auto make = [&] {
+        return k->revolve(k->makeFace({rectangle(10, 0, 5, 20), {}}, kGround).shape, {0, 0, 0}, {0, 1, 0}, 2)
+            .shape;
+    };
+    const auto a = make(), b = make();
+    CHECK(k->massProps(a).volume == k->massProps(b).volume);  // exactly
+    CHECK(k->massProps(a).area == k->massProps(b).area);
+    CHECK(k->topology(a).edges == k->topology(b).edges);
 }

@@ -26,6 +26,7 @@ Commands for sketchbillet_cli run:
   feature.add_extrude      Extrude
   feature.add_fillet       Fillet
   feature.add_move         Move body
+  feature.add_revolve      Revolve
   feature.add_sketch       Add sketch
   feature.delete           Delete step
   feature.duplicate        Duplicate step

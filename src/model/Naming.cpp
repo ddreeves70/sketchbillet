@@ -345,8 +345,8 @@ std::string describeFace(const Document& doc, std::string_view name) {
     } else if (role == "side") {
         // The sketch curve it was swept from, by name.
         std::string curve = "a deleted line";
-        if (const auto* e = dynamic_cast<const ExtrudeFeature*>(step)) {
-            if (const auto* sk = dynamic_cast<const SketchFeature*>(doc.find(e->sketch()))) {
+        if (const auto sketches = step ? step->sketchInputs() : std::vector<FeatureId>{}; !sketches.empty()) {
+            if (const auto* sk = dynamic_cast<const SketchFeature*>(doc.find(sketches.front()))) {
                 for (const auto& x : sk->sketch().entities) {
                     if (shortId(x.id.toString()) == from) curve = x.name + " of " + sk->name();
                 }

@@ -1,0 +1,92 @@
+{
+  "name": "revolve-tube",
+  "description": "A 5 x 20 mm rectangle 10 mm from the y axis (x 10 to 15), turned a full 360 degrees about the y axis: a tube 30 mm across, 20 mm wide inside, 20 mm long. Volume pi (15^2 - 10^2) 20 = 2500 pi = 7853.981634 mm^3; area: outside 600 pi, inside 400 pi, two rings 2 x 125 pi, so 1250 pi = 3926.990817 mm^2. Four faces and no ends, as a full turn has none.",
+  "steps": [
+    {
+      "id": "face",
+      "op": "face",
+      "outer": [
+        {
+          "line": [
+            [
+              10,
+              0
+            ],
+            [
+              15,
+              0
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              15,
+              0
+            ],
+            [
+              15,
+              20
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              15,
+              20
+            ],
+            [
+              10,
+              20
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              10,
+              20
+            ],
+            [
+              10,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tube",
+      "op": "revolve",
+      "face": "face",
+      "axis": [
+        0,
+        1,
+        0
+      ],
+      "angle": 360
+    }
+  ],
+  "expect": {
+    "valid": true,
+    "volume": 7853.981634,
+    "area": 3926.990817,
+    "bounds": [
+      [
+        -15.0,
+        0.0,
+        -15.0
+      ],
+      [
+        15.0,
+        20.0,
+        15.0
+      ]
+    ],
+    "solids": 1,
+    "faces": 4,
+    "edges": 6,
+    "vertices": 4
+  }
+}

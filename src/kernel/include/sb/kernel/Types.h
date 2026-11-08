@@ -225,8 +225,8 @@ enum class OriginKind {
              ///< face.
     Vertex,  ///< A vertex of an input: the piece was made from it, like a fillet's corner.
     Curve,   ///< A curve of the outline given to IKernel::makeFace(): outline first, then each hole.
-    Start,   ///< An extrude's face where it starts (the face it swept).
-    End,     ///< An extrude's face where it ends.
+    Start,   ///< An extrude's or revolve's face where it starts (the face it swept).
+    End,     ///< An extrude's or revolve's face where it ends.
 };
 
 /// One place a piece of a result came from.

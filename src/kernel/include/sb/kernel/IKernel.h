@@ -155,6 +155,28 @@ public:
     /// @return The beveled solid, with history like fillet(). Diagnostics if an edge
     ///         number isn't in the shape or the bevel doesn't fit.
     virtual OpResult chamfer(const ShapeHandle& shape, const std::vector<int>& edges, double distance) = 0;
+
+    /// Turns a flat face around a line in its plane, making a solid: a rectangle
+    /// beside the line becomes a tube or a disc, a half circle on it a ball.
+    /// @code
+    /// auto face = kernel.makeFace(profile, plane);
+    /// // A full turn about the line through 0, 0, 0 going up (z).
+    /// auto solid = kernel.revolve(face.shape, {0, 0, 0}, {0, 0, 1}, 2 * std::numbers::pi);
+    /// @endcode
+    /// @param face A flat face, like one from makeFace(). It may touch the line but
+    ///        not cross it.
+    /// @param point A point on the line (mm).
+    /// @param direction Which way the line goes. Not 0, 0, 0, and lying in the face's
+    ///        plane, as @p point must.
+    /// @param angle How far to turn (radians), the right-hand way about
+    ///        @p direction: more than 0 and at most 2 pi. A full turn (2 pi) has no
+    ///        ends.
+    /// @return The solid, or diagnostics if the face, the line or the angle won't
+    ///         do. Its history: each side face from an Edge of the face (input 0;
+    ///         an edge lying on the line makes no face), and for less than a full
+    ///         turn the two ends from Start and End.
+    virtual OpResult revolve(const ShapeHandle& face, const Point3& point, const Vec3& direction,
+                             double angle) = 0;
 };
 
 }  // namespace sb::kernel

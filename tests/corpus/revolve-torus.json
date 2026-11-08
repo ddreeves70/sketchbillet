@@ -1,0 +1,52 @@
+{
+  "name": "revolve-torus",
+  "description": "A circle of radius 5 mm centered 20 mm from the y axis, turned a full turn about it: a ring (torus). Volume 2 pi^2 20 5^2 = 1000 pi^2 = 9869.604401 mm^3 and area 4 pi^2 20 5 = 400 pi^2 = 3947.841760 mm^2 (Pappus's theorems).",
+  "steps": [
+    {
+      "id": "face",
+      "op": "face",
+      "outer": [
+        {
+          "circle": {
+            "center": [
+              20,
+              0
+            ],
+            "radius": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "ring",
+      "op": "revolve",
+      "face": "face",
+      "axis": [
+        0,
+        1,
+        0
+      ]
+    }
+  ],
+  "expect": {
+    "valid": true,
+    "volume": 9869.604401,
+    "area": 3947.84176,
+    "bounds": [
+      [
+        -25.0,
+        -5.0,
+        -25.0
+      ],
+      [
+        25.0,
+        5.0,
+        25.0
+      ]
+    ],
+    "solids": 1,
+    "faces": 1,
+    "edges": 2,
+    "vertices": 1
+  }
+}

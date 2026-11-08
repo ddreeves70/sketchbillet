@@ -103,6 +103,27 @@
       "run --open block.sb --save block.sb feature.add_extrude sketch=Sketch1 distance=10",
       "run --open block.sb --save block.sb feature.add_sketch body=Extrude1 face=6",
       "run --open block.sb --save block.sb sketch.add_circle sketch=Sketch2 center=20,10 radius=5"
+    ],
+    "pulley": [
+      "run --save pulley.sb feature.add_sketch plane=xz",
+      "run --open pulley.sb --save pulley.sb sketch.add_line sketch=Sketch1 from=3,0 to=15,0",
+      "run --open pulley.sb --save pulley.sb sketch.add_line sketch=Sketch1 from=15,0 to=15,3",
+      "run --open pulley.sb --save pulley.sb sketch.add_line sketch=Sketch1 from=15,3 to=12,5",
+      "run --open pulley.sb --save pulley.sb sketch.add_line sketch=Sketch1 from=12,5 to=15,7",
+      "run --open pulley.sb --save pulley.sb sketch.add_line sketch=Sketch1 from=15,7 to=15,10",
+      "run --open pulley.sb --save pulley.sb sketch.add_line sketch=Sketch1 from=15,10 to=3,10",
+      "run --open pulley.sb --save pulley.sb sketch.add_line sketch=Sketch1 from=3,10 to=3,0",
+      "run --open pulley.sb --save pulley.sb feature.add_revolve sketch=Sketch1"
+    ],
+    "top": [
+      "run --save top.sb feature.add_sketch plane=xz name=Profile",
+      "run --open top.sb --save top.sb sketch.add_line sketch=Profile from=0,0 to=15,12",
+      "run --open top.sb --save top.sb sketch.add_line sketch=Profile from=15,12 to=15,16",
+      "run --open top.sb --save top.sb sketch.add_line sketch=Profile from=15,16 to=3,19",
+      "run --open top.sb --save top.sb sketch.add_line sketch=Profile from=3,19 to=3,35",
+      "run --open top.sb --save top.sb sketch.add_line sketch=Profile from=3,35 to=0,35",
+      "run --open top.sb --save top.sb sketch.add_line sketch=Profile from=0,35 to=0,0",
+      "run --open top.sb --save top.sb feature.add_revolve sketch=Profile name=Top"
     ]
   },
   "pictures": [
@@ -1412,6 +1433,74 @@
         {
           "file": "block.sb",
           "step": "Extrude2",
+          "color": "blue"
+        }
+      ]
+    },
+    {
+      "out": "docs/user-guide/images/revolve-pulley.png",
+      "size": "560x380",
+      "script": "pulley",
+      "commands": [
+        "run --open pulley.sb --save pulley.sb feature.set_value feature=Revolve1 setting=angle value=270"
+      ],
+      "show": [
+        {
+          "file": "pulley.sb",
+          "step": "Revolve1",
+          "color": "blue"
+        }
+      ]
+    },
+    {
+      "out": "docs/user-guide/images/app-revolve.png",
+      "size": "1280x800",
+      "script": "pulley",
+      "app": {
+        "open": "pulley.sb",
+        "select": [
+          "Revolve1"
+        ],
+        "trigger": [
+          "sb.viewer.fit"
+        ]
+      },
+      "crop": [
+        0,
+        0,
+        1280,
+        800
+      ]
+    },
+    {
+      "out": "docs/tutorials/images/top-cutaway.png",
+      "size": "560x420",
+      "script": "top",
+      "commands": [
+        "run --open top.sb --save top.sb feature.set_value feature=Top setting=angle value=270"
+      ],
+      "show": [
+        {
+          "file": "top.sb",
+          "step": "Top",
+          "color": "blue"
+        }
+      ]
+    },
+    {
+      "out": "docs/tutorials/images/top-done.png",
+      "size": "560x420",
+      "script": "top",
+      "commands": [
+        "run --open top.sb --save top.sb sketch.constrain sketch=Profile kind=coincident on=Line1.end,Line2.start",
+        "run --open top.sb --save top.sb sketch.constrain sketch=Profile kind=coincident on=Line2.end,Line3.start",
+        "run --open top.sb --save top.sb sketch.round_corner sketch=Profile at=Line1.end radius=2",
+        "run --open top.sb --save top.sb sketch.round_corner sketch=Profile at=Line2.end radius=2"
+      ],
+      "show": [
+        {
+          "file": "top.sb",
+          "step": "Top",
           "color": "blue"
         }
       ]

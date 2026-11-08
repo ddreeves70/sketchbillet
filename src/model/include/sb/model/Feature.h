@@ -30,6 +30,7 @@ enum class FeatureType {
     Extrude,   ///< An ExtrudeFeature.
     Fillet,    ///< A FilletFeature.
     Chamfer,   ///< A ChamferFeature.
+    Revolve,   ///< A RevolveFeature.
 };
 
 /// The flat plane a sketch is drawn on.
@@ -620,14 +621,15 @@ private:
     sketch::Sketch sketch_;
 };
 
-/// Which way an Extrude goes from its sketch.
+/// Which way an Extrude (or a Revolve) goes from its sketch.
 enum class ExtrudeSide {
-    One,   ///< Out of the sketch's front (the side it's seen from: up for XY).
-    Flip,  ///< Out of the back instead (down for XY).
-    Both,  ///< Half the distance each way.
+    One,   ///< Out of the sketch's front (the side it's seen from: up for XY); a Revolve turns the right-hand
+           ///< way about its axis.
+    Flip,  ///< Out of the back instead (down for XY); a Revolve turns the other way.
+    Both,  ///< Half the distance (or angle) each way.
 };
 
-/// What an Extrude does with the solid it makes.
+/// What an Extrude (or a Revolve) does with the solid it makes.
 enum class ExtrudeOp {
     NewBody,  ///< Makes a body of its own.
     Join,     ///< Adds the solid to a body (a boss, a peg, a tab).
@@ -717,6 +719,120 @@ private:
     FeatureId sketch_;
     double distance_;
     ExtrudeSide side_;
+    ExtrudeOp op_ = ExtrudeOp::NewBody;
+    FeatureId body_{};
+};
+
+/// The line a Revolve turns about: the sketch's x or y axis, or a line of the sketch.
+struct RevolveAxis {
+    /// Which kind of line.
+    enum class Kind {
+        X,     ///< The sketch's x axis: through its 0, 0, along its x.
+        Y,     ///< The sketch's y axis: through its 0, 0, along its y.
+        Line,  ///< A line of the sketch (a helper line, or a side of the shape), from its start to its end.
+    };
+    Kind kind = Kind::Y;  ///< Which kind.
+    EntityId line{};      ///< For Kind::Line, the line; otherwise nil.
+
+    /// Checks whether two axes are the same.
+    /// @return True if the kind and line match.
+    bool operator==(const RevolveAxis&) const = default;
+};
+
+/// A Revolve step: every closed shape of a sketch, turned around a line in the
+/// sketch into a solid, like a vase, a knob, a wheel or a ring. Shapes may touch
+/// the line but not cross it. A full turn (360 degrees) is solid all the way
+/// round; less leaves two flat ends. Like an Extrude, the solid is a new body, or
+/// joins onto a body, or is cut out of one (a groove).
+///
+/// @code
+/// // A full turn about Sketch1's y axis.
+/// auto knob = std::make_unique<RevolveFeature>("Knob", sketchId, RevolveAxis{}, 2 * std::numbers::pi);
+/// @endcode
+class RevolveFeature final : public Feature {
+public:
+    /// Makes a Revolve step with a new id.
+    /// @param name The name shown in the feature tree.
+    /// @param sketch The Sketch step whose closed shapes turn.
+    /// @param axis The line they turn about.
+    /// @param angle How far (radians): more than 0, at most 2 pi.
+    RevolveFeature(std::string name, FeatureId sketch, RevolveAxis axis, double angle);
+
+    /// Makes a Revolve step with a given id, for loading a saved design.
+    /// @param id The id it was saved with.
+    /// @param name The name shown in the feature tree.
+    /// @param sketch The Sketch step whose closed shapes turn.
+    /// @param axis The line they turn about.
+    /// @param angle How far (radians).
+    RevolveFeature(FeatureId id, std::string name, FeatureId sketch, RevolveAxis axis, double angle);
+
+    /// Gives the Sketch step it turns.
+    /// @return Its id.
+    const FeatureId& sketch() const { return sketch_; }
+
+    /// Gives the line it turns about.
+    /// @return The axis.
+    const RevolveAxis& axis() const { return axis_; }
+
+    /// Changes the line it turns about. Use on a copy, or from a Command.
+    /// @param axis The new axis.
+    void setAxis(RevolveAxis axis) { axis_ = axis; }
+
+    /// Gives how far it turns.
+    /// @return The angle (radians); with ExtrudeSide::Both, the whole angle.
+    double angle() const { return angle_; }
+
+    /// Changes how far it turns. Use on a copy, or from a Command.
+    /// @param a The angle (radians).
+    void setAngle(double a) { angle_ = a; }
+
+    /// Gives which way it turns.
+    /// @return One (the right-hand way about the axis), Flip or Both.
+    ExtrudeSide side() const { return side_; }
+
+    /// Changes which way it turns. Use on a copy, or from a Command.
+    /// @param s The side.
+    void setSide(ExtrudeSide s) { side_ = s; }
+
+    /// Gives what it does with its solid: a new body, or join or cut.
+    /// @return The operation.
+    ExtrudeOp operation() const { return op_; }
+
+    /// Gives the body it joins onto or cuts from (nil for a new body).
+    /// @return The step that made the body.
+    const FeatureId& body() const { return body_; }
+
+    /// Changes what it does with its solid. Use on a copy, or from a Command.
+    /// @param op New body, join or cut.
+    /// @param body The body to join onto or cut from; ignored for a new body.
+    void setOperation(ExtrudeOp op, FeatureId body) {
+        op_ = op;
+        body_ = op == ExtrudeOp::NewBody ? FeatureId{} : body;
+    }
+
+    FeatureType type() const override { return FeatureType::Revolve; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<RevolveFeature>(*this); }
+    /// angle (radians, more than 0).
+    /// @return The numbers.
+    std::vector<StepNumber> numbers() const override;
+    std::optional<double> number(std::string_view key) const override;
+    bool setNumber(std::string_view key, double value) override;
+    std::vector<FeatureId> dependencies() const override {
+        if (op_ == ExtrudeOp::NewBody) return {sketch_};
+        return {sketch_, body_};
+    }
+    std::vector<FeatureId> sketchInputs() const override { return {sketch_}; }
+    void remapInputs(const std::map<FeatureId, FeatureId>& map) override {
+        if (auto it = map.find(sketch_); it != map.end()) sketch_ = it->second;
+        if (auto it = map.find(body_); it != map.end()) body_ = it->second;
+    }
+    Built build(kernel::IKernel& kernel, const ResultLookup& earlier) const override;
+
+private:
+    FeatureId sketch_;
+    RevolveAxis axis_;
+    double angle_;
+    ExtrudeSide side_ = ExtrudeSide::One;
     ExtrudeOp op_ = ExtrudeOp::NewBody;
     FeatureId body_{};
 };

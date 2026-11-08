@@ -17,11 +17,14 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
 #include <memory>
 #include <numbers>
 #include <string>
+#include <type_traits>
+#include <variant>
 #include <vector>
 
 #include "sb/model/Commands.h"
@@ -530,6 +533,7 @@ private:
                 break;
             }
             case model::FeatureType::Extrude:  // see addExtrude()
+            case model::FeatureType::Revolve:  // see addRevolve()
                 break;
             case model::FeatureType::Fillet:
             case model::FeatureType::Chamfer: {
@@ -625,6 +629,7 @@ private:
             }
         }
         if (f.type() == model::FeatureType::Extrude) addExtrude(form);
+        if (f.type() == model::FeatureType::Revolve) addRevolve(form);
         if (f.type() != model::FeatureType::Sketch) addMaterial(form);  // a sketch isn't a body
     }
 
@@ -632,36 +637,123 @@ private:
 
     // An Extrude: which sketch, how far, and which way.
     void addExtrude(QFormLayout* form) {
+        addSketchName<model::ExtrudeFeature>(form);
+        addNumber(
+            form, QStringLiteral("distance"), tr("Distance"),
+            [](const model::Feature& g) { return static_cast<const model::ExtrudeFeature&>(g).distance(); },
+            [](model::Feature& g, double v) { static_cast<model::ExtrudeFeature&>(g).setDistance(v); });
+        addSide<model::ExtrudeFeature>(form,
+                                       {tr("One side (out of the sketch's front)"),
+                                        tr("Flipped (the other way)"), tr("Both sides (half each way)")},
+                                       tr("Which way the shape goes from its sketch."));
+        addOperation<model::ExtrudeFeature>(form, tr("(a pocket, a hole)"));
+    }
+
+    void addRevolve(QFormLayout* form) {
+        addSketchName<model::RevolveFeature>(form);
+        // The axis: the sketch's x or y axis, or one of its lines.
+        auto* axis = new QComboBox(form_);
+        axis->setObjectName(QStringLiteral("axis"));
+        axis->setToolTip(
+            tr("The line the shape turns about: the sketch's x or y axis, or a line of the sketch. The shape "
+               "may touch it but not cross it."));
+        form->addRow(tr("Axis"), axis);
+        connect(axis, &QComboBox::activated, this, [this, axis](int index) {
+            const QString key = axis->itemData(index).toString();
+            model::RevolveAxis a;
+            if (key == QLatin1String("x")) {
+                a.kind = model::RevolveAxis::Kind::X;
+            } else if (key != QLatin1String("y")) {
+                const auto line = EntityId::parse(key.toStdString());
+                if (!line) return;
+                a = {model::RevolveAxis::Kind::Line, *line};
+            }
+            edit(QStringLiteral("axis"),
+                 [a](model::Feature& g) { static_cast<model::RevolveFeature&>(g).setAxis(a); });
+        });
+        updaters_.push_back([this, axis](const model::Feature& g) {
+            const auto& r = static_cast<const model::RevolveFeature&>(g);
+            axis->clear();
+            axis->addItem(tr("Sketch's y axis"), QStringLiteral("y"));
+            axis->addItem(tr("Sketch's x axis"), QStringLiteral("x"));
+            const auto* d = design();
+            if (const auto* sk =
+                    d ? dynamic_cast<const model::SketchFeature*>(d->find(r.sketch())) : nullptr) {
+                for (const auto& e : sk->sketch().entities) {
+                    if (!std::holds_alternative<sketch::LineShape>(e.shape)) continue;
+                    axis->addItem(e.construction ? tr("%1 (helper line)").arg(qs(e.name)) : qs(e.name),
+                                  qs(e.id.toString()));
+                }
+            }
+            const QString want = r.axis().kind == model::RevolveAxis::Kind::X ? QStringLiteral("x")
+                                 : r.axis().kind == model::RevolveAxis::Kind::Y
+                                     ? QStringLiteral("y")
+                                     : qs(r.axis().line.toString());
+            if (axis->findData(want) < 0) axis->addItem(tr("(deleted line)"), want);
+            axis->setCurrentIndex(axis->findData(want));
+        });
+        // Angle: degrees for the student, radians inside.
+        auto* angle = new QDoubleSpinBox(form_);
+        angle->setObjectName(QStringLiteral("angle"));
+        angle->setDecimals(2);
+        angle->setRange(0.01, 360.0);
+        angle->setSuffix(QStringLiteral("°"));
+        angle->setKeyboardTracking(false);
+        angle->setAccelerated(true);
+        form->addRow(tr("Angle"), angle);
+        connect(angle, &QDoubleSpinBox::valueChanged, this, [this](double degrees) {
+            edit(QStringLiteral("angle"), [degrees](model::Feature& g) {
+                static_cast<model::RevolveFeature&>(g).setAngle(degrees * std::numbers::pi / 180.0);
+            });
+        });
+        updaters_.push_back([this, angle](const model::Feature& g) {
+            angle->setValue(static_cast<const model::RevolveFeature&>(g).angle() * 180.0 / std::numbers::pi);
+            const auto tip = formulaTip(g, QStringLiteral("angle"));
+            angle->setToolTip(tip.isEmpty() ? tr("How far to turn, in degrees: 360 for all the way round.")
+                                            : tip);
+        });
+        addSide<model::RevolveFeature>(
+            form, {tr("One way"), tr("Flipped (the other way)"), tr("Both ways (half each way)")},
+            tr("Which way the shape turns from its sketch, for less than a full turn."));
+        addOperation<model::RevolveFeature>(form, tr("(a groove)"));
+    }
+
+    // A sketch step's sketch, by name.
+    template <class Step>
+    void addSketchName(QFormLayout* form) {
         auto* sketch = new QLabel(form_);
         sketch->setObjectName(QStringLiteral("sketch"));
         form->addRow(tr("Sketch"), sketch);
         updaters_.push_back([this, sketch](const model::Feature& g) {
             const auto* d = design();
-            const auto* s = d ? d->find(static_cast<const model::ExtrudeFeature&>(g).sketch()) : nullptr;
+            const auto* s = d ? d->find(static_cast<const Step&>(g).sketch()) : nullptr;
             sketch->setText(s ? QString::fromStdString(s->name()) : tr("(missing)"));
         });
-        addNumber(
-            form, QStringLiteral("distance"), tr("Distance"),
-            [](const model::Feature& g) { return static_cast<const model::ExtrudeFeature&>(g).distance(); },
-            [](model::Feature& g, double v) { static_cast<model::ExtrudeFeature&>(g).setDistance(v); });
+    }
+
+    // Which way an Extrude or Revolve goes: one, flipped or both.
+    template <class Step>
+    void addSide(QFormLayout* form, const std::array<QString, 3>& labels, const QString& tip) {
         auto* side = new QComboBox(form_);
         side->setObjectName(QStringLiteral("side"));
-        side->addItem(tr("One side (out of the sketch's front)"), static_cast<int>(model::ExtrudeSide::One));
-        side->addItem(tr("Flipped (the other way)"), static_cast<int>(model::ExtrudeSide::Flip));
-        side->addItem(tr("Both sides (half each way)"), static_cast<int>(model::ExtrudeSide::Both));
-        side->setToolTip(tr("Which way the shape goes from its sketch."));
+        side->addItem(labels[0], static_cast<int>(model::ExtrudeSide::One));
+        side->addItem(labels[1], static_cast<int>(model::ExtrudeSide::Flip));
+        side->addItem(labels[2], static_cast<int>(model::ExtrudeSide::Both));
+        side->setToolTip(tip);
         form->addRow(tr("Side"), side);
         connect(side, &QComboBox::activated, this, [this, side](int index) {
             const auto s = static_cast<model::ExtrudeSide>(side->itemData(index).toInt());
-            edit(QStringLiteral("side"),
-                 [s](model::Feature& g) { static_cast<model::ExtrudeFeature&>(g).setSide(s); });
+            edit(QStringLiteral("side"), [s](model::Feature& g) { static_cast<Step&>(g).setSide(s); });
         });
         updaters_.push_back([side](const model::Feature& g) {
-            const int want = static_cast<int>(static_cast<const model::ExtrudeFeature&>(g).side());
+            const int want = static_cast<int>(static_cast<const Step&>(g).side());
             side->setCurrentIndex(side->findData(want));
         });
+    }
 
-        // What it does with its solid, and to which body.
+    // What an Extrude or Revolve does with its solid, and to which body.
+    template <class Step>
+    void addOperation(QFormLayout* form, const QString& cutExample) {
         auto* op = new QComboBox(form_);
         op->setObjectName(QStringLiteral("operation"));
         op->addItem(tr("New body"), static_cast<int>(model::ExtrudeOp::NewBody));
@@ -669,7 +761,8 @@ private:
         op->addItem(tr("Cut (take out of a body)"), static_cast<int>(model::ExtrudeOp::Cut));
         op->setToolTip(
             tr("Make a body of its own, add the shape to a body (a peg, a tab), or cut it out of one "
-               "(a pocket, a hole)."));
+               "%1.")
+                .arg(cutExample));
         form->addRow(tr("Operation"), op);
         auto* body = new QComboBox(form_);
         body->setObjectName(QStringLiteral("body"));
@@ -679,7 +772,7 @@ private:
             const auto want = static_cast<model::ExtrudeOp>(op->itemData(index).toInt());
             const auto* d = design();
             edit(QStringLiteral("operation"), [want, d](model::Feature& g) {
-                auto& e = static_cast<model::ExtrudeFeature&>(g);
+                auto& e = static_cast<Step&>(g);
                 // Keep its body; or the body its sketch is on; or the last body before it.
                 FeatureId target = e.body();
                 const auto* sk = d ? dynamic_cast<const model::SketchFeature*>(d->find(e.sketch())) : nullptr;
@@ -687,10 +780,12 @@ private:
                 if (target.isNil() && d) {
                     for (const auto& id : bodiesBefore(*d, e.id())) target = id;
                 }
-                // A cut from a face goes into the body.
-                if (want == model::ExtrudeOp::Cut && sk && sk->face() &&
-                    e.side() == model::ExtrudeSide::One) {
-                    e.setSide(model::ExtrudeSide::Flip);
+                // An extruded cut from a face goes into the body.
+                if constexpr (std::is_same_v<Step, model::ExtrudeFeature>) {
+                    if (want == model::ExtrudeOp::Cut && sk && sk->face() &&
+                        e.side() == model::ExtrudeSide::One) {
+                        e.setSide(model::ExtrudeSide::Flip);
+                    }
                 }
                 e.setOperation(want, target);
             });
@@ -699,12 +794,12 @@ private:
             const auto id = FeatureId::parse(body->itemData(index).toString().toStdString());
             if (!id) return;
             edit(QStringLiteral("body"), [id](model::Feature& g) {
-                auto& e = static_cast<model::ExtrudeFeature&>(g);
+                auto& e = static_cast<Step&>(g);
                 e.setOperation(e.operation(), *id);
             });
         });
         updaters_.push_back([this, op, body](const model::Feature& g) {
-            const auto& e = static_cast<const model::ExtrudeFeature&>(g);
+            const auto& e = static_cast<const Step&>(g);
             op->setCurrentIndex(op->findData(static_cast<int>(e.operation())));
             body->clear();
             const auto* d = design();

@@ -110,7 +110,9 @@ class PluginContext;
 /// model::ProblemCommand, for a command factory to report a plain problem.
 /// Version 38 added picking on one body only: plugin::Selection::pickOnly() and
 /// setPickOnly().
-inline constexpr int kPluginApiVersion = 38;
+/// Version 39 added Revolve: kernel::IKernel::revolve(), model::RevolveFeature,
+/// model::RevolveAxis, FeatureType::Revolve and the feature.add_revolve command.
+inline constexpr int kPluginApiVersion = 39;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

@@ -1,0 +1,73 @@
+{
+  "name": "invalid-revolve-crosses",
+  "description": "A rectangle from x -5 to 5, turned about the y axis, which runs through its middle. It would turn through itself, so the kernel must refuse it with kernel.revolve.crosses instead of making a broken solid.",
+  "steps": [
+    {
+      "id": "face",
+      "op": "face",
+      "outer": [
+        {
+          "line": [
+            [
+              -5,
+              0
+            ],
+            [
+              5,
+              0
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              5,
+              0
+            ],
+            [
+              5,
+              10
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              5,
+              10
+            ],
+            [
+              -5,
+              10
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              -5,
+              10
+            ],
+            [
+              -5,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bad",
+      "op": "revolve",
+      "face": "face",
+      "axis": [
+        0,
+        1,
+        0
+      ]
+    }
+  ],
+  "expect": {
+    "error": "kernel.revolve.crosses"
+  }
+}
