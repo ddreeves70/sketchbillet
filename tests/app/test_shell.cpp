@@ -58,6 +58,7 @@
 #include "sb/plugins/ViewOptions.h"
 #include "sb/plugins/Viewer.h"
 #include "sb/sketch_planegcs/PlaneGcsSolver.h"
+#include "sb/ui/FormulaBox.h"
 #include "sb/ui/UiRegistry.h"
 #include "sb/view/FlatView.h"
 #include "sb/viewer/Viewer.h"
@@ -1133,6 +1134,60 @@ TEST_CASE("Dimension: the number is ready to type in the Sketch panel, and typin
     REQUIRE(r->sketch->ok());
     const auto& l = std::get<sketch::LineShape>(r->sketch->entities[0].shape);
     CHECK(std::hypot(l.end.x - l.start.x, l.end.y - l.start.y) == Approx(45).margin(1e-6));
+}
+
+TEST_CASE("a dimension's box in the Sketch panel takes a formula, and shows it has one",
+          "[app][sketcher][constrain][formula]") {
+    Drawn d;
+    auto& docs = d.app.host.documents();
+    const auto doc = d.app.shell->activeDesign();
+    REQUIRE(docs.run(doc, "parameter.set", {{"name", std::string("wall")}, {"value", std::string("5 mm")}})
+                .empty());
+    clickAt(d.flat, {30, 0, 0});
+    d.app.click("sb.sketcher.dimension");  // Length1 = 60
+    // The newest box by that name: the list is made again after each change, and the
+    // old boxes are only deleted once the app's event loop runs, which a test's doesn't.
+    auto formulaBox = [&] {
+        const auto boxes = d.app.shell->panelWidget(QStringLiteral("sb.sketcher.panel"))
+                               ->findChildren<QDoubleSpinBox*>(QStringLiteral("Length1"));
+        return boxes.isEmpty() ? nullptr : dynamic_cast<ui::FormulaBox*>(boxes.last());
+    };
+    REQUIRE(formulaBox());
+    CHECK(formulaBox()->formula().isEmpty());
+
+    // A formula with a parameter in it becomes the dimension's formula.
+    formulaBox()->type(QStringLiteral("wall * 8"));
+    settle();
+    CHECK(d.sketch().findConstraint("Length1")->expression == "wall * 8");
+    CHECK(d.sketch().findConstraint("Length1")->value == Approx(40));
+    CHECK(formulaBox()->formula() == QStringLiteral("wall * 8"));
+    CHECK(formulaBox()->value() == Approx(40));
+    CHECK(d.app.doc().undoLabel() == "Change Length1");
+
+    // Enter on the box as it is changes nothing: the formula stays.
+    // (A change would empty Redo, so Redo still being there shows nothing was changed.)
+    REQUIRE(docs.run(doc, "parameter.set", {{"name", std::string("wall")}, {"value", std::string("6 mm")}})
+                .empty());
+    d.app.shell->undoAction()->trigger();
+    settle();
+    REQUIRE(d.app.doc().canRedo());
+    formulaBox()->type(formulaBox()->formula());  // what the box shows while typing
+    settle();
+    CHECK(d.sketch().findConstraint("Length1")->expression == "wall * 8");
+    CHECK(d.app.doc().canRedo());
+
+    // One with no parameters is just a number in another unit.
+    formulaBox()->type(QStringLiteral("1 in + 4.6 mm"));
+    settle();
+    CHECK(d.sketch().findConstraint("Length1")->expression.empty());
+    CHECK(d.sketch().findConstraint("Length1")->value == Approx(30));
+    CHECK(formulaBox()->formula().isEmpty());
+
+    // One that can't be worked out says why, and changes nothing.
+    formulaBox()->type(QStringLiteral("wall + 2"));
+    settle();
+    REQUIRE_FALSE(d.app.shell->lastProblems().empty());
+    CHECK(d.sketch().findConstraint("Length1")->value == Approx(30));
 }
 
 TEST_CASE("constraints that can't all be true are red, and SketchBillet says which",
@@ -3321,6 +3376,125 @@ TEST_CASE("Shell: click it, pick faces, click it again; Properties changes the t
     settle();
     CHECK(static_cast<const model::ShellFeature&>(app.doc().featureAt(1)).thickness() == 4.0);
     CHECK(app.shell->button("sb.modeling.shell") != nullptr);
+}
+
+TEST_CASE("Properties: a number's box takes a formula, shows it while typing, and a number replaces it",
+          "[app][properties][formula]") {
+    App app;
+    const auto doc = app.shell->activeDesign();
+    auto& docs = app.host.documents();
+    REQUIRE(docs.run(doc, "parameter.set", {{"name", std::string("wall")}, {"value", std::string("3 mm")}})
+                .empty());
+    REQUIRE(docs.run(doc, "parameter.set", {{"name", std::string("lean")}, {"value", std::string("30 deg")}})
+                .empty());
+    REQUIRE(docs.run(doc, "feature.add_box", {{"size", kernel::Vec3{40, 30, 20}}}).empty());
+    settle();
+    const auto box = app.doc().featureAt(0).id();
+    app.host.selection().set(doc, {box});
+    settle();
+    auto field = [&](const char* name) {
+        return dynamic_cast<ui::FormulaBox*>(app.field<QDoubleSpinBox>(name));
+    };
+    auto step = [&]() -> const model::Feature& { return app.doc().featureAt(0); };
+    REQUIRE(field("size.z"));
+    CHECK(field("size.z")->takesFormulas());
+    CHECK(field("size.z")->formula().isEmpty());
+
+    // A formula: the height is 4 walls, and follows the parameter.
+    field("size.z")->type(QStringLiteral("wall * 4"));
+    settle();
+    CHECK(step().formula("size_z") == "wall * 4");
+    CHECK(*step().number("size_z") == Approx(12));
+    CHECK(field("size.z")->value() == Approx(12));
+    CHECK(field("size.z")->formula() == QStringLiteral("wall * 4"));
+    CHECK(field("size.x")->formula().isEmpty());  // the others keep theirs
+    REQUIRE(docs.run(doc, "parameter.set", {{"name", std::string("wall")}, {"value", std::string("5 mm")}})
+                .empty());
+    settle();
+    CHECK(field("size.z")->value() == Approx(20));
+
+    // Clicking in shows the formula, without the "z" and the unit; clicking out puts the number back.
+    // (A change would empty Redo, so Redo still being there shows nothing was changed.)
+    app.shell->undoAction()->trigger();  // wall back to 3 mm
+    settle();
+    REQUIRE(app.doc().canRedo());
+    QFocusEvent in(QEvent::FocusIn, Qt::MouseFocusReason), out(QEvent::FocusOut, Qt::MouseFocusReason);
+    QApplication::sendEvent(field("size.z"), &in);
+    CHECK(field("size.z")->text() == QStringLiteral("wall * 4"));
+    QApplication::sendEvent(field("size.z"), &out);
+    settle();
+    CHECK(field("size.z")->text() == QStringLiteral("z 12.00"));
+    field("size.z")->type(field("size.z")->formula());  // Enter on the box as it is
+    settle();
+    CHECK(step().formula("size_z") == "wall * 4");
+    CHECK(app.doc().canRedo());
+
+    // The formula is one undo step.
+    app.shell->undoAction()->trigger();
+    settle();
+    CHECK(step().formula("size_z").empty());
+    CHECK(field("size.z")->value() == Approx(20));
+    CHECK(field("size.z")->formula().isEmpty());
+    app.shell->redoAction()->trigger();
+    settle();
+    CHECK(field("size.z")->formula() == QStringLiteral("wall * 4"));
+
+    // A number typed over a formula replaces it.
+    field("size.z")->type(QStringLiteral("15"));
+    settle();
+    CHECK(step().formula("size_z").empty());
+    CHECK(*step().number("size_z") == Approx(15));
+    CHECK(field("size.z")->formula().isEmpty());
+
+    // A length in another unit is just a number.
+    field("size.x")->type(QStringLiteral("2 in"));
+    settle();
+    CHECK(step().formula("size_x").empty());
+    CHECK(*step().number("size_x") == Approx(50.8));
+
+    // The wrong kind of value says why, and changes nothing.
+    field("size.y")->type(QStringLiteral("wall * wall"));
+    settle();
+    REQUIRE_FALSE(app.shell->lastProblems().empty());
+    CHECK(app.shell->lastProblems()[0].message.find("area") != std::string::npos);
+    CHECK(*step().number("size_y") == Approx(30));
+    CHECK(field("size.y")->formula().isEmpty());
+
+    // Typed key by key: the box keeps its "y" and unit for a number, and drops them at
+    // the first letter of a formula, so what's typed is the whole formula.
+    auto keys = [&](ui::FormulaBox* w, const QString& text) {
+        for (const QChar c : text) {
+            QKeyEvent press(QEvent::KeyPress, 0, Qt::NoModifier, QString(c));
+            QApplication::sendEvent(w, &press);
+        }
+    };
+    auto enter = [&](ui::FormulaBox* w) {
+        QKeyEvent press(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+        QApplication::sendEvent(w, &press);
+        settle();
+    };
+    field("size.y")->selectAll();
+    keys(field("size.y"), QStringLiteral("4"));
+    CHECK(field("size.y")->text() == QStringLiteral("y 4"));
+    field("size.y")->selectAll();
+    keys(field("size.y"), QStringLiteral("wall + 2 mm"));
+    CHECK(field("size.y")->text() == QStringLiteral("wall + 2 mm"));
+    enter(field("size.y"));
+    CHECK(step().formula("size_y") == "wall + 2 mm");
+    CHECK(*step().number("size_y") == Approx(5));
+    CHECK(field("size.y")->formula() == QStringLiteral("wall + 2 mm"));
+
+    // An angle takes one too: a Move's turn.
+    REQUIRE(docs.run(doc, "feature.add_move", {{"body", box}, {"turn", 10.0}}).empty());
+    settle();
+    app.host.selection().set(doc, {app.doc().featureAt(1).id()});
+    settle();
+    REQUIRE(field("turn"));
+    field("turn")->type(QStringLiteral("lean * 2"));
+    settle();
+    CHECK(app.doc().featureAt(1).formula("angle") == "lean * 2");
+    CHECK(field("turn")->value() == Approx(60));
+    CHECK(field("turn")->formula() == QStringLiteral("lean * 2"));
 }
 
 TEST_CASE("Change edges: pick a fillet's edges again on its body, then Done or Cancel", "[app][fillet]") {

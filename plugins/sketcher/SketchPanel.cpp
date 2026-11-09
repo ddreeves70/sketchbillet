@@ -19,8 +19,11 @@
 #include <numbers>
 
 #include "Constrain.h"
+#include "sb/model/Expression.h"
 #include "sb/model/Feature.h"
+#include "sb/model/Formulas.h"
 #include "sb/sketch/Profiles.h"
+#include "sb/ui/FormulaBox.h"
 #include "sb/ui/UiRegistry.h"
 
 namespace sb::plugins::sketcher {
@@ -68,23 +71,6 @@ std::string onWhat(const sketch::Sketch& s, const sketch::Constraint& c) {
     return out;
 }
 
-// A number box that shows "40 mm", not "40.000 mm", but keeps 3 decimals for typing.
-class NumberBox final : public QDoubleSpinBox {
-public:
-    using QDoubleSpinBox::QDoubleSpinBox;
-
-protected:
-    QString textFromValue(double value) const override {
-        QString text = locale().toString(value, 'f', decimals());
-        const QString point = locale().decimalPoint();
-        if (text.contains(point)) {
-            while (text.endsWith(QLatin1Char('0'))) text.chop(1);
-            if (text.endsWith(point)) text.chop(point.size());
-        }
-        return text;
-    }
-};
-
 // "1 hole", "2 holes".
 QString count(std::size_t n, const QString& one, const QString& many) {
     return QString::number(n) + QLatin1Char(' ') + (n == 1 ? one : many);
@@ -125,7 +111,9 @@ SketchPanel::SketchPanel(plugin::PluginContext& ctx, PanelHooks hooks, QWidget* 
            "last."));
     form->addRow(closed_);
     weightLabel_ = new QLabel(splineBox_);
-    weight_ = new NumberBox(splineBox_);
+    auto* weight = new ui::FormulaBox(splineBox_);  // numbers only: no handler
+    weight->setTrimZeros(true);
+    weight_ = weight;
     weight_->setObjectName(QStringLiteral("spline.weight"));
     weight_->setRange(0.01, 100);
     weight_->setDecimals(3);
@@ -287,10 +275,10 @@ void SketchPanel::refresh() {
         for (const auto& d : found.issues) shapes += QLatin1Char(' ') + qs(d.message);
         status_->setText(status_->text() + QLatin1Char('\n') + shapes);
     }
-    // The list, made again only if the constraints or their numbers changed.
+    // The list, made again only if the constraints, their numbers or their formulas changed.
     std::string now = step->id().toString();
     for (const auto& c : step->sketch().constraints) {
-        now += "|" + c.name + ":" + std::to_string(c.value);
+        now += "|" + c.name + ":" + std::to_string(c.value) + "=" + c.expression;
         if (last && std::ranges::find(last->conflicting, c.id) != last->conflicting.end()) now += "!";
         if (last && std::ranges::find(last->redundant, c.id) != last->redundant.end()) now += "?";
     }
@@ -355,7 +343,9 @@ void SketchPanel::rebuild() {
             continue;
         }
         // A dimension: its number, ready to change. Enter (or clicking away) sets it.
-        auto* box = new NumberBox(table_);
+        // "40 mm", not "40.000 mm", but 3 decimals for typing; a formula can be typed too.
+        auto* box = new ui::FormulaBox(table_);
+        box->setTrimZeros(true);
         box->setObjectName(qs(c.name));
         box->setKeyboardTracking(false);
         box->setButtonSymbols(QAbstractSpinBox::NoButtons);
@@ -368,15 +358,20 @@ void SketchPanel::rebuild() {
         box->setValue(angle ? c.value / kDegrees : toUnit(c.value, unit));
         if (!c.expression.empty()) {
             // Its number comes from a formula: say so, and that typing a number replaces it.
-            tip += tr("\nWorked out from %1. Change the parameters it uses to change it, or type a number "
-                      "to use that instead.")
+            tip += tr("\nWorked out from %1. Type a new formula to change it, or a number to use that "
+                      "instead.")
                        .arg(qs(c.expression));
-            box->setProperty("formula", qs(c.expression));
         }
+        box->setFormula(qs(c.expression));
         box->setToolTip(tip);
         const std::string constraint = c.name;
-        connect(box, &QDoubleSpinBox::editingFinished, this, [this, box, constraint] {
-            if (updating_) return;
+        box->setFormulaHandler(
+            [this, constraint](const QString& text) { setFormula(constraint, text.toStdString()); });
+        // The box rounds what it shows, so "changed" means changed from that, or just
+        // clicking in a box and out again would swap a formula for its rounded number.
+        const double shown = box->value();
+        connect(box, &QDoubleSpinBox::editingFinished, this, [this, box, constraint, shown] {
+            if (updating_ || box->value() == shown) return;
             // Change the sketch just after this returns: the rebuild that follows makes
             // the list again, which deletes this box, and it must not be deleted while
             // it's still telling us about Enter.
@@ -460,6 +455,33 @@ void SketchPanel::setValue(const std::string& name, double value) {
     const auto problems =
         ctx_.documents().run(ctx_.documents().active(), "sketch.set_value",
                              {{"sketch", step->id()}, {"constraint", name}, {"value", value}});
+    if (!problems.empty()) {
+        if (auto* ui = ctx_.service<ui::UiRegistry>()) ui->showProblems(problems);
+    }
+}
+
+void SketchPanel::setFormula(const std::string& name, const std::string& formula) {
+    const auto* step = sketchStep(ctx_, hooks_.editing ? hooks_.editing() : std::nullopt);
+    const auto* design = ctx_.documents().find(ctx_.documents().active());
+    if (!step || !design) return;
+    const auto* c = step->sketch().findConstraint(name);
+    if (!c) return;
+    model::Args args{{"sketch", step->id()}, {"constraint", name}};
+    // A formula with no parameters in it, like "1 in", is just a number in another unit.
+    std::optional<double> typed;
+    if (model::Expression::parse(formula).isConstant()) {
+        const auto r = model::evalDimension(c->kind, formula, design->parameters().evaluate(),
+                                            name + " in " + step->name());
+        // sketch.set_value takes mm, and degrees for an angle.
+        if (r.ok())
+            typed = c->kind == sketch::ConstraintKind::Angle ? r.value->value / kDegrees : r.value->value;
+    }
+    if (typed) {
+        args["value"] = *typed;
+    } else {
+        args["formula"] = formula;
+    }
+    const auto problems = ctx_.documents().run(ctx_.documents().active(), "sketch.set_value", args);
     if (!problems.empty()) {
         if (auto* ui = ctx_.service<ui::UiRegistry>()) ui->showProblems(problems);
     }

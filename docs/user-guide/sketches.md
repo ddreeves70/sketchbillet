@@ -386,7 +386,9 @@ Change a dimension with `sketch.set_value`, and delete anything with
 `sketch.delete` (deleting a line also deletes the constraints on it). A dimension
 can also take a `formula` instead of a `value`, like `formula="wall * 2"`, that
 uses the design's [parameters](parameters.md#using-parameters-in-a-sketch): it
-changes when they do.
+changes when they do. In the desktop app, type the formula into the dimension's
+box in the Sketch panel instead of a number
+([Typing formulas in the app](parameters.md#typing-formulas-in-the-app)).
 
 ## Free to move: degrees of freedom
 

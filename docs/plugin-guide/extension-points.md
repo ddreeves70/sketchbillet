@@ -694,6 +694,26 @@ void registerNotes(sb::plugin::PluginContext& ctx) {
   label->setText(QString::fromStdString(sb::lengthText(radius, unit)));  // "0.709 in"
   const double mm = sb::fromUnit(box->value(), unit);                   // what the student typed
   ```
+- **Numbers that take formulas.** Use `sb::ui::FormulaBox` (`sb/ui/FormulaBox.h`)
+  instead of a `QDoubleSpinBox` for a step's number, and the student can type a
+  formula like `wall * 2` into it, as in Properties. It's a `QDoubleSpinBox`, so
+  numbers work as usual; anything else that's typed goes to your handler, to set
+  with a command. Tell the box which formula its number comes from, and it shows
+  the *fx* mark and the formula while typing:
+
+  ```cpp
+  auto* box = new sb::ui::FormulaBox(this);
+  box->setSuffix(" mm");
+  box->setFormulaHandler([this, step](const QString& text) {
+      const auto problems = ctx_.documents().run(
+          ctx_.documents().active(), "feature.set_value",
+          {{"feature", step}, {"setting", std::string("distance")}, {"formula", text.toStdString()}});
+      if (!problems.empty()) ui_->showProblems(problems);
+  });
+  // When the design changes:
+  box->setValue(sb::toUnit(*feature.number("distance"), unit));
+  box->setFormula(QString::fromStdString(feature.formula("distance")));
+  ```
 - `ui->showProblems(problems)` shows what went wrong in the status bar.
 - **Status-bar items.** `ui->addStatusItem` puts a small widget at the bottom
   right of the window, like SketchBillet's grid size. SketchBillet calls your function once when

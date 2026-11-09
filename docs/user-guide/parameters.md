@@ -168,9 +168,9 @@ $ sketchbillet_cli open stand.sb --sketch Sketch1
 
 A length dimension needs a length and an angle dimension an angle, so a plain
 number like `12` is refused: write `12 mm`. SketchBillet also refuses a parameter
-change that would make a length 0 mm or less. In the desktop app, a dimension
-with a formula says so when you point at its number; typing a new number there
-replaces the formula.
+change that would make a length 0 mm or less. In the desktop app, type the
+formula straight into the dimension's box in the Sketch panel: see
+[Typing formulas in the app](#typing-formulas-in-the-app).
 
 ## Using parameters in steps
 
@@ -215,9 +215,34 @@ Parameters:
 wrote stand.sb
 ```
 
-That's 20 mm × 33.4 mm × 2 mm = 1336 mm^3. In the desktop app's Properties
-panel, a number with a formula says so when you point at it; typing a new number
-there replaces the formula, and the other numbers keep theirs.
+That's 20 mm × 33.4 mm × 2 mm = 1336 mm^3. In the desktop app, type the formula
+straight into the number's box in Properties, as below.
+
+## Typing formulas in the app
+
+Anywhere the app has a box for a step's number or a sketch dimension, you can
+type a formula instead of a number: in **Properties** (an extrude's distance, a
+box's size, a shell's thickness, an angle) and in the **Sketch panel** (a
+dimension's number).
+
+![Hollow's thickness is worked out from wall: its box has an fx mark](images/app-properties-formula.png)
+
+1. Click in the box and type the formula, like `wall * 2`. Press **Enter**.
+2. The box shows what the formula works out to, with a small blue ***fx*** in
+   front, so you can see which numbers follow parameters. Point at the *fx* to
+   see the formula.
+3. Click in the box again and it shows the formula, ready to change.
+
+| You type | What happens |
+| --- | --- |
+| A number, like `25` | The number, in the design's unit. If the box had a formula, the number replaces it |
+| A formula with a parameter, like `wall * 2` or `height - 2 * wall` | The number follows the formula from now on |
+| A number with a unit, like `1 in` or `2.5 cm`, or sums like `10 mm + 1 in` | It's worked out once and kept as a number: handy for typing inches into a design in mm |
+| Something that can't be worked out, like `wall + 2` | Nothing changes, and the status bar says why (here: `wall` is a length and `2` is a plain number, so write `wall + 2 mm`) |
+
+Each change is one step of Edit > Undo. The other numbers of a step keep their
+own formulas. A formula in a length's box must give a length, and in an angle's
+box an angle, like `30 deg` or `lean * 2`.
 
 ## Tips
 

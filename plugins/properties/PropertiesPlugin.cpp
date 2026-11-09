@@ -32,12 +32,15 @@
 #include "sb/model/Commands.h"
 #include "sb/model/ConstructionPlane.h"
 #include "sb/model/Document.h"
+#include "sb/model/Expression.h"
+#include "sb/model/Formulas.h"
 #include "sb/model/Holes.h"
 #include "sb/model/Material.h"
 #include "sb/model/Mirror.h"
 #include "sb/model/Pattern.h"
 #include "sb/model/Shell.h"
 #include "sb/plugin/Events.h"
+#include "sb/ui/FormulaBox.h"
 #include "sb/ui/UiRegistry.h"
 
 namespace sb::plugins {
@@ -313,6 +316,7 @@ private:
         }
         filling_ = true;
         for (auto& u : updaters_) u(*f);
+        showFormulas(*f);
         filling_ = false;
         title_->setText(QString::fromStdString(f->name()));
 
@@ -630,7 +634,7 @@ private:
                         setMotion(g, [v](kernel::Motion& m) { m.offset = v; });
                     });
                 // Turn: degrees for the student, radians inside.
-                auto* turn = new QDoubleSpinBox(form_);
+                auto* turn = new ui::FormulaBox(form_);
                 turn->setObjectName(QStringLiteral("turn"));
                 turn->setDecimals(2);
                 turn->setRange(-360.0, 360.0);
@@ -737,7 +741,7 @@ private:
             axis->setCurrentIndex(axis->findData(want));
         });
         // Angle: degrees for the student, radians inside.
-        auto* angle = new QDoubleSpinBox(form_);
+        auto* angle = new ui::FormulaBox(form_);
         angle->setObjectName(QStringLiteral("angle"));
         angle->setDecimals(2);
         angle->setRange(0.01, 360.0);
@@ -878,7 +882,7 @@ private:
                 auto& h = static_cast<HoleFeature&>(g);
                 h.setCountersink(v, h.countersinkAngle());
             });
-        auto* angle = new QDoubleSpinBox(form_);
+        auto* angle = new ui::FormulaBox(form_);
         angle->setObjectName(QStringLiteral("countersink_angle"));
         angle->setDecimals(1);
         angle->setRange(1.0, 179.0);
@@ -1028,7 +1032,7 @@ private:
                 l.center = v;
                 p.setLayout(l);
             });
-        auto* angle = new QDoubleSpinBox(form_);
+        auto* angle = new ui::FormulaBox(form_);
         angle->setObjectName(QStringLiteral("angle"));
         angle->setDecimals(1);
         angle->setRange(0.1, 360.0);
@@ -1143,7 +1147,7 @@ private:
             form, QStringLiteral("offset"), tr("Offset"),
             [plane](const model::Feature& g) { return plane(g).offset(); },
             [](model::Feature& g, double v) { static_cast<PlaneFeature&>(g).setOffset(v); }, false);
-        auto* angle = new QDoubleSpinBox(form_);
+        auto* angle = new ui::FormulaBox(form_);
         angle->setObjectName(QStringLiteral("angle"));
         angle->setDecimals(1);
         angle->setRange(-360.0, 360.0);
@@ -1458,8 +1462,8 @@ private:
 
     // A box for a length in the design's unit (or, with `length` false, for a
     // plain number, like an axis direction).
-    QDoubleSpinBox* spin(const QString& name, bool positive, const QString& suffix, bool length = true) {
-        auto* s = new QDoubleSpinBox(form_);
+    ui::FormulaBox* spin(const QString& name, bool positive, const QString& suffix, bool length = true) {
+        auto* s = new ui::FormulaBox(form_);
         s->setObjectName(name);
         const double most = length ? toUnit(10000.0, unit_) : 10000.0;  // 10 m
         s->setDecimals(length ? unitDecimals(unit_) : 2);
@@ -1487,14 +1491,72 @@ private:
         });
     }
 
+    // The key of the step's number a box shows, like "size_x" for the box "size.x".
+    static std::string numberKey(const QObject& box) {
+        QString name = box.objectName();
+        if (name == QStringLiteral("turn")) return "angle";  // a Move's angle
+        return name.replace(QLatin1Char('.'), QLatin1Char('_')).toStdString();
+    }
+
+    // Lets every box that shows one of the step's numbers take a formula, and
+    // marks the ones that have one.
+    void showFormulas(const model::Feature& f) {
+        const auto numbers = f.numbers();
+        for (auto* spinBox : form_->findChildren<QDoubleSpinBox*>()) {
+            auto* box = dynamic_cast<ui::FormulaBox*>(spinBox);
+            if (!box) continue;
+            const std::string key = numberKey(*box);
+            const bool number = std::any_of(numbers.begin(), numbers.end(),
+                                            [&](const model::StepNumber& n) { return n.key == key; });
+            if (!number) {
+                box->setFormulaHandler(nullptr);
+                box->setFormula(QString());
+                continue;
+            }
+            box->setFormula(qs(f.formula(key)));
+            if (!box->takesFormulas())
+                box->setFormulaHandler([this, key](const QString& text) { typedFormula(key, text); });
+        }
+    }
+
+    // A formula typed into a number's box. One with no parameters in it, like
+    // "1 in" or "25 mm", is just a number in another unit; any other becomes the
+    // number's formula.
+    void typedFormula(const std::string& key, const QString& text) {
+        const auto* f = selected();
+        const auto* d = design();
+        if (!f || !d) return;
+        const std::string formula = text.toStdString();
+        model::Args args{{"feature", f->id()}, {"setting", key}};
+        std::optional<double> typed;
+        if (model::Expression::parse(formula).isConstant()) {
+            for (const auto& n : f->numbers()) {
+                if (n.key != key) continue;
+                const auto r = model::evalNumber(n.dim, n.positive, formula, d->parameters().evaluate(),
+                                                 key + " in " + f->name());
+                // feature.set_value takes angles in degrees.
+                if (r.ok())
+                    typed =
+                        n.dim == model::kAngle ? r.value->value * 180.0 / std::numbers::pi : r.value->value;
+            }
+        }
+        if (typed) {
+            args["value"] = *typed;
+        } else {
+            args["formula"] = formula;
+        }
+        lastField_.clear();  // not part of a run of arrow-key changes
+        const auto problems = ctx_.documents().run(ctx_.selection().doc(), "feature.set_value", args);
+        if (!problems.empty()) ui_.showProblems(problems);
+        schedule();
+    }
+
     // Says where a number comes from, if it's worked out from a formula.
     // @param key The box's name, like "distance" or "size.x" (the number's key is "size_x").
     QString formulaTip(const model::Feature& g, QString key) const {
         const auto text = g.formula(key.replace(QLatin1Char('.'), QLatin1Char('_')).toStdString());
         if (text.empty()) return {};
-        return tr("Worked out from %1. Change the parameters it uses to change it, or type a number to use "
-                  "that "
-                  "instead.")
+        return tr("Worked out from %1. Type a new formula to change it, or a number to use that instead.")
             .arg(qs(text));
     }
 
