@@ -29,6 +29,7 @@ Commands for sketchbillet_cli run:
   feature.add_mirror       Mirror
   feature.add_move         Move body
   feature.add_pattern      Pattern
+  feature.add_plane        Construction plane
   feature.add_revolve      Revolve
   feature.add_sketch       Add sketch
   feature.delete           Delete step

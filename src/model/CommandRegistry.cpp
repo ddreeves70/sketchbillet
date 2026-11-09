@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "sb/model/Commands.h"
+#include "sb/model/ConstructionPlane.h"
 #include "sb/model/Document.h"
 #include "sb/model/Formulas.h"
 #include "sb/model/Holes.h"
@@ -1092,14 +1093,123 @@ CommandRegistry makeBuiltin() {
            "when the body changes.",
            false,
            {}},
+          {"on",
+           ArgType::FeatureRef,
+           "To draw on a construction plane: the Plane step, like Plane1. The sketch moves with the plane.",
+           false,
+           {}},
           {"name", ArgType::Text, "Step name. Default Sketch1, Sketch2, ...", false, {}}}},
         [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
             const auto p = argText(a, "plane", "xy");
             auto plane = p == "xz" ? SketchPlane::XZ : p == "yz" ? SketchPlane::YZ : SketchPlane::XY;
             const auto face = argFace(a, "face");
             if (face) plane = nearestPlane(face->signature.direction);
+            const FeatureId on = argFeature(a, "on");
+            if (!on.isNil()) {
+                const auto* target = doc.find(on);
+                if (!target || target->type() != FeatureType::Plane) {
+                    return std::make_unique<ProblemCommand>(Diagnostic{
+                        "sketch.not_a_plane",
+                        Severity::Error,
+                        (target ? target->name() : std::string("That step")) +
+                            " isn't a construction plane. Use on= with a Plane step, like on=Plane1.",
+                        {}});
+                }
+            }
             auto step = std::make_unique<SketchFeature>(argText(a, "name", doc.uniqueName("Sketch")), plane);
             if (face) step->setFace(SketchFace{argFeature(a, "body"), *face});
+            if (!on.isNil()) step->setOnPlane(on);
+            return std::make_unique<AddFeatureCommand>(std::move(step));
+        });
+
+    r.add(
+        {"feature.add_plane",
+         "Construction plane",
+         "Adds a construction plane to sketch on, where there's no face: moved out from a base plane, a flat "
+         "face or another plane, and turned at an angle. It isn't a body.",
+         {{"plane",
+           ArgType::Choice,
+           "Start from a base plane: xy (the ground), xz (facing the front) or yz (facing the right). "
+           "Default "
+           "xy.",
+           false,
+           {"xy", "xz", "yz"}},
+          {"body",
+           ArgType::FeatureRef,
+           "To start from a face: the step whose body has it, like Box1.",
+           false,
+           {}},
+          {"face",
+           ArgType::Face,
+           "To start from a face: a flat face of the body, as `sketchbillet_cli open <design.sb> --faces "
+           "<body>` "
+           "numbers it, like 6.",
+           false,
+           {}},
+          {"from",
+           ArgType::FeatureRef,
+           "To start from another construction plane: its Plane step.",
+           false,
+           {}},
+          {"offset",
+           ArgType::Number,
+           "How far to move it, in mm, along the way it faces (after turning). Default 0.",
+           false,
+           {}},
+          {"angle",
+           ArgType::Number,
+           "How far to turn it, in degrees, the right-hand way about its hinge. Default 0.",
+           false,
+           {}},
+          {"hinge",
+           ArgType::Choice,
+           "The line it turns about: x or y, the starting plane's directions through its 0, 0. Default x.",
+           false,
+           {"x", "y"}},
+          {"edge",
+           ArgType::GeometryList,
+           "Instead of hinge, starting from a face: a straight edge of that face to turn about, like 9.",
+           false,
+           {}},
+          {"name", ArgType::Text, "Step name. Default Plane1, Plane2, ...", false, {}}}},
+        [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+            auto problem = [](std::string code, std::string message) {
+                return std::make_unique<ProblemCommand>(
+                    Diagnostic{std::move(code), Severity::Error, std::move(message), {}});
+            };
+            PlaneFrom from;
+            const auto p = argText(a, "plane", "xy");
+            from.base = p == "xz" ? SketchPlane::XZ : p == "yz" ? SketchPlane::YZ : SketchPlane::XY;
+            if (const auto face = argFace(a, "face")) {
+                from.kind = PlaneFrom::Kind::Face;
+                from.face = {argFeature(a, "body"), *face};
+            } else if (const auto other = argFeature(a, "from"); !other.isNil()) {
+                const auto* f = doc.find(other);
+                if (!f || f->type() != FeatureType::Plane) {
+                    return problem("plane.from",
+                                   (f ? f->name() : std::string("That step")) +
+                                       " isn't a construction plane. Use from= with a Plane step, like "
+                                       "from=Plane1.");
+                }
+                from.kind = PlaneFrom::Kind::Plane;
+                from.plane = other;
+            }
+            PlaneHinge hinge;
+            hinge.kind = argText(a, "hinge", "x") == "y" ? PlaneHinge::Kind::Y : PlaneHinge::Kind::X;
+            if (a.count("edge")) {
+                const auto edges = argGeometry(a, "edge");
+                if (edges.size() != 1 || from.kind != PlaneFrom::Kind::Face) {
+                    return problem(
+                        "plane.hinge",
+                        "edge= is one straight edge of the face the plane starts from, like edge=9, "
+                        "with body= and face=.");
+                }
+                hinge = {PlaneHinge::Kind::Edge, edges[0]};
+            }
+            auto step = std::make_unique<PlaneFeature>(argText(a, "name", doc.uniqueName("Plane")), from);
+            step->setOffset(argNumber(a, "offset", 0));
+            step->setAngle(argNumber(a, "angle", 0) * std::numbers::pi / 180.0);
+            step->setHinge(hinge);
             return std::make_unique<AddFeatureCommand>(std::move(step));
         });
 

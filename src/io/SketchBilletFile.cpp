@@ -18,6 +18,7 @@
 
 #include "sb/core/Version.h"
 #include "sb/model/Commands.h"
+#include "sb/model/ConstructionPlane.h"
 #include "sb/model/Holes.h"
 #include "sb/model/Mirror.h"
 #include "sb/model/Pattern.h"
@@ -558,6 +559,33 @@ json featureToJson(const Feature& f) {
                 j["inputs"] = {{"body", sk.face()->body.toString()}};
                 j["params"]["face"] = refToJson(sk.face()->face);
             }
+            if (!sk.onPlane().isNil()) j["inputs"] = {{"on", sk.onPlane().toString()}};  // a Plane step
+            break;
+        }
+        case FeatureType::Plane: {
+            const auto& p = static_cast<const model::PlaneFeature&>(f);
+            j["type"] = "Plane";
+            const auto& from = p.from();
+            json params = {{"offset", p.offset()}, {"angle", p.angle()}};
+            switch (from.kind) {
+                case model::PlaneFrom::Kind::Base:
+                    params["from"] = planeName(from.base);
+                    break;
+                case model::PlaneFrom::Kind::Face:
+                    params["from"] = "face";
+                    params["face"] = refToJson(from.face.face);
+                    j["inputs"] = {{"body", from.face.body.toString()}};
+                    break;
+                case model::PlaneFrom::Kind::Plane:
+                    params["from"] = "plane";
+                    j["inputs"] = {{"plane", from.plane.toString()}};
+                    break;
+            }
+            const auto& h = p.hinge();
+            params["hinge"] = h.kind == model::PlaneHinge::Kind::X   ? json("x")
+                              : h.kind == model::PlaneHinge::Kind::Y ? json("y")
+                                                                     : json({{"edge", refToJson(h.edge)}});
+            j["params"] = params;
             break;
         }
         case FeatureType::Move: {
@@ -782,6 +810,57 @@ std::unique_ptr<Feature> stepFromJson(const json& j, const FeatureId& id, std::s
             if (!face) return bad("face");
             step->setFace(model::SketchFace{*body, *face});
         }
+        if (inputs.contains("on")) {
+            const auto on =
+                inputs["on"].is_string() ? FeatureId::parse(inputs["on"].get<std::string>()) : std::nullopt;
+            if (!on) return bad("input on");
+            step->setOnPlane(*on);
+        }
+        return step;
+    }
+    if (type == "Plane") {
+        model::PlaneFrom from;
+        const json f = params.value("from", json());
+        if (f == "face") {
+            const auto body = inputs.contains("body") && inputs["body"].is_string()
+                                  ? FeatureId::parse(inputs["body"].get<std::string>())
+                                  : std::nullopt;
+            const auto face = refFromJson(params.value("face", json()));
+            if (!body) return bad("input body");
+            if (!face) return bad("face");
+            from.kind = model::PlaneFrom::Kind::Face;
+            from.face = {*body, *face};
+        } else if (f == "plane") {
+            const auto plane = inputs.contains("plane") && inputs["plane"].is_string()
+                                   ? FeatureId::parse(inputs["plane"].get<std::string>())
+                                   : std::nullopt;
+            if (!plane) return bad("input plane");
+            from.kind = model::PlaneFrom::Kind::Plane;
+            from.plane = *plane;
+        } else {
+            const auto base = readPlane(f);
+            if (!base) return bad("from");
+            from.base = *base;
+        }
+        const auto offset = readNumber(params.value("offset", json()));
+        const auto angle = readNumber(params.value("angle", json()));
+        if (!offset) return bad("offset");
+        if (!angle) return bad("angle");
+        model::PlaneHinge hinge;
+        const json h = params.value("hinge", json("x"));
+        if (h == "y") {
+            hinge.kind = model::PlaneHinge::Kind::Y;
+        } else if (h.is_object() && h.contains("edge")) {
+            const auto edge = refFromJson(h["edge"]);
+            if (!edge) return bad("hinge");
+            hinge = {model::PlaneHinge::Kind::Edge, *edge};
+        } else if (h != "x") {
+            return bad("hinge");
+        }
+        auto step = std::make_unique<model::PlaneFeature>(id, name, from);
+        step->setOffset(*offset);
+        step->setAngle(*angle);
+        step->setHinge(hinge);
         return step;
     }
     if (type == "Move") {

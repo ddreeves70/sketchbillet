@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "sb/model/Commands.h"
+#include "sb/model/ConstructionPlane.h"
 #include "sb/model/Document.h"
 #include "sb/model/Holes.h"
 #include "sb/model/Material.h"
@@ -542,6 +543,7 @@ private:
             case model::FeatureType::Hole:     // see addHole()
             case model::FeatureType::Pattern:  // see addPattern()
             case model::FeatureType::Mirror:   // see addMirror()
+            case model::FeatureType::Plane:    // see addPlane()
                 break;
             case model::FeatureType::Fillet:
             case model::FeatureType::Chamfer: {
@@ -641,7 +643,10 @@ private:
         if (f.type() == model::FeatureType::Hole) addHole(form, static_cast<const model::HoleFeature&>(f));
         if (f.type() == model::FeatureType::Pattern) addPattern(form);
         if (f.type() == model::FeatureType::Mirror) addMirror(form);
-        if (f.type() != model::FeatureType::Sketch) addMaterial(form);  // a sketch isn't a body
+        if (f.type() == model::FeatureType::Plane) addPlane(form);
+        // Sketches and planes aren't bodies: no material, volume or mass.
+        if (f.type() != model::FeatureType::Sketch && f.type() != model::FeatureType::Plane)
+            addMaterial(form);
     }
 
     const model::Document* design() const { return ctx_.documents().find(ctx_.selection().doc()); }
@@ -1079,6 +1084,94 @@ private:
         });
     }
 
+    void addPlane(QFormLayout* form) {
+        using model::PlaneFeature;
+        using model::PlaneFrom;
+        using model::PlaneHinge;
+        auto plane = [](const model::Feature& g) -> const PlaneFeature& {
+            return static_cast<const PlaneFeature&>(g);
+        };
+        // Where it starts: a base plane can be changed here; a face or another plane is shown.
+        auto* from = new QComboBox(form_);
+        from->setObjectName(QStringLiteral("from"));
+        from->setToolTip(tr("What the plane starts from, before it's turned and moved."));
+        form->addRow(tr("Starts from"), from);
+        connect(from, &QComboBox::activated, this, [this, from](int index) {
+            const QString key = from->itemData(index).toString();
+            if (key != QLatin1String("xy") && key != QLatin1String("xz") && key != QLatin1String("yz"))
+                return;
+            const auto base = key == QLatin1String("xz")   ? model::SketchPlane::XZ
+                              : key == QLatin1String("yz") ? model::SketchPlane::YZ
+                                                           : model::SketchPlane::XY;
+            edit(QStringLiteral("from"), [base](model::Feature& g) {
+                auto& p = static_cast<PlaneFeature&>(g);
+                PlaneFrom f;
+                f.base = base;
+                p.setFrom(f);
+                if (p.hinge().kind == PlaneHinge::Kind::Edge) p.setHinge({});  // an edge needs a face
+            });
+        });
+        addNumber(
+            form, QStringLiteral("offset"), tr("Offset"),
+            [plane](const model::Feature& g) { return plane(g).offset(); },
+            [](model::Feature& g, double v) { static_cast<PlaneFeature&>(g).setOffset(v); }, false);
+        auto* angle = new QDoubleSpinBox(form_);
+        angle->setObjectName(QStringLiteral("angle"));
+        angle->setDecimals(1);
+        angle->setRange(-360.0, 360.0);
+        angle->setSuffix(QStringLiteral("°"));
+        angle->setKeyboardTracking(false);
+        angle->setToolTip(tr("How far it's tilted about its hinge. Below 0 tilts it the other way."));
+        form->addRow(tr("Angle"), angle);
+        connect(angle, &QDoubleSpinBox::valueChanged, this, [this](double degrees) {
+            edit(QStringLiteral("angle"), [degrees](model::Feature& g) {
+                static_cast<PlaneFeature&>(g).setAngle(degrees * std::numbers::pi / 180.0);
+            });
+        });
+        auto* hinge = new QComboBox(form_);
+        hinge->setObjectName(QStringLiteral("hinge"));
+        hinge->addItem(tr("Its x direction"), static_cast<int>(PlaneHinge::Kind::X));
+        hinge->addItem(tr("Its y direction"), static_cast<int>(PlaneHinge::Kind::Y));
+        hinge->setToolTip(tr("The line it tilts about, through the starting plane's 0, 0."));
+        form->addRow(tr("Tilts about"), hinge);
+        connect(hinge, &QComboBox::activated, this, [this, hinge](int index) {
+            const auto k = static_cast<PlaneHinge::Kind>(hinge->itemData(index).toInt());
+            if (k == PlaneHinge::Kind::Edge) return;
+            edit(QStringLiteral("hinge"),
+                 [k](model::Feature& g) { static_cast<PlaneFeature&>(g).setHinge(PlaneHinge{k, {}}); });
+        });
+        updaters_.push_back([this, plane, from, angle, hinge](const model::Feature& g) {
+            const auto& p = plane(g);
+            from->clear();
+            from->addItem(tr("XY (the ground)"), QStringLiteral("xy"));
+            from->addItem(tr("XZ (facing the front)"), QStringLiteral("xz"));
+            from->addItem(tr("YZ (facing the right)"), QStringLiteral("yz"));
+            const auto* d = design();
+            auto nameOf = [d](const FeatureId& id) {
+                const auto* f = d ? d->find(id) : nullptr;
+                return f ? qs(f->name()) : QObject::tr("(missing)");
+            };
+            const auto& f = p.from();
+            if (f.kind == PlaneFrom::Kind::Face) {
+                from->addItem(tr("A face of %1").arg(nameOf(f.face.body)), QStringLiteral("face"));
+                from->setCurrentIndex(3);
+            } else if (f.kind == PlaneFrom::Kind::Plane) {
+                from->addItem(nameOf(f.plane), QStringLiteral("plane"));
+                from->setCurrentIndex(3);
+            } else {
+                from->setCurrentIndex(f.base == model::SketchPlane::XZ   ? 1
+                                      : f.base == model::SketchPlane::YZ ? 2
+                                                                         : 0);
+            }
+            angle->setValue(p.angle() * 180.0 / std::numbers::pi);
+            const int edgeAt = hinge->findData(static_cast<int>(PlaneHinge::Kind::Edge));
+            if (p.hinge().kind == PlaneHinge::Kind::Edge && edgeAt < 0) {
+                hinge->addItem(tr("An edge of the face"), static_cast<int>(PlaneHinge::Kind::Edge));
+            }
+            hinge->setCurrentIndex(hinge->findData(static_cast<int>(p.hinge().kind)));
+        });
+    }
+
     // What a Pattern or Mirror repeats, in words: its steps (and the body, when
     // it's a later one), or `whole` with the body's name.
     QString repeatsText(const std::vector<FeatureId>& steps, const FeatureId& body,
@@ -1192,13 +1285,14 @@ private:
         });
     }
 
-    // The steps before `step` that make a body (any step but a sketch), in order.
+    // The steps before `step` that make a body (any step but a sketch or a plane), in order.
     static std::vector<FeatureId> bodiesBefore(const model::Document& d, const FeatureId& step) {
         std::vector<FeatureId> out;
         for (std::size_t i = 0; i < d.featureCount(); ++i) {
             const auto& f = d.featureAt(i);
             if (f.id() == step) break;
-            if (f.type() != model::FeatureType::Sketch) out.push_back(f.id());
+            if (f.type() != model::FeatureType::Sketch && f.type() != model::FeatureType::Plane)
+                out.push_back(f.id());
         }
         return out;
     }

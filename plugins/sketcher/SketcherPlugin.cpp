@@ -1692,8 +1692,19 @@ void registerSketcher(plugin::PluginContext& ctx) {
         return false;
     };
 
-    // Starts a new sketch on a base plane, or on the picked face, and draws in it.
-    auto newSketch = [&ctx, sketcher](const char* plane, std::optional<plugin::PickedElement> face) {
+    // The one construction plane (Plane step) picked in the active design, if that's what's picked.
+    auto pickedPlane = [&ctx]() -> std::optional<FeatureId> {
+        const auto& sel = ctx.selection();
+        const DocId active = ctx.documents().active();
+        const auto* doc = ctx.documents().find(active);
+        if (!doc || sel.doc() != active || sel.features().size() != 1) return std::nullopt;
+        const auto* f = doc->find(sel.features()[0]);
+        if (!f || f->type() != model::FeatureType::Plane) return std::nullopt;
+        return f->id();
+    };
+    // Starts a new sketch on a base plane, the picked face or a construction plane, and draws in it.
+    auto newSketch = [&ctx, sketcher](const char* plane, std::optional<plugin::PickedElement> face,
+                                      std::optional<FeatureId> on = std::nullopt) {
         auto& docs = ctx.documents();
         const DocId doc = docs.active();
         if (!docs.find(doc)) return;
@@ -1702,6 +1713,8 @@ void registerSketcher(plugin::PluginContext& ctx) {
         if (face) {
             args = {{"body", face->body}, {"face", face->ref}};
             ctx.selection().setPickMode(plugin::PickMode::Bodies);  // done picking faces
+        } else if (on) {
+            args = {{"on", *on}};
         }
         const auto problems = docs.run(doc, "feature.add_sketch", args);
         if (!problems.empty()) {
@@ -1713,21 +1726,54 @@ void registerSketcher(plugin::PluginContext& ctx) {
         ctx.selection().set(doc, {id});
         sketcher->begin(id, Tool::Line);  // a new sketch starts with lines
     };
-    ctx.addAction(ActionSpec{.id = "sb.sketcher.new_xy",
-                             .text = "New sketch on XY (the ground)",
-                             .menu = "Sketch",
-                             .shortcut = "Ctrl+Shift+K",
-                             .toolbar = true,
-                             .buttonText = "New sketch",
-                             .icon = std::string(icons::sketcher::new_sketch_svg),
-                             .tip =
-                                 "Start a sketch lying flat, seen from the top, and draw in it. With a flat "
-                                 "face picked, the sketch goes on that face.",
-                             .run = [newSketch, pickedFace, flatFace] {
-                                 const auto face = pickedFace();
-                                 if (face && !flatFace(*face)) return;
-                                 newSketch("xy", face);
-                             }});
+    ctx.addAction(
+        ActionSpec{.id = "sb.sketcher.new_xy",
+                   .text = "New sketch on XY (the ground)",
+                   .menu = "Sketch",
+                   .shortcut = "Ctrl+Shift+K",
+                   .toolbar = true,
+                   .buttonText = "New sketch",
+                   .icon = std::string(icons::sketcher::new_sketch_svg),
+                   .tip = "Start a sketch lying flat, seen from the top, and draw in it. With a flat "
+                          "face picked, the sketch goes on that face; with a plane picked, on the plane.",
+                   .run = [newSketch, pickedFace, flatFace, pickedPlane] {
+                       const auto face = pickedFace();
+                       if (face && !flatFace(*face)) return;
+                       newSketch("xy", face, face ? std::nullopt : pickedPlane());
+                   }});
+    // A construction plane: off the picked face or plane, or above the ground.
+    ctx.addAction(ActionSpec{
+        .id = "sb.sketcher.new_plane",
+        .text = "New plane",
+        .menu = "Sketch",
+        .toolbar = true,
+        .buttonText = "Plane",
+        .icon = std::string(icons::sketcher::new_plane_svg),
+        .tip =
+            "Add a construction plane to sketch on: 10 mm off the picked face or plane, or 20 mm above the "
+            "ground. Move it, or tilt it, in Properties.",
+        .run =
+            [&ctx, pickedFace, flatFace, pickedPlane] {
+                auto& docs = ctx.documents();
+                const DocId doc = docs.active();
+                if (!docs.find(doc)) return;
+                model::Args args{{"offset", 20.0}};
+                if (const auto face = pickedFace()) {
+                    if (!flatFace(*face)) return;
+                    args = {{"body", face->body}, {"face", face->ref}, {"offset", 10.0}};
+                    ctx.selection().setPickMode(plugin::PickMode::Bodies);
+                } else if (const auto plane = pickedPlane()) {
+                    args = {{"from", *plane}, {"offset", 10.0}};
+                }
+                const auto problems = docs.run(doc, "feature.add_plane", args);
+                if (!problems.empty()) {
+                    if (auto* ui = ctx.service<ui::UiRegistry>()) ui->showProblems(problems);
+                    return;
+                }
+                const auto* design = docs.find(doc);
+                ctx.selection().set(doc, {design->featureAt(design->featureCount() - 1).id()});
+            },
+        .enabled = [&ctx] { return ctx.documents().find(ctx.documents().active()) != nullptr; }});
     ctx.addAction(ActionSpec{
         .id = "sb.sketcher.new_face",
         .text = "New sketch on a face",

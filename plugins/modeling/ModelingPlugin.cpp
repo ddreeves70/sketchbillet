@@ -1,5 +1,7 @@
 #include "sb/plugins/Modeling.h"
 
+#include <algorithm>
+#include <cmath>
 #include <string>
 #include <string_view>
 
@@ -7,6 +9,8 @@
 #include "sb/kernel/Types.h"
 #include "sb/model/CommandRegistry.h"
 #include "sb/plugin/Actions.h"
+#include "sb/plugin/Events.h"
+#include "sb/plugin/Overlays.h"
 
 // sb.modeling adds SketchBillet's modeling commands through the same PluginContext an
 // outside plugin uses. The commands themselves are still defined in sb_model
@@ -25,7 +29,96 @@ constexpr const char* kManifest = R"({
   "tier": "foundation"
 })";
 
+// Draws the active design's construction planes (Plane steps): a square on each,
+// round the point of it nearest the middle of the design's bodies and big enough
+// to show beside them, with its name; the picked ones in orange.
+void drawPlanes(plugin::PluginContext& ctx) {
+    plugin::Overlay plain, picked, names;
+    plain.color = {183, 121, 31, 200};
+    picked.color = {230, 120, 20, 255};
+    picked.size = 2.5;
+    names.shape = plugin::OverlayShape::Labels;
+    names.color = {140, 90, 20, 255};
+    names.size = 12;
+    const auto& docs = ctx.documents();
+    const DocId active = docs.active();
+    const auto* design = docs.find(active);
+    const auto* report = design ? docs.lastRebuild(active) : nullptr;
+    if (design && report) {
+        // The middle of the bodies, and how big they are.
+        kernel::Vec3 middle{};
+        double half = 30;  // mm
+        if (const auto* k = docs.kernel()) {
+            bool any = false;
+            kernel::Vec3 lo{}, hi{};
+            for (const auto& id : report->bodies()) {
+                const auto* shape = report->shapeOf(id);
+                if (!shape) continue;
+                const auto b = k->bounds(*shape);
+                if (!any) {
+                    lo = b.min;
+                    hi = b.max;
+                    any = true;
+                }
+                lo = {std::min(lo.x, b.min.x), std::min(lo.y, b.min.y), std::min(lo.z, b.min.z)};
+                hi = {std::max(hi.x, b.max.x), std::max(hi.y, b.max.y), std::max(hi.z, b.max.z)};
+            }
+            if (any) {
+                middle = {(lo.x + hi.x) / 2, (lo.y + hi.y) / 2, (lo.z + hi.z) / 2};
+                const double dx = hi.x - lo.x, dy = hi.y - lo.y, dz = hi.z - lo.z;
+                half = std::max(half, 0.4 * std::sqrt(dx * dx + dy * dy + dz * dz));
+            }
+        }
+        const auto& sel = ctx.selection();
+        for (std::size_t i = 0; i < design->featureCount(); ++i) {
+            const auto& f = design->featureAt(i);
+            const auto* r = report->result(f.id());
+            if (f.type() != model::FeatureType::Plane || !r || !r->plane) continue;
+            const auto& a = *r->plane;
+            // The point of the plane nearest the middle, in the plane's own x and y.
+            const kernel::Vec3 d{middle.x - a.origin.x, middle.y - a.origin.y, middle.z - a.origin.z};
+            const double cu = d.x * a.x.x + d.y * a.x.y + d.z * a.x.z;
+            const double cv = d.x * a.y.x + d.y * a.y.y + d.z * a.y.z;
+            auto at = [&a, cu, cv](double u, double v) {
+                u += cu;
+                v += cv;
+                return kernel::Vec3{a.origin.x + u * a.x.x + v * a.y.x, a.origin.y + u * a.x.y + v * a.y.y,
+                                    a.origin.z + u * a.x.z + v * a.y.z};
+            };
+            const double kHalf = half;
+            const kernel::Vec3 corners[] = {at(-kHalf, -kHalf), at(kHalf, -kHalf), at(kHalf, kHalf),
+                                            at(-kHalf, kHalf)};
+            const bool isPicked =
+                sel.doc() == active &&
+                std::find(sel.features().begin(), sel.features().end(), f.id()) != sel.features().end();
+            auto& out = isPicked ? picked : plain;
+            for (int k = 0; k < 4; ++k) {
+                out.points.push_back(corners[k]);
+                out.points.push_back(corners[(k + 1) % 4]);
+            }
+            names.points.push_back(at(-kHalf + 2, kHalf - 2));
+            names.texts.push_back(f.name());
+        }
+    }
+    // Only what there is: a design with no planes draws nothing.
+    auto put = [&ctx](const char* name, plugin::Overlay o) {
+        if (o.points.empty()) {
+            ctx.overlays().remove(name);
+        } else {
+            ctx.overlays().set(name, std::move(o));
+        }
+    };
+    put("planes", std::move(plain));
+    put("planes.picked", std::move(picked));
+    put("planes.names", std::move(names));
+}
+
 void registerModeling(plugin::PluginContext& ctx) {
+    // Construction planes are drawn in the view after every rebuild and pick.
+    ctx.listen<plugin::RebuildFinished>([&ctx](const auto&) { drawPlanes(ctx); });
+    ctx.listen<plugin::SelectionChanged>([&ctx](const auto&) { drawPlanes(ctx); });
+    ctx.listen<plugin::ActiveDocumentChanged>([&ctx](const auto&) { drawPlanes(ctx); });
+
     const auto& builtin = model::CommandRegistry::builtin();
     for (const auto* info : builtin.commands()) {
         ctx.addCommand(*info, *builtin.factory(info->name));

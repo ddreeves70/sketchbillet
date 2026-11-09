@@ -24,6 +24,9 @@ int help(int argc, char** argv);
 // One line about a solved sketch, like "4 lines, 8 constraints, fully constrained".
 std::string sketchSummary(const sketch::Sketch& sketch, int freedom);
 
+// One line about a construction plane, like "plane through 0.00,0.00,20.00 mm, facing 0.00,0.00,1.00".
+std::string planeSummary(const model::PlaneAxes& plane);
+
 // Lists a step's numbers that come from formulas, one per line under the step:
 // "    distance = wall * 4  (12 mm)".
 void printFormulas(const model::Feature& step, LengthUnit unit, const char* indent);

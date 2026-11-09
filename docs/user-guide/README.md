@@ -25,6 +25,7 @@ works in either.
 | Holes for screws: simple, counterbored, countersunk; at a sketch's points or in from two edges | Threads |
 | Patterns: holes, joins, cuts or bodies, in a row, a grid or round a circle | |
 | Mirror: holes, joins, cuts or a body, across a plane or a face | Mirrored copies as separate bodies |
+| Construction planes: moved out and tilted from a base plane, a face or another plane, to sketch on | Planes through three points, or midway between two faces |
 | Name, rename and delete steps; undo and redo | |
 | Move and turn bodies; copy, paste and duplicate steps; turn steps off; folders | |
 | The desktop app: 3D viewer with 1, 2 or 4 panes, feature tree, Properties, layouts | |
@@ -51,11 +52,12 @@ works in either.
 13. [Holes](holes.md): holes for screws, counterbored or countersunk.
 14. [Patterns](patterns.md): repeat holes, pegs, slots or bodies in a row or round a circle.
 15. [Mirror](mirror.md): model half a part, mirror it to make the whole.
-16. [Materials](materials.md): what a body is made of, its mass, weight and cost.
-17. [Parameters](parameters.md): named values like `wall = 3 mm`, and formulas that use them.
-18. [Files](files.md): saving, opening, and exporting for 3D printing.
-19. [Plugins](plugins.md): adding features to SketchBillet.
-20. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
+16. [Construction planes](planes.md): planes to sketch on, moved out or tilted.
+17. [Materials](materials.md): what a body is made of, its mass, weight and cost.
+18. [Parameters](parameters.md): named values like `wall = 3 mm`, and formulas that use them.
+19. [Files](files.md): saving, opening, and exporting for 3D printing.
+20. [Plugins](plugins.md): adding features to SketchBillet.
+21. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
 
 ## Other guides
 

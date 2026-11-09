@@ -8,6 +8,7 @@
 #include <numbers>
 #include <utility>
 
+#include "sb/model/ConstructionPlane.h"
 #include "sb/model/Holes.h"
 #include "sb/model/Mirror.h"
 #include "sb/model/Pattern.h"
@@ -206,6 +207,7 @@ std::optional<PlaneAxes> faceAxes(const kernel::ElementInfo& face) {
 }
 
 void SketchFeature::remapInputs(const std::map<FeatureId, FeatureId>& map) {
+    if (auto it = map.find(onPlane_); it != map.end()) onPlane_ = it->second;
     if (!face_) return;
     if (auto it = map.find(face_->body); it != map.end()) face_->body = it->second;
     remapRef(face_->face, map);
@@ -1425,6 +1427,148 @@ Built MirrorFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier)
          "mirror", "mirror image"}};
     return copyInto(kernel, earlier, id(), name(), body_, steps_, copies, "mirror",
                     "Check the mirror's plane.");
+}
+
+PlaneFeature::PlaneFeature(std::string name, PlaneFrom from)
+    : PlaneFeature(FeatureId::generate(), std::move(name), std::move(from)) {}
+
+PlaneFeature::PlaneFeature(FeatureId id, std::string name, PlaneFrom from)
+    : Feature(id, std::move(name)), from_(std::move(from)) {}
+
+std::vector<StepNumber> PlaneFeature::numbers() const {
+    return {{"offset", kLength, false}, {"angle", kAngle, false}};
+}
+
+std::optional<double> PlaneFeature::number(std::string_view key) const {
+    if (key == "offset") return offset_;
+    if (key == "angle") return angle_;
+    return std::nullopt;
+}
+
+bool PlaneFeature::setNumber(std::string_view key, double value) {
+    if (key == "offset") {
+        offset_ = value;
+    } else if (key == "angle") {
+        angle_ = value;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+std::vector<FeatureId> PlaneFeature::dependencies() const {
+    if (from_.kind == PlaneFrom::Kind::Face) return {from_.face.body};
+    if (from_.kind == PlaneFrom::Kind::Plane) return {from_.plane};
+    return {};
+}
+
+void PlaneFeature::remapInputs(const std::map<FeatureId, FeatureId>& map) {
+    if (auto it = map.find(from_.face.body); it != map.end()) from_.face.body = it->second;
+    if (auto it = map.find(from_.plane); it != map.end()) from_.plane = it->second;
+    remapRef(from_.face.face, map);
+    remapRef(hinge_.edge, map);
+}
+
+Built PlaneFeature::build(kernel::IKernel&, const ResultLookup&) const {
+    return stepFailed("plane.no_build", "Planes are worked out by the rebuild, not the kernel.");
+}
+
+std::optional<PlaneAxes> PlaneFeature::where(const ResultLookup& earlier, Diagnostic& why) const {
+    auto fail = [&](std::string code, std::string message) -> std::optional<PlaneAxes> {
+        why = {std::move(code), Severity::Error, std::move(message), {}};
+        return std::nullopt;
+    };
+    // Where it starts.
+    PlaneAxes start;
+    const ShapeNames* names = nullptr;
+    switch (from_.kind) {
+        case PlaneFrom::Kind::Base:
+            start = planeAxes(from_.base);
+            break;
+        case PlaneFrom::Kind::Plane: {
+            const FeatureResult* r = earlier.resultOf(from_.plane);
+            if (!r || r->status != FeatureStatus::Ok || !r->plane) {
+                return fail(
+                    "plane.from_missing",
+                    name() + " starts from a plane that isn't there. Pick what it starts from again.");
+            }
+            start = *r->plane;
+            break;
+        }
+        case PlaneFrom::Kind::Face: {
+            names = namesOf(earlier, from_.face.body);
+            if (!names) {
+                return fail("plane.face_missing",
+                            name() + " starts from a face of a body that isn't there. Pick its face again.");
+            }
+            const auto found = resolve(from_.face.face, *names);
+            if (!found.found()) {
+                return fail(
+                    "plane.face_missing",
+                    name() +
+                        (found.status == ResolveStatus::Ambiguous
+                             ? " can't tell which face it starts from: an earlier change split it."
+                             : " can't find the face it starts from: an earlier change took it away.") +
+                        " Pick its face again.");
+            }
+            const auto axes = faceAxes(names->elements.faces[static_cast<std::size_t>(found.index)]);
+            if (!axes) {
+                return fail(
+                    "plane.face_curved",
+                    name() + " starts from a curved face, and a plane needs a flat one. Pick a flat face.");
+            }
+            start = *axes;
+            break;
+        }
+    }
+
+    // Turned about the hinge.
+    PlaneAxes out = start;
+    if (angle_ != 0) {
+        kernel::Vec3 point = start.origin, dir = start.x;
+        if (hinge_.kind == PlaneHinge::Kind::Y) dir = start.y;
+        if (hinge_.kind == PlaneHinge::Kind::Edge) {
+            if (!names) {
+                return fail("plane.hinge",
+                            name() +
+                                " can only turn about an edge when it starts from a face. Turn it about its "
+                                "x or y instead.");
+            }
+            const auto found = resolve(hinge_.edge, *names);
+            if (!found.found()) {
+                return fail("plane.hinge_missing",
+                            name() +
+                                " can't find the edge it turns about: an earlier change took it away. Pick "
+                                "its hinge again.");
+            }
+            const auto& e = names->elements.edges[static_cast<std::size_t>(found.index)];
+            const kernel::Vec3 n = unit(cross(start.x, start.y));
+            if (e.geom != kernel::GeomKind::Line || std::abs(dot(unit(e.direction), n)) > 1e-6 ||
+                std::abs(dot(minus(e.center, start.origin), n)) > 1e-6) {
+                return fail("plane.hinge",
+                            name() +
+                                " turns about an edge, and the edge must be straight and on the face it "
+                                "starts from. Pick an edge of that face.");
+            }
+            point = e.center;
+            dir = e.direction;
+        }
+        const kernel::Vec3 k = unit(dir);
+        const double c = std::cos(angle_), s = std::sin(angle_);
+        auto turn = [&](const kernel::Vec3& v) {  // Rodrigues' formula
+            const auto kv = cross(k, v);
+            const double d = dot(k, v) * (1 - c);
+            return kernel::Vec3{v.x * c + kv.x * s + k.x * d, v.y * c + kv.y * s + k.y * d,
+                                v.z * c + kv.z * s + k.z * d};
+        };
+        out.origin = plus(point, turn(minus(start.origin, point)));
+        out.x = turn(start.x);
+        out.y = turn(start.y);
+    }
+    // Moved along the way it faces.
+    const kernel::Vec3 n = unit(cross(out.x, out.y));
+    out.origin = plus(out.origin, scaled(n, offset_));
+    return out;
 }
 
 }  // namespace sb::model
