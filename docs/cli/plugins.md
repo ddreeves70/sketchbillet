@@ -48,6 +48,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command feature.add_extrude
            command feature.add_fillet
            command feature.add_hole
+           command feature.add_mirror
            command feature.add_move
            command feature.add_pattern
            command feature.add_revolve
@@ -98,6 +99,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            action  Create > Hole from two edges  (feature.add_hole)
            action  Create > Linear pattern  (feature.add_pattern)
            action  Create > Circular pattern  (feature.add_pattern)
+           action  Create > Mirror  (feature.add_mirror)
            action  Modify > Fillet  (feature.add_fillet)
            action  Modify > Chamfer  (feature.add_chamfer)
            action  Edit > Pick edges  (check mark)
@@ -131,6 +133,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command feature.add_extrude
            command feature.add_fillet
            command feature.add_hole
+           command feature.add_mirror
            command feature.add_move
            command feature.add_pattern
            command feature.add_revolve
@@ -181,6 +184,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            action  Create > Hole from two edges  (feature.add_hole)
            action  Create > Linear pattern  (feature.add_pattern)
            action  Create > Circular pattern  (feature.add_pattern)
+           action  Create > Mirror  (feature.add_mirror)
            action  Modify > Fillet  (feature.add_fillet)
            action  Modify > Chamfer  (feature.add_chamfer)
            action  Edit > Pick edges  (check mark)
@@ -211,7 +215,7 @@ failed   test.badname 1.0.0  Test badname
 failed   test.noentry 1.0.0  Test noentry
            error [plugin.library_bad]: The Test noentry plugin's program file isn't a SketchBillet plugin (it has no SB_PLUGIN_ENTRY). Ask its author for a fixed version. (...)
 failed   test.oldapi 1.0.0  Test oldapi
-           error [plugin.api_version]: The Test oldapi plugin was built for a different version of SketchBillet (plugin API 0; this SketchBillet uses 41). Get a version of the plugin made for this SketchBillet. (...)
+           error [plugin.api_version]: The Test oldapi plugin was built for a different version of SketchBillet (plugin API 0; this SketchBillet uses 42). Get a version of the plugin made for this SketchBillet. (...)
 ```
 
 Every reason and its fix is listed in the plugin guide's

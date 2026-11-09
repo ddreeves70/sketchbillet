@@ -88,22 +88,22 @@ TEST_CASE("sb.modeling loads and its commands work", "[plugin][host]") {
     CHECK(modeling.state == PluginState::Loaded);
     CHECK(modeling.builtin);
     CHECK(modeling.commands ==
-          std::vector<std::string>{"document.set_units",   "feature.add_boolean",  "feature.add_box",
-                                   "feature.add_chamfer",  "feature.add_cylinder", "feature.add_extrude",
-                                   "feature.add_fillet",   "feature.add_hole",     "feature.add_move",
-                                   "feature.add_pattern",  "feature.add_revolve",  "feature.add_sketch",
-                                   "feature.delete",       "feature.duplicate",    "feature.rename",
-                                   "feature.set_edges",    "feature.set_material", "feature.set_sketch_face",
-                                   "feature.set_value",    "feature.slide",        "feature.suppress",
-                                   "folder.add",           "folder.delete",        "folder.rename",
-                                   "material.define",      "material.delete",      "parameter.delete",
-                                   "parameter.rename",     "parameter.set",        "sketch.add_arc",
-                                   "sketch.add_circle",    "sketch.add_line",      "sketch.add_point",
-                                   "sketch.add_pole",      "sketch.add_rectangle", "sketch.add_spline",
-                                   "sketch.constrain",     "sketch.delete",        "sketch.import_spline",
-                                   "sketch.reload_spline", "sketch.remove_pole",   "sketch.round_corner",
-                                   "sketch.set_spline",    "sketch.set_value",     "sketch.set_weight",
-                                   "sketch.trim"});
+          std::vector<std::string>{"document.set_units",      "feature.add_boolean",  "feature.add_box",
+                                   "feature.add_chamfer",     "feature.add_cylinder", "feature.add_extrude",
+                                   "feature.add_fillet",      "feature.add_hole",     "feature.add_mirror",
+                                   "feature.add_move",        "feature.add_pattern",  "feature.add_revolve",
+                                   "feature.add_sketch",      "feature.delete",       "feature.duplicate",
+                                   "feature.rename",          "feature.set_edges",    "feature.set_material",
+                                   "feature.set_sketch_face", "feature.set_value",    "feature.slide",
+                                   "feature.suppress",        "folder.add",           "folder.delete",
+                                   "folder.rename",           "material.define",      "material.delete",
+                                   "parameter.delete",        "parameter.rename",     "parameter.set",
+                                   "sketch.add_arc",          "sketch.add_circle",    "sketch.add_line",
+                                   "sketch.add_point",        "sketch.add_pole",      "sketch.add_rectangle",
+                                   "sketch.add_spline",       "sketch.constrain",     "sketch.delete",
+                                   "sketch.import_spline",    "sketch.reload_spline", "sketch.remove_pole",
+                                   "sketch.round_corner",     "sketch.set_spline",    "sketch.set_value",
+                                   "sketch.set_weight",       "sketch.trim"});
 
     const DocId doc = host.documents().add(std::make_unique<model::Document>());
     REQUIRE(host.documents().run(doc, "feature.add_box", {{"size", kernel::Vec3{2, 3, 4}}}).empty());
@@ -335,9 +335,9 @@ TEST_CASE("sb.modeling adds menu items that run its commands", "[plugin][host]")
                      "sb.modeling.cut",        "sb.modeling.intersect",      "sb.modeling.move",
                      "sb.modeling.extrude",    "sb.modeling.revolve",        "sb.modeling.hole",
                      "sb.modeling.hole_edges", "sb.modeling.pattern_linear", "sb.modeling.pattern_circular",
-                     "sb.modeling.fillet",     "sb.modeling.chamfer",        "sb.modeling.pick_edges",
-                     "sb.modeling.duplicate",  "sb.modeling.turn_off",       "sb.modeling.turn_on",
-                     "sb.modeling.new_folder", "sb.modeling.delete"});
+                     "sb.modeling.mirror",     "sb.modeling.fillet",         "sb.modeling.chamfer",
+                     "sb.modeling.pick_edges", "sb.modeling.duplicate",      "sb.modeling.turn_off",
+                     "sb.modeling.turn_on",    "sb.modeling.new_folder",     "sb.modeling.delete"});
     CHECK(get(host, "sb.modeling").actions == ids);
 }
 

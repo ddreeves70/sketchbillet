@@ -1,0 +1,95 @@
+{
+  "name": "mirror-roof",
+  "description": "A wedge leaning toward +x (a 10 x 5 mm right triangle, extruded 4 mm), mirrored across the plane x = 0 and joined to it: a roof 20 mm wide and 5 mm tall. Worked out by hand: volume 2 x (10 x 5 / 2) x 4 = 200 mm^3; area: the two triangle ends 2 x (20 x 5 / 2) = 100, the 20 x 4 bottom 80, and the two sloping sides 2 x sqrt(10^2 + 5^2) x 4 = 89.442719, so 269.442719 mm^2. Bounds -10 to 10 in x, 0 to 5 in y, 0 to 4 in z. The image must be a solid, not turned inside out, and the two must join into one.",
+  "steps": [
+    {
+      "id": "wedge",
+      "op": "face",
+      "outer": [
+        {
+          "line": [
+            [
+              0,
+              0
+            ],
+            [
+              10,
+              0
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              10,
+              0
+            ],
+            [
+              0,
+              5
+            ]
+          ]
+        },
+        {
+          "line": [
+            [
+              0,
+              5
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "prism",
+      "op": "extrude",
+      "face": "wedge",
+      "by": [
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "id": "image",
+      "op": "mirror",
+      "body": "prism",
+      "normal": [
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "roof",
+      "op": "union",
+      "a": "prism",
+      "b": "image"
+    }
+  ],
+  "expect": {
+    "valid": true,
+    "volume": 200.0,
+    "area": 269.442719,
+    "bounds": [
+      [
+        -10.0,
+        0.0,
+        0.0
+      ],
+      [
+        10.0,
+        5.0,
+        4.0
+      ]
+    ],
+    "solids": 1,
+    "faces": 8,
+    "edges": 14,
+    "vertices": 8
+  }
+}

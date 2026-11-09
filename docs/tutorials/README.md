@@ -11,6 +11,7 @@ one or two new ideas on the way. Do them in order.
 | 4 | [Spinning top](04-spinning-top.md) | Sketching on a standing plane, revolve, rounding corners in a sketch | 15 minutes |
 | 5 | [Mounting plate](05-mounting-plate.md) | Holes for screws: screw sizes, counterbores, tapped holes, placing holes two ways | 15 minutes |
 | 6 | [Fan cover](06-fan-cover.md) | Circular and linear patterns, a grid of holes | 15 minutes |
+| 7 | [U bracket](07-u-bracket.md) | Joining boxes, mirroring half a part | 10 minutes |
 
 For now the tutorials use `sketchbillet_cli`, SketchBillet's command-line tool. When the desktop
 app arrives, each tutorial gets a version with buttons and screenshots; the

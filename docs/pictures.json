@@ -157,6 +157,15 @@
       "run --open fan.sb --save fan.sb sketch.add_point sketch=Sketch2 at=-10,-10",
       "run --open fan.sb --save fan.sb feature.add_hole sketch=Sketch2 body=Screws diameter=6 name=Air",
       "run --open fan.sb --save fan.sb feature.add_pattern steps=Air count=3 count2=3 name=Grille"
+    ],
+    "ubracket": [
+      "run --save bracket.sb feature.add_box size=25,20,4 name=Base",
+      "run --open bracket.sb --save bracket.sb feature.add_box corner=21,0,4 size=4,20,26 name=Side",
+      "run --open bracket.sb --save bracket.sb feature.add_boolean operation=union a=Base b=Side name=Half",
+      "run --open bracket.sb --save bracket.sb feature.add_sketch body=Half face=6",
+      "run --open bracket.sb --save bracket.sb sketch.add_point sketch=Sketch1 at=11,10",
+      "run --open bracket.sb --save bracket.sb feature.add_hole sketch=Sketch1 kind=countersink name=Screw",
+      "run --open bracket.sb --save bracket.sb feature.add_mirror body=Screw name=Bracket"
     ]
   },
   "pictures": [
@@ -1633,6 +1642,50 @@
         {
           "file": "fan.sb",
           "step": "Grille",
+          "color": "blue"
+        }
+      ]
+    },
+    {
+      "out": "docs/user-guide/images/mirror-bracket.png",
+      "size": "560x380",
+      "script": "ubracket",
+      "show": [
+        {
+          "file": "bracket.sb",
+          "step": "Bracket",
+          "color": "blue"
+        }
+      ]
+    },
+    {
+      "out": "docs/user-guide/images/app-mirror.png",
+      "size": "1280x800",
+      "script": "ubracket",
+      "app": {
+        "open": "bracket.sb",
+        "select": [
+          "Bracket"
+        ],
+        "trigger": [
+          "sb.viewer.fit"
+        ]
+      },
+      "crop": [
+        0,
+        0,
+        1280,
+        800
+      ]
+    },
+    {
+      "out": "docs/tutorials/images/ubracket-done.png",
+      "size": "560x380",
+      "script": "ubracket",
+      "show": [
+        {
+          "file": "bracket.sb",
+          "step": "Bracket",
           "color": "blue"
         }
       ]

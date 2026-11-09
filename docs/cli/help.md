@@ -26,6 +26,7 @@ Commands for sketchbillet_cli run:
   feature.add_extrude      Extrude
   feature.add_fillet       Fillet
   feature.add_hole         Hole
+  feature.add_mirror       Mirror
   feature.add_move         Move body
   feature.add_pattern      Pattern
   feature.add_revolve      Revolve

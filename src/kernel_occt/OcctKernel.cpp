@@ -825,6 +825,31 @@ public:
         }
     }
 
+    OpResult mirror(const ShapeHandle& shape, const Point3& point, const Vec3& normal) override {
+        const TopoDS_Shape* s = unwrap(shape);
+        if (!s) return failed("kernel.mirror.input", "Mirror needs a valid body.");
+        if (normal.x * normal.x + normal.y * normal.y + normal.z * normal.z < 1e-18) {
+            return failed(
+                "kernel.mirror.plane",
+                "The mirror's plane needs a direction square to it, not 0, 0, 0, like 1, 0, 0 for a "
+                "plane facing x.");
+        }
+        try {
+            gp_Trsf reflect;
+            reflect.SetMirror(
+                gp_Ax2(gp_Pnt(point.x, point.y, point.z), gp_Dir(normal.x, normal.y, normal.z)));
+            BRepBuilderAPI_Transform mk(*s, reflect, Standard_True);
+            if (!mk.IsDone() || !BRepCheck_Analyzer(mk.Shape()).IsValid()) {
+                return failed("kernel.mirror.failed", "The body could not be mirrored.");
+            }
+            OpResult out{wrap(mk.Shape()), {}, {}};
+            traceFaces(mk, *s, 0, Maps(mk.Shape()), out.history);
+            return out;
+        } catch (const Standard_Failure& e) {
+            return failed("kernel.mirror.failed", "The body could not be mirrored.", describe(e));
+        }
+    }
+
     OpResult boolean(BoolOp op, const ShapeHandle& a, const ShapeHandle& b) override {
         const TopoDS_Shape* sa = unwrap(a);
         const TopoDS_Shape* sb = unwrap(b);

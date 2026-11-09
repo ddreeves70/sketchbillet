@@ -19,6 +19,7 @@
 #include "sb/core/Version.h"
 #include "sb/model/Commands.h"
 #include "sb/model/Holes.h"
+#include "sb/model/Mirror.h"
 #include "sb/model/Pattern.h"
 
 // Format (schema 1), as described in docs/file-format.md:
@@ -581,6 +582,23 @@ json featureToJson(const Feature& f) {
             }
             break;
         }
+        case FeatureType::Mirror: {
+            const auto& m = static_cast<const model::MirrorFeature&>(f);
+            j["type"] = "Mirror";
+            json steps = json::array();
+            for (const auto& s : m.steps()) steps.push_back(s.toString());
+            j["inputs"] = {{"body", m.body().toString()}, {"steps", steps}};
+            const auto& p = m.plane();
+            if (p.kind == model::MirrorPlane::Kind::Face) {
+                j["params"] = {{"plane", "face"}, {"face", refToJson(p.face)}};
+            } else {
+                j["params"] = {{"plane", p.kind == model::MirrorPlane::Kind::YZ   ? "yz"
+                                         : p.kind == model::MirrorPlane::Kind::XZ ? "xz"
+                                                                                  : "xy"},
+                               {"offset", p.offset}};
+            }
+            break;
+        }
         case FeatureType::Pattern: {
             const auto& p = static_cast<const model::PatternFeature&>(f);
             const auto& l = p.layout();
@@ -803,6 +821,38 @@ std::unique_ptr<Feature> stepFromJson(const json& j, const FeatureId& id, std::s
             return bad("operation");
         }
         return step;
+    }
+    if (type == "Mirror") {
+        const auto body = inputs.contains("body") && inputs["body"].is_string()
+                              ? FeatureId::parse(inputs["body"].get<std::string>())
+                              : std::nullopt;
+        if (!body) return bad("input body");
+        std::vector<FeatureId> steps;
+        const json list = inputs.value("steps", json::array());
+        if (!list.is_array()) return bad("input steps");
+        for (const auto& s : list) {
+            const auto step = s.is_string() ? FeatureId::parse(s.get<std::string>()) : std::nullopt;
+            if (!step) return bad("input steps");
+            steps.push_back(*step);
+        }
+        model::MirrorPlane plane;
+        const std::string kind = params.value("plane", std::string());
+        if (kind == "face") {
+            const auto face = refFromJson(params.value("face", json()));
+            if (!face) return bad("face");
+            plane.kind = model::MirrorPlane::Kind::Face;
+            plane.face = *face;
+        } else if (kind == "yz" || kind == "xz" || kind == "xy") {
+            const auto offset = readNumber(params.value("offset", json()));
+            if (!offset) return bad("offset");
+            plane.kind = kind == "yz"   ? model::MirrorPlane::Kind::YZ
+                         : kind == "xz" ? model::MirrorPlane::Kind::XZ
+                                        : model::MirrorPlane::Kind::XY;
+            plane.offset = *offset;
+        } else {
+            return bad("plane");
+        }
+        return std::make_unique<model::MirrorFeature>(id, name, *body, std::move(steps), plane);
     }
     if (type == "Pattern") {
         const auto body = inputs.contains("body") && inputs["body"].is_string()

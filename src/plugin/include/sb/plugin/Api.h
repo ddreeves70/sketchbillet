@@ -119,7 +119,10 @@ class PluginContext;
 /// model::PatternLayout, model::patternMotions()), FeatureType::Pattern, the
 /// feature.add_pattern command, and model::StepTool (FeatureResult::tools and
 /// Built::tools: what a join, cut or hole step added or took away).
-inline constexpr int kPluginApiVersion = 41;
+/// Version 42 added Mirror: kernel::IKernel::mirror(), sb/model/Mirror.h
+/// (model::MirrorFeature, model::MirrorPlane), FeatureType::Mirror and the
+/// feature.add_mirror command.
+inline constexpr int kPluginApiVersion = 42;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

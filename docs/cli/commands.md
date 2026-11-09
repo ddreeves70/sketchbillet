@@ -34,6 +34,7 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`feature.add_revolve`](#featureadd_revolve) | Turns a sketch's closed shapes around a line into a solid |
 | [`feature.add_hole`](#featureadd_hole) | Drills holes for screws: simple, counterbored or countersunk |
 | [`feature.add_pattern`](#featureadd_pattern) | Repeats holes, joins and cuts, or copies a body, in a row, a grid or round a circle |
+| [`feature.add_mirror`](#featureadd_mirror) | A mirror image of holes, joins and cuts, or of a body, across a plane |
 | [`feature.add_fillet`](#featureadd_fillet) | Rounds edges of a body |
 | [`feature.add_chamfer`](#featureadd_chamfer) | Bevels edges of a body |
 | [`feature.set_edges`](#featureset_edges) | Picks a fillet's or chamfer's edges again |
@@ -1803,6 +1804,58 @@ A sketch can't be repeated:
 ```console
 $ sketchbillet_cli run --open ring.sb feature.add_pattern steps=Sketch1
 error [pattern.not_repeatable]: Sketch1 can't be repeated: a pattern of steps repeats holes, and extrudes and revolves that join or cut. For copies of a whole body, use body= instead.
+```
+
+## feature.add_mirror
+
+A mirror image, across a plane, of what steps did (a Hole's holes, or an
+Extrude's or Revolve's join or cut), or of a whole body, joined to it. Model half
+of a part that's the same on both sides, and mirror it to make the whole: the two
+halves stay the same as you change one. See [Mirror](../user-guide/mirror.md).
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `steps` | step names | this or `body` | The steps to mirror, like `Hole1`: holes, and extrudes and revolves that join or cut. One step that makes a body of its own, like `Box1`, mirrors its whole body instead |
+| `body` | step name | this or `steps` | Mirror this whole body, joined to its mirror image where they touch. With `steps`: the body to change, default the body the last step's body became |
+| `plane` | `yz`, `xz` or `xy` | no | The plane to mirror across: `yz` faces x (left and right swap), `xz` faces y (front and back), `xy` faces z (top and bottom). Default `yz` |
+| `offset` | number (mm) | no | How far the plane is from 0, along the way it faces. Default `0` |
+| `face` | face number | no | Instead of `plane`: a flat face of the body to mirror across, as [`open --faces`](open.md#a-bodys-edges-and-faces) numbers them |
+| `name` | text | no | Step name. Default `Mirror1`, `Mirror2`, ... |
+
+Half of a plate, 20 × 10 × 5 mm, from x = 0 to 20, mirrored across the YZ plane
+(x = 0) to make the whole 40 mm plate:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save half.sb feature.add_box size=20,10,5
+half: 1 step
+  Box1         ok  volume 1000.00 mm^3  mass 1.24 g (PLA)
+wrote half.sb
+$ sketchbillet_cli run --open half.sb feature.add_mirror body=Box1
+half: 2 steps
+  Box1         ok  volume 1000.00 mm^3
+  Mirror1      ok  volume 2000.00 mm^3  mass 2.48 g (PLA)
+```
+
+Across the XY plane moved up 5 mm (the plate's top), it makes a plate 10 mm
+thick instead:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open half.sb feature.add_mirror body=Box1 plane=xy offset=5
+half: 2 steps
+  Box1         ok  volume 1000.00 mm^3
+  Mirror1      ok  volume 2000.00 mm^3  mass 2.48 g (PLA)
+```
+
+Across one of its own faces: face 4 is the right side, at x = 20:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open half.sb feature.add_mirror body=Box1 face=4
+half: 2 steps
+  Box1         ok  volume 1000.00 mm^3
+  Mirror1      ok  volume 2000.00 mm^3  mass 2.48 g (PLA)
 ```
 
 ## feature.add_fillet

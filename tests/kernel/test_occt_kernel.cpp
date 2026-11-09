@@ -520,3 +520,42 @@ TEST_CASE("turning the same face twice gives the same solid", "[kernel][occt][re
     CHECK(k->massProps(a).area == k->massProps(b).area);
     CHECK(k->topology(a).edges == k->topology(b).edges);
 }
+
+// --- Mirror -------------------------------------------------------------------------
+
+TEST_CASE("mirror reflects a copy across a plane", "[kernel][occt][mirror]") {
+    auto k = sb::kernel::makeOcctKernel();
+    const auto box = k->makeBox({0, 0, 0}, 10, 20, 30);
+    // Across the plane x = -5: x 0 to 10 lands on -20 to -10.
+    const auto m = k->mirror(box.shape, {-5, 0, 0}, {2, 0, 0});  // the normal's length doesn't matter
+    REQUIRE(m.ok());
+    CHECK(k->validate(m.shape).empty());
+    CHECK(k->massProps(m.shape).volume == Approx(6000));  // a solid, not turned inside out
+    const auto b = k->bounds(m.shape);
+    CHECK(b.min.x == Approx(-20).margin(1e-6));
+    CHECK(b.max.x == Approx(-10).margin(1e-6));
+    CHECK(b.max.z == Approx(30).margin(1e-6));
+    // Each face comes from a face of the box.
+    REQUIRE(m.history.faces.size() == 6);
+    for (const auto& from : m.history.faces) {
+        REQUIRE(from.size() == 1);
+        CHECK(from[0].kind == OriginKind::Face);
+    }
+    CHECK(k->massProps(box.shape).volume == Approx(6000));  // the box is unchanged
+}
+
+TEST_CASE("mirror turns a left-hand shape into a right-hand one", "[kernel][occt][mirror]") {
+    auto k = sb::kernel::makeOcctKernel();
+    // A wedge leaning toward +x, mirrored across x = 0, leans toward -x; joined, they make a roof.
+    const Loop2 wedge{Edge2{Line2{{0, 0}, {10, 0}}}, Edge2{Line2{{10, 0}, {0, 5}}},
+                      Edge2{Line2{{0, 5}, {0, 0}}}};
+    const auto prism = k->extrude(k->makeFace({wedge, {}}, kGround).shape, {0, 0, 4});
+    const auto image = k->mirror(prism.shape, {0, 0, 0}, {1, 0, 0});
+    REQUIRE(image.ok());
+    CHECK(k->massProps(image.shape).centerOfMass.x == Approx(-10.0 / 3));  // a third of the way in
+    const auto roof = k->boolean(sb::kernel::BoolOp::Union, prism.shape, image.shape);
+    REQUIRE(roof.ok());
+    CHECK(k->massProps(roof.shape).volume == Approx(200));
+    CHECK(k->topology(roof.shape).solids == 1);
+    CHECK(k->mirror(prism.shape, {0, 0, 0}, {0, 0, 0}).issues.at(0).code == "kernel.mirror.plane");
+}

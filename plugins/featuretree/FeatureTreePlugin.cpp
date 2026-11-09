@@ -64,6 +64,8 @@ const char* kindName(const model::Feature& f) {
             return "Hole";
         case model::FeatureType::Pattern:
             return "Pattern";
+        case model::FeatureType::Mirror:
+            return "Mirror";
         case model::FeatureType::Fillet:
             return "Fillet";
         case model::FeatureType::Chamfer:

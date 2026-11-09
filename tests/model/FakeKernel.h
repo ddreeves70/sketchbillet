@@ -97,6 +97,12 @@ public:
         if (angle <= 0) return fail();
         return make(volumeOf(face) * angle);
     }
+    kernel::OpResult mirror(const kernel::ShapeHandle& shape, const kernel::Point3&,
+                            const kernel::Vec3& n) override {
+        ++calls;
+        if (n.x == 0 && n.y == 0 && n.z == 0) return fail();
+        return make(volumeOf(shape));
+    }
     kernel::OpResult chamfer(const kernel::ShapeHandle& s, const std::vector<int>& edges, double d) override {
         ++calls;
         if (edges.empty() || d <= 0) return fail();
