@@ -1,0 +1,34 @@
+{
+  "name": "invalid-shell-too-thick",
+  "description": "A cylinder 20 mm round hollowed out with 21 mm walls: they can't fit. OCCT turns the inside out and makes a valid-looking cup with 19 mm walls and a 1 mm hole instead; the kernel must check each wall's thickness and refuse it with kernel.shell.failed.",
+  "steps": [
+    {
+      "id": "rod",
+      "op": "cylinder",
+      "base": [
+        0,
+        0,
+        0
+      ],
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "radius": 20,
+      "height": 50
+    },
+    {
+      "id": "cup",
+      "op": "shell",
+      "body": "rod",
+      "faces": [
+        2
+      ],
+      "thickness": 21
+    }
+  ],
+  "expect": {
+    "error": "kernel.shell.failed"
+  }
+}

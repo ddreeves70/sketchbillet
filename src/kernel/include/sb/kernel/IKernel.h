@@ -186,6 +186,19 @@ public:
     /// @return The reflected shape, or diagnostics if the normal is 0, 0, 0. Its
     ///         history gives each face's Face in @p shape.
     virtual OpResult mirror(const ShapeHandle& shape, const Point3& point, const Vec3& normal) = 0;
+
+    /// Hollows a solid out, leaving walls of a thickness and some faces open, like
+    /// a box with its lid taken off. The outside stays the same size.
+    /// @param shape The solid.
+    /// @param faces Which faces to leave open, by number in elements() of
+    ///        @p shape. At least one.
+    /// @param thickness How thick the walls are (mm): more than 0, and thin enough
+    ///        to fit inside the solid.
+    /// @return The hollow solid. Its history: outside faces from their Face of
+    ///         input 0, and each inside face from the outside Face it's a wall of,
+    ///         with OriginKind::Inside. Diagnostics if a face number isn't in the
+    ///         shape or the walls don't fit.
+    virtual OpResult shell(const ShapeHandle& shape, const std::vector<int>& faces, double thickness) = 0;
 };
 
 }  // namespace sb::kernel

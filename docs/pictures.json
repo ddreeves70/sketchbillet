@@ -175,6 +175,19 @@
       "run --open stand.sb --save stand.sb feature.add_extrude sketch=Sketch1 distance=5 operation=join body=Base name=Back",
       "run --open stand.sb --save stand.sb feature.add_box corner=0,15,5 size=80,4,6 name=Lip",
       "run --open stand.sb --save stand.sb feature.add_boolean operation=union a=Back b=Lip name=Stand"
+    ],
+    "projectbox": [
+      "run --save box.sb feature.add_box size=80,60,30 name=Case",
+      "run --open box.sb --save box.sb feature.add_fillet body=Case edges=5,6,7,8 radius=5 name=Corners",
+      "run --open box.sb --save box.sb feature.add_shell body=Corners faces=10 name=Hollow",
+      "run --open box.sb --save box.sb feature.add_box corner=34,-1,8 size=12,5,6 name=SlotTool",
+      "run --open box.sb --save box.sb feature.add_boolean operation=cut a=Hollow b=SlotTool name=Slot",
+      "run --open box.sb --save box.sb feature.add_box corner=0,70,0 size=80,60,2 name=Lid",
+      "run --open box.sb --save box.sb feature.add_fillet body=Lid edges=5,6,7,8 radius=5 name=LidCorners",
+      "run --open box.sb --save box.sb feature.add_box corner=2.2,72.2,2 size=75.6,55.6,4 name=Lip",
+      "run --open box.sb --save box.sb feature.add_fillet body=Lip edges=5,6,7,8 radius=2.8 name=LipCorners",
+      "run --open box.sb --save box.sb feature.add_shell body=LipCorners faces=1,10 thickness=1.5 name=Ring",
+      "run --open box.sb --save box.sb feature.add_boolean operation=union a=LidCorners b=Ring name=LidDone"
     ]
   },
   "pictures": [
@@ -1740,6 +1753,96 @@
           "file": "stand.sb",
           "step": "Stand",
           "color": "blue"
+        }
+      ]
+    },
+    {
+      "out": "docs/user-guide/images/shell-tray-cup.png",
+      "size": "560x380",
+      "commands": [
+        "run --save s.sb feature.add_box size=40,30,20",
+        "run --open s.sb --save s.sb feature.add_shell body=Box1 faces=6",
+        "run --open s.sb --save s.sb feature.add_cylinder radius=12 height=25 base=65,15,0",
+        "run --open s.sb --save s.sb feature.add_shell body=Cylinder1 faces=3"
+      ],
+      "show": [
+        {
+          "file": "s.sb",
+          "step": "Shell1",
+          "color": "blue"
+        },
+        {
+          "file": "s.sb",
+          "step": "Shell2",
+          "color": "orange"
+        }
+      ]
+    },
+    {
+      "out": "docs/user-guide/images/app-shell.png",
+      "size": "1280x800",
+      "script": "projectbox",
+      "app": {
+        "open": "box.sb",
+        "select": [
+          "Hollow"
+        ],
+        "trigger": [
+          "sb.viewer.fit"
+        ]
+      },
+      "crop": [
+        0,
+        0,
+        1280,
+        800
+      ]
+    },
+    {
+      "out": "docs/tutorials/images/box-hollow.png",
+      "size": "560x400",
+      "script": "projectbox",
+      "show": [
+        {
+          "file": "box.sb",
+          "step": "Hollow",
+          "color": "blue"
+        }
+      ]
+    },
+    {
+      "out": "docs/tutorials/images/box-slot.png",
+      "size": "560x400",
+      "script": "projectbox",
+      "show": [
+        {
+          "file": "box.sb",
+          "step": "Slot",
+          "color": "blue"
+        },
+        {
+          "file": "box.sb",
+          "step": "SlotTool",
+          "color": "orange",
+          "ghost": true
+        }
+      ],
+      "view": "front"
+    },
+    {
+      "out": "docs/tutorials/images/box-done.png",
+      "size": "560x420",
+      "script": "projectbox",
+      "show": [
+        {
+          "file": "box.sb",
+          "step": "Slot",
+          "color": "blue"
+        },
+        {
+          "file": "box.sb",
+          "step": "LidDone",
+          "color": "green"
         }
       ]
     }

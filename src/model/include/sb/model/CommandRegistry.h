@@ -44,6 +44,11 @@ enum class ArgType {
     /// argument. Picked in the app; on the command line, its number as
     /// `sketchbillet_cli open <design.sb> --faces <body>` lists it, like 6.
     Face,
+    /// A std::vector<GeometryRef>: faces of the body named by the command's
+    /// "body" argument, at least one. Picked in the app; on the command line,
+    /// numbers as `sketchbillet_cli open <design.sb> --faces <body>` lists them, like 1,6.
+    /// Read it with argGeometry().
+    FaceList,
 };
 
 /// One argument value. Which alternative is allowed depends on the ArgSpec's ArgType.
@@ -191,7 +196,7 @@ std::vector<FeatureId> argFeatures(const Args& args, const std::string& name);
 /// @return The folder id, or a nil id if the argument is absent.
 FolderId argFolder(const Args& args, const std::string& name);
 
-/// Reads an argument of ArgType::GeometryList.
+/// Reads an argument of ArgType::GeometryList or ArgType::FaceList.
 /// @param args The arguments.
 /// @param name The argument's name, like "edges".
 /// @return Its references, or an empty list if it's missing or isn't one.

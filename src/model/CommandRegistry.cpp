@@ -16,6 +16,7 @@
 #include "sb/model/Holes.h"
 #include "sb/model/Mirror.h"
 #include "sb/model/Pattern.h"
+#include "sb/model/Shell.h"
 
 namespace sb::model {
 
@@ -93,6 +94,8 @@ const char* typeName(ArgType t) {
             return "edges or faces of a body, at least one";
         case ArgType::Face:
             return "a face of a body";
+        case ArgType::FaceList:
+            return "faces of a body, at least one";
         case ArgType::FeatureRef:
             return "a step in the design";
         case ArgType::FeatureList:
@@ -123,6 +126,7 @@ bool matches(ArgType t, const ArgValue& v) {
         case ArgType::Vec2List:
             return std::holds_alternative<std::vector<sketch::Point2>>(v);
         case ArgType::GeometryList:
+        case ArgType::FaceList:
             return std::holds_alternative<std::vector<GeometryRef>>(v);
         case ArgType::Face:
             return std::holds_alternative<GeometryRef>(v);
@@ -882,6 +886,26 @@ CommandRegistry makeBuiltin() {
             l.angle = argNumber(a, "angle", 360) * std::numbers::pi / 180.0;
             return std::make_unique<AddFeatureCommand>(std::make_unique<PatternFeature>(
                 argText(a, "name", doc.uniqueName("Pattern")), body, std::move(steps), l));
+        });
+
+    r.add(
+        {"feature.add_shell",
+         "Shell",
+         "Hollows a body out to walls of a thickness, leaving the picked faces open, like a box with no lid. "
+         "The outside stays the same size.",
+         {{"body", ArgType::FeatureRef, "The step whose body to hollow, like Box1.", true, {}},
+          {"faces",
+           ArgType::FaceList,
+           "The faces to leave open, like 6 (a box's top), or 1,6 for both ends, as `sketchbillet_cli open "
+           "<design.sb> --faces <body>` numbers them.",
+           true,
+           {}},
+          {"thickness", ArgType::Number, "How thick the walls are, in mm. Default 2.", false, {}},
+          {"name", ArgType::Text, "Step name. Default Shell1, Shell2, ...", false, {}}}},
+        [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+            return std::make_unique<AddFeatureCommand>(std::make_unique<ShellFeature>(
+                argText(a, "name", doc.uniqueName("Shell")), argFeature(a, "body"), argGeometry(a, "faces"),
+                argNumber(a, "thickness", 2)));
         });
 
     r.add(
@@ -2078,11 +2102,12 @@ CreateResult CommandRegistry::create(std::string_view name, const Args& args, co
     }
     for (const auto& spec : info.args) {
         const auto given = args.find(spec.name);
-        if (spec.type == ArgType::GeometryList && given != args.end() &&
+        if ((spec.type == ArgType::GeometryList || spec.type == ArgType::FaceList) && given != args.end() &&
             argGeometry(args, spec.name).empty()) {
-            result.issues.push_back(error(
-                "command.arg_geometry",
-                info.label + " needs at least one edge in " + spec.name + ". Pick the edges to change."));
+            const char* what = spec.type == ArgType::FaceList ? "face" : "edge";
+            result.issues.push_back(error("command.arg_geometry", info.label + " needs at least one " + what +
+                                                                      " in " + spec.name + ". Pick the " +
+                                                                      what + "s to change."));
         }
         if (spec.required && !args.count(spec.name)) {
             result.issues.push_back(

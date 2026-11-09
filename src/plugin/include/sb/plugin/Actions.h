@@ -56,6 +56,12 @@ struct ActionSpec {
     std::string fromEdges{};
     /// With `fromEdges`: the argument the edges' body goes in, like "body".
     std::string fromEdgesBody{};
+    /// Like `fromEdges`, for faces: an argument filled with the picked faces (an
+    /// ArgType::GeometryList argument), all on one body. Clicking the action with
+    /// no faces picked turns on picking faces and says to pick them.
+    std::string fromFaces{};
+    /// With `fromFaces`: the argument the faces' body goes in, like "body".
+    std::string fromFacesBody{};
     std::string shortcut{};  ///< Keyboard shortcut, e.g. "Ctrl+B" or "Delete". May be empty.
     bool toolbar = false;    ///< True to also show it as a toolbar button.
     /// Shorter words for the toolbar button, e.g. "Sketch" for "New sketch on XY

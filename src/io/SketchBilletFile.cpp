@@ -22,6 +22,7 @@
 #include "sb/model/Holes.h"
 #include "sb/model/Mirror.h"
 #include "sb/model/Pattern.h"
+#include "sb/model/Shell.h"
 
 // Format (schema 1), as described in docs/file-format.md:
 //
@@ -610,6 +611,15 @@ json featureToJson(const Feature& f) {
             }
             break;
         }
+        case FeatureType::Shell: {
+            const auto& sh = static_cast<const model::ShellFeature&>(f);
+            j["type"] = "Shell";
+            j["inputs"] = {{"body", sh.body().toString()}};
+            json faces = json::array();
+            for (const auto& r : sh.faces()) faces.push_back(refToJson(r));
+            j["params"] = {{"thickness", sh.thickness()}, {"faces", faces}};
+            break;
+        }
         case FeatureType::Mirror: {
             const auto& m = static_cast<const model::MirrorFeature&>(f);
             j["type"] = "Mirror";
@@ -900,6 +910,23 @@ std::unique_ptr<Feature> stepFromJson(const json& j, const FeatureId& id, std::s
             return bad("operation");
         }
         return step;
+    }
+    if (type == "Shell") {
+        const auto body = inputs.contains("body") && inputs["body"].is_string()
+                              ? FeatureId::parse(inputs["body"].get<std::string>())
+                              : std::nullopt;
+        if (!body) return bad("input body");
+        const auto thickness = readNumber(params.value("thickness", json()));
+        if (!thickness) return bad("thickness");
+        const json list = params.value("faces", json());
+        if (!list.is_array()) return bad("faces");
+        std::vector<model::GeometryRef> faces;
+        for (const auto& r : list) {
+            const auto ref = refFromJson(r);
+            if (!ref) return bad("faces");
+            faces.push_back(*ref);
+        }
+        return std::make_unique<model::ShellFeature>(id, name, *body, std::move(faces), *thickness);
     }
     if (type == "Mirror") {
         const auto body = inputs.contains("body") && inputs["body"].is_string()

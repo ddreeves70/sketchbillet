@@ -15,11 +15,13 @@
 #include <BRepBuilderAPI_NurbsConvert.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepCheck_Analyzer.hxx>
+#include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepFilletAPI_MakeChamfer.hxx>
 #include <BRepFilletAPI_MakeFillet.hxx>
 #include <BRepGProp.hxx>
 #include <BRepGProp_Face.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
+#include <BRepOffsetAPI_MakeThickSolid.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
@@ -98,6 +100,13 @@ const TopoDS_Shape* unwrap(const ShapeHandle& h) {
 
 Diagnostic error(std::string code, std::string message, std::string detail = {}) {
     return Diagnostic{std::move(code), Severity::Error, std::move(message), std::move(detail)};
+}
+
+// A shape's volume (mm^3).
+double volumeOf(const TopoDS_Shape& shape) {
+    GProp_GProps props;
+    BRepGProp::VolumeProperties(shape, props);
+    return props.Mass();
 }
 
 OpResult failed(std::string code, std::string message, std::string detail = {}) {
@@ -847,6 +856,83 @@ public:
             return out;
         } catch (const Standard_Failure& e) {
             return failed("kernel.mirror.failed", "The body could not be mirrored.", describe(e));
+        }
+    }
+
+    OpResult shell(const ShapeHandle& shape, const std::vector<int>& faces, double thickness) override {
+        const TopoDS_Shape* s = unwrap(shape);
+        if (!s) return failed("kernel.shell.input", "Shell needs a valid body.");
+        if (faces.empty()) {
+            return failed("kernel.shell.faces",
+                          "Shell needs at least one face to leave open, like the top of a box. Pick a face.");
+        }
+        if (!(thickness > 0)) {
+            return failed("kernel.shell.thickness", "A shell needs walls thicker than 0 mm, like 2.");
+        }
+        try {
+            const Maps in(*s);
+            TopTools_ListOfShape open;
+            for (const int f : faces) {
+                if (f < 0 || f >= in.faces.Extent()) {
+                    return failed("kernel.shell.face",
+                                  "Shell uses a face that isn't on the body. Pick the faces again.");
+                }
+                open.Append(in.faces(f + 1));
+            }
+            BRepOffsetAPI_MakeThickSolid mk;
+            mk.MakeThickSolidByJoin(*s, open, -thickness, 1e-6);
+            mk.Build();
+            if (!mk.IsDone() || mk.Shape().IsNull() || !BRepCheck_Analyzer(mk.Shape()).IsValid()) {
+                return failed("kernel.shell.failed",
+                              "The body couldn't be hollowed out: walls that thick may not fit inside it. "
+                              "Try thinner ones.");
+            }
+            const auto tooThick = [] {
+                return failed("kernel.shell.failed",
+                              "The body couldn't be hollowed out: walls that thick may not fit inside it. "
+                              "Try thinner ones.");
+            };
+            OpResult out{wrap(mk.Shape()), {}, {}};
+            const Maps result(mk.Shape());
+            traceFaces(mk, *s, 0, result, out.history);
+            // Inside walls are made from the faces they're the inside of: tell them apart.
+            std::vector<int> insides;  // result face numbers, from 1
+            for (int i = 1; i <= in.faces.Extent(); ++i) {
+                const TopoDS_Shape& f = in.faces(i);
+                for (TopTools_ListIteratorOfListOfShape it(mk.Generated(f)); it.More(); it.Next()) {
+                    const int at = result.faces.FindIndex(it.Value());
+                    if (at > 0 && !result.faces(at).IsSame(f)) {
+                        out.history.faces[static_cast<std::size_t>(at - 1)] = {
+                            {0, OriginKind::Inside, i - 1}};
+                        insides.push_back(at);
+                        // Each wall must be the thickness from the face it's the inside of.
+                        BRepExtrema_DistShapeShape gap(f, result.faces(at));
+                        if (!gap.IsDone() || std::abs(gap.Value() - thickness) > 1e-4) return tooThick();
+                    }
+                }
+            }
+            // Walls too thick to fit cross each other, and OCCT (7.9, at least) can still give a valid
+            // solid. In a real shell, every point of an inside wall is at least the thickness from every
+            // outside face that isn't open, and the body gets smaller.
+            if (insides.empty() || volumeOf(mk.Shape()) >= volumeOf(*s) - 1e-9) return tooThick();
+            for (int i = 1; i <= in.faces.Extent(); ++i) {
+                if (open.Contains(in.faces(i))) continue;
+                Bnd_Box outside;
+                BRepBndLib::Add(in.faces(i), outside);
+                for (const int at : insides) {
+                    Bnd_Box wall;
+                    BRepBndLib::Add(result.faces(at), wall);
+                    if (outside.Distance(wall) > thickness) continue;  // too far apart to matter
+                    BRepExtrema_DistShapeShape gap(in.faces(i), result.faces(at));
+                    if (!gap.IsDone() || gap.Value() < thickness - 1e-4) return tooThick();
+                }
+            }
+            return out;
+        } catch (const Standard_Failure& e) {
+            return failed("kernel.shell.failed",
+                          "The body couldn't be hollowed out: walls that thick may not fit inside it. Try "
+                          "thinner ones.",
+                          describe(e));
         }
     }
 

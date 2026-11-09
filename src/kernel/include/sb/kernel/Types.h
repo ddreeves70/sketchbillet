@@ -227,6 +227,7 @@ enum class OriginKind {
     Curve,   ///< A curve of the outline given to IKernel::makeFace(): outline first, then each hole.
     Start,   ///< An extrude's or revolve's face where it starts (the face it swept).
     End,     ///< An extrude's or revolve's face where it ends.
+    Inside,  ///< A shell's inside wall: the inside of Face index of the input.
 };
 
 /// One place a piece of a result came from.

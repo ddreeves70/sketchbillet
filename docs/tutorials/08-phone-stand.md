@@ -188,3 +188,5 @@ supports in your slicer, or print it on its side.
   on it is the face, folded along the edge.
 - A sketch on a plane makes a new body; use **operation=join** to add it to one.
 - Change the plane, and everything on it follows.
+
+Next: [Tutorial 9](09-project-box.md) hollows a box out with a shell, and makes a lid for it.

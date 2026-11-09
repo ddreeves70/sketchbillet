@@ -535,8 +535,9 @@ void Shell::refreshActions() {
         if (!spec.fromSelectionList.empty()) {
             ok = ok && sel.doc() == activeDesign() && !sel.features().empty();
         }
-        if (!spec.fromEdges.empty() && pickedEdges()) {
-            // Picked edges must all be on one body; with none picked, it starts picking.
+        if ((!spec.fromEdges.empty() && pickedEdges()) ||
+            (!spec.fromFaces.empty() && pickedOnly(kernel::TopoKind::Face))) {
+            // Picked edges or faces must all be on one body; with none picked, it starts picking.
             const auto& first = sel.elements().front().body;
             ok = ok && sel.doc() == activeDesign() &&
                  std::all_of(sel.elements().begin(), sel.elements().end(),
@@ -724,14 +725,30 @@ void Shell::runAction(const plugin::ActionSpec& spec) {
         args[spec.fromEdges] = std::move(edges);
         if (!spec.fromEdgesBody.empty()) args[spec.fromEdgesBody] = sel.elements().front().body;
     }
+    if (!spec.fromFaces.empty()) {
+        if (!pickedOnly(kernel::TopoKind::Face) || sel.doc() != doc) {
+            // No faces picked yet: pick faces, then click this again.
+            sel.setPickMode(plugin::PickMode::Faces);
+            statusBar()->showMessage(
+                tr("Click the faces for %1 in the 3D view (Ctrl-click to pick more), then click %1 again.")
+                    .arg(qs(spec.text)),
+                15000);
+            refreshActions();
+            return;
+        }
+        std::vector<model::GeometryRef> faces;
+        for (const auto& e : sel.elements()) faces.push_back(e.ref);
+        args[spec.fromFaces] = std::move(faces);
+        if (!spec.fromFacesBody.empty()) args[spec.fromFacesBody] = sel.elements().front().body;
+    }
     const auto before = docs.find(doc)->featureCount();
     auto problems = docs.run(doc, spec.command, args);
     if (!problems.empty()) {
         showProblems(problems);
         return;
     }
-    if (!spec.fromEdges.empty()) {
-        sel.setPickMode(plugin::PickMode::Bodies);  // done picking edges
+    if (!spec.fromEdges.empty() || !spec.fromFaces.empty()) {
+        sel.setPickMode(plugin::PickMode::Bodies);  // done picking edges or faces
         statusBar()->clearMessage();
     }
     // Select the step the action made, so Properties shows its numbers.
@@ -742,10 +759,14 @@ void Shell::runAction(const plugin::ActionSpec& spec) {
 }
 
 bool Shell::pickedEdges() const {
-    const auto& picked = host_.selection().elements();
-    return !picked.empty() && std::all_of(picked.begin(), picked.end(), [](const plugin::PickedElement& e) {
-        return e.ref.kind == kernel::TopoKind::Edge;
-    });
+    return pickedOnly(kernel::TopoKind::Edge);
+}
+
+bool Shell::pickedOnly(kernel::TopoKind kind) const {
+    const auto& elements = host_.selection().elements();
+    return !elements.empty() &&
+           std::all_of(elements.begin(), elements.end(),
+                       [kind](const plugin::PickedElement& e) { return e.ref.kind == kind; });
 }
 
 QAction* Shell::action(const std::string& id) const {

@@ -559,3 +559,78 @@ TEST_CASE("mirror turns a left-hand shape into a right-hand one", "[kernel][occt
     CHECK(k->topology(roof.shape).solids == 1);
     CHECK(k->mirror(prism.shape, {0, 0, 0}, {0, 0, 0}).issues.at(0).code == "kernel.mirror.plane");
 }
+
+// --- Shell --------------------------------------------------------------------------
+
+namespace {
+// The number of a shape's face that faces `d`, the one farthest along it.
+int faceFacing(sb::kernel::IKernel& k, const sb::kernel::ShapeHandle& s, sb::kernel::Vec3 d) {
+    const auto parts = k.elements(s);
+    int best = -1;
+    double far = -1e300;
+    for (std::size_t i = 0; i < parts.faces.size(); ++i) {
+        const auto& f = parts.faces[i];
+        const double along = f.center.x * d.x + f.center.y * d.y + f.center.z * d.z;
+        if (f.direction.x * d.x + f.direction.y * d.y + f.direction.z * d.z > 0.999 && along > far) {
+            best = static_cast<int>(i);
+            far = along;
+        }
+    }
+    return best;
+}
+}  // namespace
+
+TEST_CASE("shell hollows a box out, leaving its top open", "[kernel][occt][shell]") {
+    auto k = sb::kernel::makeOcctKernel();
+    const auto box = k->makeBox({0, 0, 0}, 40, 20, 10);
+    const int top = faceFacing(*k, box.shape, {0, 0, 1});
+    const auto tray = k->shell(box.shape, {top}, 2);
+    REQUIRE(tray.ok());
+    CHECK(k->validate(tray.shape).empty());
+    // The inside is 36 x 16 x 8: the walls and floor are 2 mm.
+    CHECK(k->massProps(tray.shape).volume == Approx(8000 - 36 * 16 * 8));
+    const auto b = k->bounds(tray.shape);
+    CHECK(b.max.x == Approx(40).margin(1e-6));  // the outside stays the same
+    CHECK(b.max.z == Approx(10).margin(1e-6));
+    // Faces: five outside, five inside walls, and the rim round the top.
+    const auto parts = k->elements(tray.shape);
+    REQUIRE(tray.history.faces.size() == parts.faces.size());
+    int outside = 0, inside = 0, other = 0;
+    for (std::size_t i = 0; i < parts.faces.size(); ++i) {
+        const auto& from = tray.history.faces[i];
+        INFO("face " << i << " at " << parts.faces[i].center.x << "," << parts.faces[i].center.y << ","
+                     << parts.faces[i].center.z << " origins " << from.size()
+                     << (from.empty() ? -1 : static_cast<int>(from[0].kind)));
+        if (from.size() == 1 && from[0].kind == OriginKind::Face)
+            ++outside;
+        else if (from.size() == 1 && from[0].kind == OriginKind::Inside)
+            ++inside;
+        else
+            ++other;
+    }
+    CHECK(parts.faces.size() == 11);
+    CHECK(outside == 6);
+    CHECK(inside == 5);
+    CHECK(other == 0);
+}
+
+TEST_CASE("shell makes a cup from a cylinder, and says when it can't", "[kernel][occt][shell]") {
+    auto k = sb::kernel::makeOcctKernel();
+    const auto rod = k->makeCylinder({0, 0, 0}, {0, 0, 1}, 20, 50);
+    const auto cup = k->shell(rod.shape, {faceFacing(*k, rod.shape, {0, 0, 1})}, 3);
+    REQUIRE(cup.ok());
+    CHECK(k->validate(cup.shape).empty());
+    CHECK(k->massProps(cup.shape).volume == Approx(kPi * (400 * 50 - 17 * 17 * 47)));
+    // Open at both ends: a tube.
+    const auto tube =
+        k->shell(rod.shape, {faceFacing(*k, rod.shape, {0, 0, 1}), faceFacing(*k, rod.shape, {0, 0, -1})}, 3);
+    REQUIRE(tube.ok());
+    CHECK(k->massProps(tube.shape).volume == Approx(kPi * (400 - 289) * 50));
+
+    CHECK(k->shell(rod.shape, {}, 3).issues.at(0).code == "kernel.shell.faces");
+    CHECK(k->shell(rod.shape, {0}, 0).issues.at(0).code == "kernel.shell.thickness");
+    CHECK(k->shell(rod.shape, {99}, 3).issues.at(0).code == "kernel.shell.face");
+    const auto thick = k->shell(rod.shape, {faceFacing(*k, rod.shape, {0, 0, 1})}, 25);  // wider than it is
+    REQUIRE_FALSE(thick.ok());
+    CHECK(thick.issues.at(0).code == "kernel.shell.failed");
+}

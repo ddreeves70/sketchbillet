@@ -47,6 +47,7 @@
 #include "sb/model/Holes.h"
 #include "sb/model/Mirror.h"
 #include "sb/model/Pattern.h"
+#include "sb/model/Shell.h"
 #include "sb/plugin/PluginHost.h"
 #include "sb/plugins/Axes.h"
 #include "sb/plugins/FeatureTree.h"
@@ -258,7 +259,7 @@ TEST_CASE("every toolbar button has a picture", "[app][icons]") {
         CHECK_FALSE(a->icon().pixmap(24, 24).isNull());
     }
     CHECK(buttons ==
-          5 + 14 + 3 + 11 + 15);  // SketchBillet's own, sb.modeling, sb.sketcher, sketch tools, constraints
+          5 + 15 + 3 + 11 + 15);  // SketchBillet's own, sb.modeling, sb.sketcher, sketch tools, constraints
     // The menu item shows the same picture as its button.
     CHECK_FALSE(app.shell->action("sb.modeling.box")->icon().isNull());
 }
@@ -268,7 +269,7 @@ TEST_CASE("buttons that don't fit go on a second row, which goes away when they 
     auto* row1 = app.shell->findChild<QToolBar*>(QStringLiteral("sb.shell.toolbar"));
     auto* row2 = app.shell->findChild<QToolBar*>(QStringLiteral("sb.shell.toolbar2"));
     REQUIRE(row2);
-    app.shell->resize(2400, 800);
+    app.shell->resize(4000, 800);  // wide enough for every button, in any system font
     settle();
     CHECK(row2->isHidden());
     CHECK(row1->actions().contains(app.shell->button("sb.sketcher.edit")));
@@ -287,7 +288,7 @@ TEST_CASE("buttons that don't fit go on a second row, which goes away when they 
     }
     CHECK(order.indexOf(QStringLiteral("sb.modeling.box.button")) <
           order.indexOf(QStringLiteral("sb.sketcher.edit.button")));
-    app.shell->resize(2400, 800);
+    app.shell->resize(4000, 800);
     settle();
     CHECK(row2->isHidden());
 }
@@ -3271,6 +3272,55 @@ TEST_CASE("Fillet: click it, pick edges, click it again; Chamfer the same", "[ap
     CHECK(app.doc().featureAt(3).type() == model::FeatureType::Chamfer);
     REQUIRE(app.field<QDoubleSpinBox>("distance"));
     CHECK(docs.lastRebuild(doc)->result(app.doc().featureAt(3).id())->status == model::FeatureStatus::Ok);
+}
+
+TEST_CASE("Shell: click it, pick faces, click it again; Properties changes the thickness", "[app][shell]") {
+    App app;
+    const auto doc = app.shell->activeDesign();
+    auto& docs = app.host.documents();
+    REQUIRE(docs.run(doc, "feature.add_box", {{"size", kernel::Vec3{40, 30, 20}}}).empty());
+    settle();
+    const auto box = app.doc().featureAt(0).id();
+    auto& sel = app.host.selection();
+
+    // Nothing picked: the first click starts picking faces, and says what to do.
+    app.click("sb.modeling.shell");
+    CHECK(sel.pickMode() == plugin::PickMode::Faces);
+    CHECK(app.shell->statusBar()->currentMessage().contains(QStringLiteral("Click the faces for Shell")));
+    CHECK(app.doc().featureCount() == 1);
+
+    // Pick the top (as clicking it in the viewer does), then Shell.
+    const auto* r = docs.lastRebuild(doc)->result(box);
+    REQUIRE(r->names);
+    int top = -1;
+    for (std::size_t i = 0; i < r->names->elements.faces.size(); ++i)
+        if (r->names->elements.faces[i].direction.z > 0.999) top = static_cast<int>(i);
+    REQUIRE(top >= 0);
+    sel.setElements(doc,
+                    {plugin::PickedElement{box, model::referTo(*r->names, kernel::TopoKind::Face, top)}});
+    settle();
+    app.click("sb.modeling.shell");
+    REQUIRE(app.doc().featureCount() == 2);
+    const auto& shell = static_cast<const model::ShellFeature&>(app.doc().featureAt(1));
+    CHECK(shell.name() == "Shell1");
+    CHECK(shell.body() == box);
+    CHECK(shell.faces().size() == 1);
+    CHECK(shell.thickness() == 2.0);
+    CHECK(sel.features() == std::vector{shell.id()});
+    CHECK(sel.pickMode() == plugin::PickMode::Bodies);
+    CHECK(docs.lastRebuild(doc)->result(shell.id())->status == model::FeatureStatus::Ok);
+
+    // Properties: its body, how many faces are open, and the thickness to change.
+    CHECK(app.field<QLabel>("body")->text() == QStringLiteral("Box1"));
+    CHECK(app.field<QLabel>("faces")->text() == QStringLiteral("1"));
+    auto* thickness = app.field<QDoubleSpinBox>("thickness");
+    REQUIRE(thickness);
+    CHECK(thickness->value() == 2.0);
+    thickness->setValue(4.0);
+    emit thickness->editingFinished();
+    settle();
+    CHECK(static_cast<const model::ShellFeature&>(app.doc().featureAt(1)).thickness() == 4.0);
+    CHECK(app.shell->button("sb.modeling.shell") != nullptr);
 }
 
 TEST_CASE("Change edges: pick a fillet's edges again on its body, then Done or Cancel", "[app][fillet]") {
