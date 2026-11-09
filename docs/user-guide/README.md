@@ -31,7 +31,7 @@ works in either.
 | Move and turn bodies; copy, paste and duplicate steps; turn steps off; folders | |
 | The desktop app: 3D viewer with 1, 2 or 4 panes, feature tree, Properties, layouts | |
 | Materials: mass, weight, material cost and color | |
-| Parameters: named values like `wall = 3 mm`, with formulas and units, used by sketch dimensions and steps' numbers, with a Parameters panel in the app | Formulas typed straight into Properties and the Sketch panel |
+| Parameters: named values like `wall = 3 mm`, with formulas and units, used by sketch dimensions and steps' numbers, with a Parameters panel in the app; formulas typed straight into Properties and the Sketch panel | Formulas for a pattern's count, typed in the app |
 | Save and open `.sb` designs | |
 | Export STL (3D printing) and STEP (other CAD programs), from the app's File menu or `sketchbillet_cli` | |
 | Add plugins | Import STEP, STL and 3MF |

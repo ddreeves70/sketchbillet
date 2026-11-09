@@ -52,6 +52,7 @@ public:
 private:
     void rebuild();
     void setValue(const std::string& name, double value);
+    void setFormula(const std::string& name, const std::string& formula);
     void showSpline(const sketch::Sketch& sketch);
     // Runs a spline command on the edited sketch; shows its problems. True if it worked.
     bool runSpline(const std::string& command, model::Args args);

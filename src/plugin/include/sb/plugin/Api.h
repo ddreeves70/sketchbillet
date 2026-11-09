@@ -130,7 +130,9 @@ class PluginContext;
 /// sb/model/Shell.h (model::ShellFeature), FeatureType::Shell, the
 /// feature.add_shell command, model::ArgType::FaceList, and
 /// plugin::ActionSpec::fromFaces and fromFacesBody.
-inline constexpr int kPluginApiVersion = 44;
+/// Version 45 added ui::FormulaBox (sb/ui/FormulaBox.h): a number box for panels
+/// that also takes a formula.
+inline constexpr int kPluginApiVersion = 45;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

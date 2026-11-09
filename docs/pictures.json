@@ -1845,6 +1845,32 @@
           "color": "green"
         }
       ]
+    },
+    {
+      "out": "docs/user-guide/images/app-properties-formula.png",
+      "size": "1280x800",
+      "commands": [
+        "run --save f.sb parameter.set name=wall value=\"3 mm\"",
+        "run --open f.sb --save f.sb feature.add_box size=60,40,20 name=Tray",
+        "run --open f.sb --save f.sb feature.set_value feature=Tray setting=size_z formula=\"wall * 5\"",
+        "run --open f.sb --save f.sb feature.add_shell body=Tray faces=6 name=Hollow",
+        "run --open f.sb --save f.sb feature.set_value feature=Hollow setting=thickness formula=wall"
+      ],
+      "app": {
+        "open": "f.sb",
+        "select": [
+          "Hollow"
+        ],
+        "trigger": [
+          "sb.viewer.fit"
+        ]
+      },
+      "crop": [
+        900,
+        198,
+        380,
+        330
+      ]
     }
   ]
 }

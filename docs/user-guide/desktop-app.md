@@ -209,6 +209,11 @@ like `wall = 3 mm`, that sketch dimensions and steps can use in formulas. Type
 in it to add, change, rename or delete them. See
 [Parameters](parameters.md#in-the-desktop-app).
 
+To use one, type a formula like `wall * 2` into a number's box in Properties or
+the Sketch panel, instead of a number. A box whose number follows a formula has
+a small blue ***fx*** in front. See
+[Typing formulas in the app](parameters.md#typing-formulas-in-the-app).
+
 ## Properties
 
 Properties shows the picked step's name and numbers. Lengths are in the design's
