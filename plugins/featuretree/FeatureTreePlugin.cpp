@@ -68,6 +68,8 @@ const char* kindName(const model::Feature& f) {
             return "Mirror";
         case model::FeatureType::Plane:
             return "Plane";
+        case model::FeatureType::Shell:
+            return "Shell";
         case model::FeatureType::Fillet:
             return "Fillet";
         case model::FeatureType::Chamfer:

@@ -157,6 +157,7 @@ std::optional<model::ArgValue> parseArg(const model::ArgSpec& spec, const std::s
         }
         case ArgType::GeometryList:
         case ArgType::Face:
+        case ArgType::FaceList:
             return text;  // edge or face numbers: read once the design is rebuilt (see geometryArgs())
         case ArgType::Vec2List: {
             // Points split by "/", so the shell needs no quotes: 0,0/0,30/40,30.
@@ -246,6 +247,8 @@ const char* typeName(model::ArgType t) {
             return "edge numbers";
         case model::ArgType::Face:
             return "face number";
+        case model::ArgType::FaceList:
+            return "face numbers";
         case model::ArgType::FeatureRef:
             return "step name";
         case model::ArgType::FeatureList:
@@ -366,7 +369,8 @@ int listPlugins(int argc, char** argv) {
 bool geometryArgs(const model::CommandInfo& info, model::Args& values, const model::Document& doc,
                   kernel::IKernel& kernel, sketch::ISketchSolver& solver) {
     for (const auto& spec : info.args) {
-        const bool faces = spec.type == model::ArgType::Face;
+        const bool oneFace = spec.type == model::ArgType::Face;
+        const bool faces = oneFace || spec.type == model::ArgType::FaceList;
         if ((spec.type != model::ArgType::GeometryList && !faces) || !values.count(spec.name)) continue;
         const auto kind = faces ? kernel::TopoKind::Face : kernel::TopoKind::Edge;
         const std::string text = std::get<std::string>(values[spec.name]);
@@ -402,12 +406,18 @@ bool geometryArgs(const model::CommandInfo& info, model::Args& values, const mod
         std::vector<model::GeometryRef> refs;
         std::size_t from = 0;
         for (;;) {
-            const auto comma = faces ? std::string::npos : text.find(',', from);
+            const auto comma = oneFace ? std::string::npos : text.find(',', from);
             const std::string item =
                 text.substr(from, comma == std::string::npos ? std::string::npos : comma - from);
             const auto n = toNumber(item);
             if (!n || *n != std::floor(*n) || *n < 1 || *n > static_cast<double>(count)) {
-                if (faces) {
+                if (faces && !oneFace) {
+                    std::fprintf(
+                        stderr,
+                        "error: %s must be face numbers of %s from 1 to %zu, split by commas, like 1,6 "
+                        "(%s isn't one). To see them: sketchbillet_cli open <design.sb> --faces %s\n",
+                        spec.name.c_str(), step->name().c_str(), count, item.c_str(), step->name().c_str());
+                } else if (faces) {
                     std::fprintf(stderr,
                                  "error: %s must be a face number of %s from 1 to %zu (%s isn't one). To see "
                                  "them: sketchbillet_cli open <design.sb> --faces %s\n",
@@ -426,7 +436,7 @@ bool geometryArgs(const model::CommandInfo& info, model::Args& values, const mod
             if (comma == std::string::npos) break;
             from = comma + 1;
         }
-        if (faces) {
+        if (oneFace) {
             values[spec.name] = refs.front();
         } else {
             values[spec.name] = std::move(refs);

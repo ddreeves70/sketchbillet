@@ -120,6 +120,9 @@ Outcome build(IKernel& k, const json& c) {
             r = k.makeFace(profile, plane);
         } else if (op == "extrude") {
             r = k.extrude(shapes.at(step.at("face").get<std::string>()), vec3(step.at("by")));
+        } else if (op == "shell") {
+            r = k.shell(shapes.at(step.at("body").get<std::string>()),
+                        step.at("faces").get<std::vector<int>>(), step.at("thickness").get<double>());
         } else if (op == "mirror") {
             r = k.mirror(shapes.at(step.at("body").get<std::string>()),
                          vec3(step.value("about", json::array({0, 0, 0}))), vec3(step.at("normal")));

@@ -24,6 +24,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command feature.add_pattern
            command feature.add_plane
            command feature.add_revolve
+           command feature.add_shell
            command feature.add_sketch
            command feature.delete
            command feature.duplicate
@@ -72,6 +73,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            action  Create > Linear pattern  (feature.add_pattern)
            action  Create > Circular pattern  (feature.add_pattern)
            action  Create > Mirror  (feature.add_mirror)
+           action  Modify > Shell  (feature.add_shell)
            action  Modify > Fillet  (feature.add_fillet)
            action  Modify > Chamfer  (feature.add_chamfer)
            action  Edit > Pick edges  (check mark)

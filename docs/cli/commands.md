@@ -35,6 +35,7 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`feature.add_hole`](#featureadd_hole) | Drills holes for screws: simple, counterbored or countersunk |
 | [`feature.add_pattern`](#featureadd_pattern) | Repeats holes, joins and cuts, or copies a body, in a row, a grid or round a circle |
 | [`feature.add_mirror`](#featureadd_mirror) | A mirror image of holes, joins and cuts, or of a body, across a plane |
+| [`feature.add_shell`](#featureadd_shell) | Hollows a body out to thin walls, leaving faces open |
 | [`feature.add_plane`](#featureadd_plane) | A construction plane to sketch on: moved out, or tilted |
 | [`feature.add_fillet`](#featureadd_fillet) | Rounds edges of a body |
 | [`feature.add_chamfer`](#featureadd_chamfer) | Bevels edges of a body |
@@ -1858,6 +1859,103 @@ $ sketchbillet_cli run --open half.sb feature.add_mirror body=Box1 face=4
 half: 2 steps
   Box1         ok  volume 1000.00 mm^3
   Mirror1      ok  volume 2000.00 mm^3  mass 2.48 g (PLA)
+```
+
+## feature.add_shell
+
+Hollows a body out, leaving walls of a thickness, with the faces you pick left
+open: a box becomes a tray, a cylinder a cup. The outside stays the same size;
+the walls grow inward. Model the solid outside of an enclosure, then shell it.
+See [Shell](../user-guide/shell.md).
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `body` | step name | yes | The step whose body to hollow, like `Box1` |
+| `faces` | face numbers | yes | The faces to leave open, like `6` (a box's top) or `1,6` (top and bottom), as [`open --faces`](open.md#a-bodys-edges-and-faces) numbers them |
+| `thickness` | number (mm) | no | How thick the walls are. Default `2` |
+| `name` | text | no | Step name. Default `Shell1`, `Shell2`, ... |
+
+A box 40 × 30 × 20 mm, shelled to 2 mm walls with its top (face 6) open. The
+inside is 36 × 26 × 18 mm, so the tray is 24000 − 16848 = 7152 mm³:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save tray.sb feature.add_box size=40,30,20
+tray: 1 step
+  Box1         ok  volume 24000.00 mm^3  mass 29.76 g (PLA)
+wrote tray.sb
+$ sketchbillet_cli run --open tray.sb --save tray.sb feature.add_shell body=Box1 faces=6
+tray: 2 steps
+  Box1         ok  volume 24000.00 mm^3
+  Shell1       ok  volume 7152.00 mm^3  mass 8.87 g (PLA)
+wrote tray.sb
+```
+
+Its faces: the outside ones keep their names (the top is now just the rim), and
+each inside wall is named after the outside face it's the inside of:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli open tray.sb --faces Shell1
+tray: 2 steps
+  Box1         ok  volume 24000.00 mm^3
+  Shell1       ok  volume 7152.00 mm^3  mass 8.87 g (PLA)
+faces of Shell1: 11
+   1  flat       1200.00 mm^2  at 20.00,15.00,0.00  bottom of Box1
+   2  flat        936.00 mm^2  at 20.00,15.00,2.00  inside of bottom of Box1 (Shell1)
+   3  flat        800.00 mm^2  at 20.00,0.00,10.00  front side of Box1
+   4  flat        600.00 mm^2  at 0.00,15.00,10.00  left side of Box1
+   5  flat        600.00 mm^2  at 40.00,15.00,10.00  right side of Box1
+   6  flat        800.00 mm^2  at 20.00,30.00,10.00  back side of Box1
+   7  flat        648.00 mm^2  at 20.00,2.00,11.00  inside of front side of Box1 (Shell1)
+   8  flat        468.00 mm^2  at 2.00,15.00,11.00  inside of left side of Box1 (Shell1)
+   9  flat        468.00 mm^2  at 38.00,15.00,11.00  inside of right side of Box1 (Shell1)
+  10  flat        648.00 mm^2  at 20.00,28.00,11.00  inside of back side of Box1 (Shell1)
+  11  flat        264.00 mm^2  at 20.00,15.00,20.00  top of Box1
+```
+
+Thicker walls: 3 mm leaves an inside of 34 × 24 × 17 mm, so 24000 − 13872 =
+10128 mm³:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open tray.sb feature.set_value feature=Shell1 setting=thickness value=3
+tray: 2 steps
+  Box1         ok  volume 24000.00 mm^3
+  Shell1       ok  volume 10128.00 mm^3  mass 12.56 g (PLA)
+```
+
+Another shell of the same box, with the top and the bottom open (faces 1 and 6),
+is a square tube:
+24000 − 36 × 26 × 20 = 5280 mm³:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open tray.sb --save tube.sb feature.add_shell body=Box1 faces=1,6 name=Tube
+tray: 3 steps
+  Box1         ok  volume 24000.00 mm^3
+  Shell1       ok  volume 7152.00 mm^3  mass 8.87 g (PLA)
+  Tube         ok  volume 5280.00 mm^3  mass 6.55 g (PLA)
+wrote tube.sb
+```
+
+Walls too thick to fit inside the body stop the step, and say so:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open tray.sb feature.set_value feature=Shell1 setting=thickness value=16
+tray: 2 steps
+  Box1         ok  volume 24000.00 mm^3
+  Shell1       failed
+    error [kernel.shell.failed]: The body couldn't be hollowed out. The walls may be too thick for it: try thinner ones.
+```
+
+A face number the body doesn't have:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open tray.sb feature.add_shell body=Box1 faces=9
+error: faces must be face numbers of Box1 from 1 to 6, split by commas, like 1,6 (9 isn't one). To see them: sketchbillet_cli open <design.sb> --faces Box1
 ```
 
 ## feature.add_plane

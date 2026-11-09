@@ -1,0 +1,52 @@
+{
+  "name": "shell-cup",
+  "description": "A cylinder 20 mm round and 50 mm tall, hollowed out to 3 mm walls with its top open: a cup. Worked out by hand: volume pi (20^2 x 50 - 17^2 x 47) = 20159.600058 mm^3; area: outside wall 2 pi 20 x 50, bottom pi 20^2, the rim pi (20^2 - 17^2), inside wall 2 pi 17 x 47, inside floor pi 17^2: 13816.724490 mm^2.",
+  "steps": [
+    {
+      "id": "rod",
+      "op": "cylinder",
+      "base": [
+        0,
+        0,
+        0
+      ],
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "radius": 20,
+      "height": 50
+    },
+    {
+      "id": "cup",
+      "op": "shell",
+      "body": "rod",
+      "faces": [
+        2
+      ],
+      "thickness": 3
+    }
+  ],
+  "expect": {
+    "valid": true,
+    "volume": 20159.600058,
+    "area": 13816.72449,
+    "bounds": [
+      [
+        -20.0,
+        -20.0,
+        0.0
+      ],
+      [
+        20.0,
+        20.0,
+        50.0
+      ]
+    ],
+    "solids": 1,
+    "faces": 5,
+    "edges": 6,
+    "vertices": 4
+  }
+}

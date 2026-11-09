@@ -36,6 +36,7 @@
 #include "sb/model/Material.h"
 #include "sb/model/Mirror.h"
 #include "sb/model/Pattern.h"
+#include "sb/model/Shell.h"
 #include "sb/plugin/Events.h"
 #include "sb/ui/UiRegistry.h"
 
@@ -574,6 +575,33 @@ private:
                     fillet ? tr("Radius") : tr("Distance"),
                     [](const model::Feature& g) { return static_cast<const model::EdgeFeature&>(g).size(); },
                     [](model::Feature& g, double v) { static_cast<model::EdgeFeature&>(g).setSize(v); });
+                break;
+            }
+            case model::FeatureType::Shell: {
+                auto* body = new QLabel(form_);
+                body->setObjectName(QStringLiteral("body"));
+                form->addRow(tr("Body"), body);
+                auto* open = new QLabel(form_);
+                open->setObjectName(QStringLiteral("faces"));
+                open->setToolTip(
+                    tr("How many faces are left open. To change them, delete this step and add "
+                       "it again with the faces picked."));
+                form->addRow(tr("Open faces"), open);
+                updaters_.push_back([this, body, open](const model::Feature& g) {
+                    const auto& sh = static_cast<const model::ShellFeature&>(g);
+                    const auto* design = ctx_.documents().find(ctx_.selection().doc());
+                    const auto* s = design ? design->find(sh.body()) : nullptr;
+                    body->setText(s ? QString::fromStdString(s->name()) : tr("(missing)"));
+                    open->setText(QString::number(sh.faces().size()));
+                });
+                addNumber(
+                    form, QStringLiteral("thickness"), tr("Thickness"),
+                    [](const model::Feature& g) {
+                        return static_cast<const model::ShellFeature&>(g).thickness();
+                    },
+                    [](model::Feature& g, double v) {
+                        static_cast<model::ShellFeature&>(g).setThickness(v);
+                    });
                 break;
             }
             case model::FeatureType::Move: {

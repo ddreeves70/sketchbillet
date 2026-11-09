@@ -126,7 +126,11 @@ class PluginContext;
 /// (model::PlaneFeature, model::PlaneFrom, model::PlaneHinge),
 /// FeatureType::Plane, SketchFeature::onPlane() and setOnPlane(), the
 /// feature.add_plane command and feature.add_sketch's on= setting.
-inline constexpr int kPluginApiVersion = 43;
+/// Version 44 added Shell: kernel::IKernel::shell(), kernel::OriginKind::Inside,
+/// sb/model/Shell.h (model::ShellFeature), FeatureType::Shell, the
+/// feature.add_shell command, model::ArgType::FaceList, and
+/// plugin::ActionSpec::fromFaces and fromFacesBody.
+inline constexpr int kPluginApiVersion = 44;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

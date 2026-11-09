@@ -103,6 +103,12 @@ public:
         if (n.x == 0 && n.y == 0 && n.z == 0) return fail();
         return make(volumeOf(shape));
     }
+    kernel::OpResult shell(const kernel::ShapeHandle& shape, const std::vector<int>& faces,
+                           double t) override {
+        ++calls;
+        if (faces.empty() || t <= 0) return fail();
+        return make(volumeOf(shape) / 2);
+    }
     kernel::OpResult chamfer(const kernel::ShapeHandle& s, const std::vector<int>& edges, double d) override {
         ++calls;
         if (edges.empty() || d <= 0) return fail();

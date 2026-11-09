@@ -76,6 +76,8 @@ public:
 
     // True if edges (not faces) are picked.
     bool pickedEdges() const;
+    // Whether some edges or faces (`kind`) are picked, and nothing else.
+    bool pickedOnly(kernel::TopoKind kind) const;
 
     // Plugin actions by id, e.g. "sb.modeling.box"; nullptr if there is none.
     QAction* action(const std::string& id) const;

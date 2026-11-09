@@ -12,6 +12,7 @@
 #include "sb/model/Holes.h"
 #include "sb/model/Mirror.h"
 #include "sb/model/Pattern.h"
+#include "sb/model/Shell.h"
 #include "sb/sketch/Profiles.h"
 
 namespace sb::model {
@@ -1568,6 +1569,83 @@ std::optional<PlaneAxes> PlaneFeature::where(const ResultLookup& earlier, Diagno
     // Moved along the way it faces.
     const kernel::Vec3 n = unit(cross(out.x, out.y));
     out.origin = plus(out.origin, scaled(n, offset_));
+    return out;
+}
+
+ShellFeature::ShellFeature(std::string name, FeatureId body, std::vector<GeometryRef> faces, double thickness)
+    : ShellFeature(FeatureId::generate(), std::move(name), body, std::move(faces), thickness) {}
+
+ShellFeature::ShellFeature(FeatureId id, std::string name, FeatureId body, std::vector<GeometryRef> faces,
+                           double thickness)
+    : Feature(id, std::move(name)), body_(body), faces_(std::move(faces)), thickness_(thickness) {}
+
+std::vector<StepNumber> ShellFeature::numbers() const {
+    return {{"thickness", kLength, true}};
+}
+
+std::optional<double> ShellFeature::number(std::string_view key) const {
+    if (key == "thickness") return thickness_;
+    return std::nullopt;
+}
+
+bool ShellFeature::setNumber(std::string_view key, double value) {
+    if (key != "thickness") return false;
+    thickness_ = value;
+    return true;
+}
+
+void ShellFeature::remapInputs(const std::map<FeatureId, FeatureId>& map) {
+    if (auto it = map.find(body_); it != map.end()) body_ = it->second;
+    for (auto& f : faces_) remapRef(f, map);
+}
+
+Built ShellFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) const {
+    if (!(thickness_ > 0)) {
+        return stepFailed("shell.thickness",
+                          name() + " needs walls thicker than 0 mm. Type a thickness in Properties, like 2.");
+    }
+    if (faces_.empty()) {
+        return stepFailed("shell.no_faces",
+                          name() + " has no faces to leave open. Pick at least one, like the top.");
+    }
+    const auto* shape = earlier.shapeOf(body_);
+    if (!shape) return missingInput();
+    const ShapeNames* names = namesOf(earlier, body_);
+
+    // Find each face again. Anything less than sure stops the step.
+    std::vector<int> found;
+    Diagnostics notes;
+    for (const auto& ref : faces_) {
+        const auto where = names ? resolve(ref, *names) : Resolution{};
+        if (!where.found()) {
+            return stepFailed(
+                "shell.face_missing",
+                name() + " can't find a face it leaves open: an earlier change " +
+                    (where.status == ResolveStatus::Ambiguous ? "made several like it" : "took it away") +
+                    ". Delete " + name() + " and add it again with the faces to leave open.");
+        }
+        if (where.status == ResolveStatus::Matched && notes.empty()) {
+            notes.push_back({"shell.face_matched",
+                             Severity::Info,
+                             name() +
+                                 " found a face by where it is, because an earlier change renamed it. Check "
+                                 "it's the right one.",
+                             {}});
+        }
+        if (std::find(found.begin(), found.end(), where.index) == found.end()) found.push_back(where.index);
+    }
+
+    const std::string me = shortId(id().toString());
+    auto out =
+        carried(kernel, kernel.shell(*shape, found, thickness_), {names}, id(), [&](const kernel::Origin& o) {
+            // An inside wall is named for the outside face it's the inside of.
+            const auto i = static_cast<std::size_t>(o.index);
+            if (o.kind == kernel::OriginKind::Inside && names && i < names->faces.size()) {
+                return me + "/inside:" + names->faces[i];
+            }
+            return std::string();
+        });
+    if (out.op.ok()) out.op.issues.insert(out.op.issues.end(), notes.begin(), notes.end());
     return out;
 }
 

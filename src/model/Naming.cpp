@@ -355,6 +355,9 @@ std::string describeFace(const Document& doc, std::string_view name) {
         what = "side from " + curve + " (" + by + ")";
     } else if (role == "start" || role == "end") {
         what = std::string(role) + " of " + by;
+    } else if (role == "inside") {
+        // A Shell's inside wall: the inside of an outside face.
+        return "inside of " + describeFace(doc, from) + " (" + by + ")" + piece;
     } else if (role == "mirror") {
         // A Mirror's image of a face.
         return "mirror image (" + by + ") of " + describeFace(doc, from) + piece;

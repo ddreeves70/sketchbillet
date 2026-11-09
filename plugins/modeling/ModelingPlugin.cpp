@@ -300,6 +300,20 @@ void registerModeling(plugin::PluginContext& ctx) {
             "Mirror the picked hole, join or cut, or a picked body, across the YZ plane, so left and right "
             "match. Change the plane in Properties.",
         .enabled = patternable});
+    // Shell: the picked faces of one body left open, 2 mm walls.
+    ctx.addAction(ActionSpec{
+        .id = "sb.modeling.shell",
+        .text = "Shell",
+        .menu = "Modify",
+        .command = "feature.add_shell",
+        .args = {{"thickness", 2.0}},
+        .fromFaces = "faces",
+        .fromFacesBody = "body",
+        .toolbar = true,
+        .icon = std::string(icons::modeling::shell_svg),
+        .tip =
+            "Hollow a body out to 2 mm walls, leaving the picked faces open, like a box with no lid. With no "
+            "faces picked, click the faces first. Change the thickness in Properties."});
     // Fillet and Chamfer: the picked edges of one body. With none picked, the
     // first click starts picking edges.
     ctx.addAction(ActionSpec{

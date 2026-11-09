@@ -26,13 +26,14 @@ works in either.
 | Patterns: holes, joins, cuts or bodies, in a row, a grid or round a circle | |
 | Mirror: holes, joins, cuts or a body, across a plane or a face | Mirrored copies as separate bodies |
 | Construction planes: moved out and tilted from a base plane, a face or another plane, to sketch on | Planes through three points, or midway between two faces |
+| Shell: hollow a body to thin walls, leaving faces open | Walls of different thicknesses |
 | Name, rename and delete steps; undo and redo | |
 | Move and turn bodies; copy, paste and duplicate steps; turn steps off; folders | |
 | The desktop app: 3D viewer with 1, 2 or 4 panes, feature tree, Properties, layouts | |
 | Materials: mass, weight, material cost and color | |
 | Parameters: named values like `wall = 3 mm`, with formulas and units, used by sketch dimensions and steps' numbers, with a Parameters panel in the app | Formulas typed straight into Properties and the Sketch panel |
 | Save and open `.sb` designs | |
-| Export STL (3D printing) and STEP (other CAD programs), from the app's File menu or `sketchbillet_cli` | Shells |
+| Export STL (3D printing) and STEP (other CAD programs), from the app's File menu or `sketchbillet_cli` | |
 | Add plugins | Import STEP, STL and 3MF |
 
 ## Contents
@@ -53,11 +54,12 @@ works in either.
 14. [Patterns](patterns.md): repeat holes, pegs, slots or bodies in a row or round a circle.
 15. [Mirror](mirror.md): model half a part, mirror it to make the whole.
 16. [Construction planes](planes.md): planes to sketch on, moved out or tilted.
-17. [Materials](materials.md): what a body is made of, its mass, weight and cost.
-18. [Parameters](parameters.md): named values like `wall = 3 mm`, and formulas that use them.
-19. [Files](files.md): saving, opening, and exporting for 3D printing.
-20. [Plugins](plugins.md): adding features to SketchBillet.
-21. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
+17. [Shell](shell.md): hollow a body out to thin walls, for boxes and enclosures.
+18. [Materials](materials.md): what a body is made of, its mass, weight and cost.
+19. [Parameters](parameters.md): named values like `wall = 3 mm`, and formulas that use them.
+20. [Files](files.md): saving, opening, and exporting for 3D printing.
+21. [Plugins](plugins.md): adding features to SketchBillet.
+22. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
 
 ## Other guides
 

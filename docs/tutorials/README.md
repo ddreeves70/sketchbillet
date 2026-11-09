@@ -13,6 +13,7 @@ one or two new ideas on the way. Do them in order.
 | 6 | [Fan cover](06-fan-cover.md) | Circular and linear patterns, a grid of holes | 15 minutes |
 | 7 | [U bracket](07-u-bracket.md) | Joining boxes, mirroring half a part | 10 minutes |
 | 8 | [Phone stand](08-phone-stand.md) | Construction planes, tilting a plane about an edge, sketching on it | 15 minutes |
+| 9 | [Project box](09-project-box.md) | Shelling a body, rounding corners first, a slot in a wall, a lid with a lip | 20 minutes |
 
 For now the tutorials use `sketchbillet_cli`, SketchBillet's command-line tool. When the desktop
 app arrives, each tutorial gets a version with buttons and screenshots; the
