@@ -22,6 +22,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command feature.add_mirror
            command feature.add_move
            command feature.add_pattern
+           command feature.add_plane
            command feature.add_revolve
            command feature.add_sketch
            command feature.delete

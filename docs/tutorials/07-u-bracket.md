@@ -173,3 +173,5 @@ for a pipe up to about 40 mm across.
 - Start the half at x = 0, and the YZ plane is its middle.
 - A mirror of a body includes everything already in it, like its holes.
 - Change the half, and the whole changes.
+
+Next: [Tutorial 8](08-phone-stand.md) sketches on a tilted construction plane.

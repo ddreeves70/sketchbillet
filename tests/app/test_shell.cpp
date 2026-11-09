@@ -42,6 +42,7 @@
 #include "Shell.h"
 #include "sb/grid/Grid.h"
 #include "sb/kernel_occt/OcctKernel.h"
+#include "sb/model/ConstructionPlane.h"
 #include "sb/model/Feature.h"
 #include "sb/model/Holes.h"
 #include "sb/model/Mirror.h"
@@ -257,7 +258,7 @@ TEST_CASE("every toolbar button has a picture", "[app][icons]") {
         CHECK_FALSE(a->icon().pixmap(24, 24).isNull());
     }
     CHECK(buttons ==
-          5 + 14 + 2 + 11 + 15);  // SketchBillet's own, sb.modeling, sb.sketcher, sketch tools, constraints
+          5 + 14 + 3 + 11 + 15);  // SketchBillet's own, sb.modeling, sb.sketcher, sketch tools, constraints
     // The menu item shows the same picture as its button.
     CHECK_FALSE(app.shell->action("sb.modeling.box")->icon().isNull());
 }
@@ -1759,6 +1760,55 @@ TEST_CASE("Mirror the picked body across a plane; Properties changes the plane a
         -5);  // below 0 too: across z = -5, the image is at -15 to -10
     settle();
     CHECK(bounds().min.z == Approx(-15).margin(1e-6));
+}
+
+TEST_CASE("New plane, then New sketch on it; Properties moves and tilts it", "[app][plane]") {
+    App app;
+    auto& docs = app.host.documents();
+    const auto doc = app.shell->activeDesign();
+    // Nothing picked: a plane 20 mm above the ground, picked, and drawn in the view.
+    app.click("sb.sketcher.new_plane");
+    REQUIRE(app.doc().featureCount() == 1);
+    const auto plane = app.doc().featureAt(0).id();
+    CHECK(app.doc().featureAt(0).name() == "Plane1");
+    CHECK(app.host.selection().features() == std::vector{plane});
+    const auto* r = docs.lastRebuild(doc)->result(plane);
+    REQUIRE(r->plane);
+    CHECK(r->plane->origin.z == 20);
+    const auto* drawn = app.host.overlays().find("sb.modeling.planes.picked");
+    REQUIRE(drawn);
+    CHECK(drawn->points.size() == 8);  // a square: four lines
+    const auto* names = app.host.overlays().find("sb.modeling.planes.names");
+    REQUIRE(names);
+    CHECK(names->texts == std::vector<std::string>{"Plane1"});
+
+    // Properties: from the ground, 20 mm, not tilted.
+    CHECK(app.field<QComboBox>("from")->currentText() == QStringLiteral("XY (the ground)"));
+    CHECK(app.field<QDoubleSpinBox>("offset")->value() == Approx(20));
+    CHECK(app.properties()->findChild<QComboBox*>(QStringLiteral("material")) == nullptr);  // not a body
+    app.field<QDoubleSpinBox>("angle")->setValue(-30);
+    settle();
+    const auto n = [&] {
+        const auto& a = *docs.lastRebuild(doc)->result(plane)->plane;
+        return a.x.x * a.y.y - a.x.y * a.y.x;  // the normal's z
+    };
+    CHECK(n() == Approx(std::sqrt(3.0) / 2));
+    CHECK(app.doc().undoLabel() == "Edit Plane1");
+
+    // With the plane picked, New sketch goes on it.
+    app.pickRows({0});
+    app.click("sb.sketcher.new_xy");
+    REQUIRE(app.doc().featureCount() == 2);
+    const auto& sketch = static_cast<const model::SketchFeature&>(app.doc().featureAt(1));
+    CHECK(sketch.onPlane() == plane);
+    app.click("sb.sketcher.finish");
+
+    // A plane on from a picked plane: 10 mm further.
+    app.pickRows({0});
+    app.click("sb.sketcher.new_plane");
+    REQUIRE(app.doc().featureCount() == 3);
+    CHECK(static_cast<const model::PlaneFeature&>(app.doc().featureAt(2)).from().plane == plane);
+    CHECK(app.field<QComboBox>("from")->currentText() == QStringLiteral("Plane1"));
 }
 
 TEST_CASE("Paste explains when the clipboard has no steps", "[app][copy]") {

@@ -327,6 +327,9 @@ int openDesign(int argc, char** argv) {
                         sb::cli::sketchSummary(static_cast<const sb::model::SketchFeature&>(f).sketch(),
                                                r->sketch->freedom)
                             .c_str());
+        } else if (r->status == sb::model::FeatureStatus::Ok && r->plane &&
+                   f.type() == sb::model::FeatureType::Plane) {
+            std::printf("  %s", sb::cli::planeSummary(*r->plane).c_str());
         } else if (r->status == sb::model::FeatureStatus::Ok) {
             const auto& material = doc.materialOf(f.id());
             const auto mass = sb::model::bodyMass(*kernel, r->shape, material);

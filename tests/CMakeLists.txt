@@ -76,7 +76,7 @@ endif()
 target_compile_definitions(sb_tests PRIVATE SB_TEST_FILES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/files")
 
 if(SB_WITH_OCCT)
-  target_sources(sb_tests PRIVATE kernel/test_occt_kernel.cpp kernel/test_elements.cpp model/test_naming.cpp model/test_fillet.cpp model/test_sketch_face.cpp model/test_extrude_join_cut.cpp model/test_revolve.cpp model/test_hole.cpp model/test_pattern.cpp model/test_mirror.cpp model/test_rebuild_occt.cpp model/test_slide.cpp)
+  target_sources(sb_tests PRIVATE kernel/test_occt_kernel.cpp kernel/test_elements.cpp model/test_naming.cpp model/test_fillet.cpp model/test_sketch_face.cpp model/test_extrude_join_cut.cpp model/test_revolve.cpp model/test_hole.cpp model/test_pattern.cpp model/test_mirror.cpp model/test_plane.cpp model/test_rebuild_occt.cpp model/test_slide.cpp)
   target_link_libraries(sb_tests PRIVATE sb::kernel_occt)
 endif()
 

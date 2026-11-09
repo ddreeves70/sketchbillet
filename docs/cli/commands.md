@@ -35,6 +35,7 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`feature.add_hole`](#featureadd_hole) | Drills holes for screws: simple, counterbored or countersunk |
 | [`feature.add_pattern`](#featureadd_pattern) | Repeats holes, joins and cuts, or copies a body, in a row, a grid or round a circle |
 | [`feature.add_mirror`](#featureadd_mirror) | A mirror image of holes, joins and cuts, or of a body, across a plane |
+| [`feature.add_plane`](#featureadd_plane) | A construction plane to sketch on: moved out, or tilted |
 | [`feature.add_fillet`](#featureadd_fillet) | Rounds edges of a body |
 | [`feature.add_chamfer`](#featureadd_chamfer) | Bevels edges of a body |
 | [`feature.set_edges`](#featureset_edges) | Picks a fillet's or chamfer's edges again |
@@ -589,6 +590,7 @@ it has no volume, and it's solved again every time the design rebuilds.
 | `plane` | `xy`, `xz` or `yz` | no | `xy` (the ground, the default), `xz` (standing, facing the front) or `yz` (standing, facing the right) |
 | `body` | step name | no | To draw on a face of a body: the step that made the body, like `Extrude1` |
 | `face` | face number | no | With `body`: which flat face, as [`sketchbillet_cli open <design.sb> --faces <body>`](open.md#a-bodys-edges-and-faces) numbers them |
+| `on` | step name | no | To draw on a [construction plane](#featureadd_plane): its Plane step, like `Plane1`. The sketch moves with the plane |
 | `name` | text | no | Step name. Default `Sketch1`, `Sketch2`, ... |
 
 <!-- cli-example -->
@@ -1856,6 +1858,73 @@ $ sketchbillet_cli run --open half.sb feature.add_mirror body=Box1 face=4
 half: 2 steps
   Box1         ok  volume 1000.00 mm^3
   Mirror1      ok  volume 2000.00 mm^3  mass 2.48 g (PLA)
+```
+
+## feature.add_plane
+
+Adds a construction plane: a plane to sketch on where there's no face, like
+20 mm above the ground, or tilted 30°. It isn't a body. It starts from a base
+plane, a flat face, or another plane; turns by `angle` about a hinge line in it;
+then moves `offset` along the way it then faces. A plane from a face moves with
+the face. Draw on it with [`feature.add_sketch on=`](#featureadd_sketch). See
+[Construction planes](../user-guide/planes.md).
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `plane` | `xy`, `xz` or `yz` | no | Start from a base plane: `xy` (the ground, the default), `xz` (facing the front) or `yz` (facing the right) |
+| `body` | step name | no | To start from a face: the step whose body has it |
+| `face` | face number | no | With `body`: which flat face, as [`open --faces`](open.md#a-bodys-edges-and-faces) numbers them |
+| `from` | step name | no | To start from another construction plane: its Plane step |
+| `offset` | number (mm) | no | How far to move it along the way it faces, after turning. Below 0 moves it the other way. Default `0` |
+| `angle` | number (degrees) | no | How far to tilt it about its hinge, the right-hand way about the hinge's direction (below 0, the other way). Default `0` |
+| `hinge` | `x` or `y` | no | The line it tilts about: the starting plane's x or y direction, through its 0, 0. Default `x` |
+| `edge` | edge number | no | Instead of `hinge`, starting from a face: a straight edge of that face to tilt about, as [`open --edges`](open.md#a-bodys-edges-and-faces) numbers them |
+| `name` | text | no | Step name. Default `Plane1`, `Plane2`, ... |
+
+A plane 20 mm above the ground, and a 10 mm square block standing on it:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save plane.sb feature.add_plane offset=20
+plane: 1 step
+  Plane1       ok  plane through 0.00,0.00,20.00 mm, facing 0.00,0.00,1.00
+wrote plane.sb
+$ sketchbillet_cli run --open plane.sb --save plane.sb feature.add_sketch on=Plane1
+plane: 2 steps
+  Plane1       ok  plane through 0.00,0.00,20.00 mm, facing 0.00,0.00,1.00
+  Sketch1      ok  empty
+wrote plane.sb
+$ sketchbillet_cli run --open plane.sb --save plane.sb sketch.add_rectangle sketch=Sketch1 from=0,0 to=10,10
+plane: 2 steps
+  Plane1       ok  plane through 0.00,0.00,20.00 mm, facing 0.00,0.00,1.00
+  Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
+wrote plane.sb
+$ sketchbillet_cli run --open plane.sb --save plane.sb feature.add_extrude sketch=Sketch1 distance=5
+plane: 3 steps
+  Plane1       ok  plane through 0.00,0.00,20.00 mm, facing 0.00,0.00,1.00
+  Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
+  Extrude1     ok  volume 500.00 mm^3  mass 0.62 g (PLA)
+wrote plane.sb
+```
+
+Tilted 30° about its x: it faces up and a little toward the front (−y). Every
+step after it moves with it:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open plane.sb feature.set_value feature=Plane1 setting=angle value=30
+plane: 3 steps
+  Plane1       ok  plane through 0.00,-10.00,17.32 mm, facing 0.00,-0.50,0.87
+  Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
+  Extrude1     ok  volume 500.00 mm^3  mass 0.62 g (PLA)
+```
+
+A plane that isn't a plane step can't hold a sketch:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open plane.sb feature.add_sketch on=Extrude1
+error [sketch.not_a_plane]: Extrude1 isn't a construction plane. Use on= with a Plane step, like on=Plane1.
 ```
 
 ## feature.add_fillet

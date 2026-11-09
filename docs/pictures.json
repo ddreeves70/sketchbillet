@@ -166,6 +166,15 @@
       "run --open bracket.sb --save bracket.sb sketch.add_point sketch=Sketch1 at=11,10",
       "run --open bracket.sb --save bracket.sb feature.add_hole sketch=Sketch1 kind=countersink name=Screw",
       "run --open bracket.sb --save bracket.sb feature.add_mirror body=Screw name=Bracket"
+    ],
+    "phonestand": [
+      "run --save stand.sb feature.add_box size=80,60,5 name=Base",
+      "run --open stand.sb --save stand.sb feature.add_plane body=Base face=6 edge=12 angle=70 name=Lean",
+      "run --open stand.sb --save stand.sb feature.add_sketch on=Lean",
+      "run --open stand.sb --save stand.sb sketch.add_rectangle sketch=Sketch1 from=0,57 to=80,130",
+      "run --open stand.sb --save stand.sb feature.add_extrude sketch=Sketch1 distance=5 operation=join body=Base name=Back",
+      "run --open stand.sb --save stand.sb feature.add_box corner=0,15,5 size=80,4,6 name=Lip",
+      "run --open stand.sb --save stand.sb feature.add_boolean operation=union a=Back b=Lip name=Stand"
     ]
   },
   "pictures": [
@@ -1686,6 +1695,50 @@
         {
           "file": "bracket.sb",
           "step": "Bracket",
+          "color": "blue"
+        }
+      ]
+    },
+    {
+      "out": "docs/user-guide/images/planes-stand.png",
+      "size": "560x420",
+      "script": "phonestand",
+      "show": [
+        {
+          "file": "stand.sb",
+          "step": "Stand",
+          "color": "blue"
+        }
+      ]
+    },
+    {
+      "out": "docs/user-guide/images/app-plane.png",
+      "size": "1280x800",
+      "script": "phonestand",
+      "app": {
+        "open": "stand.sb",
+        "select": [
+          "Lean"
+        ],
+        "trigger": [
+          "sb.viewer.fit"
+        ]
+      },
+      "crop": [
+        0,
+        0,
+        1280,
+        800
+      ]
+    },
+    {
+      "out": "docs/tutorials/images/stand-done.png",
+      "size": "560x420",
+      "script": "phonestand",
+      "show": [
+        {
+          "file": "stand.sb",
+          "step": "Stand",
           "color": "blue"
         }
       ]

@@ -1,4 +1,5 @@
 #include "sb/model/Document.h"
+#include "sb/model/ConstructionPlane.h"
 
 #include <algorithm>
 #include <cctype>
@@ -261,6 +262,16 @@ struct SketchWhere {
 };
 
 SketchWhere sketchAxes(const SketchFeature& step, const RebuildReport& report) {
+    if (!step.onPlane().isNil()) {
+        const auto* p = report.result(step.onPlane());
+        if (p && p->status == FeatureStatus::Ok && p->plane) return {p->plane, {}};
+        return {std::nullopt,
+                Diagnostic{"sketch.plane_missing",
+                           Severity::Error,
+                           step.name() + " is on a plane that isn't there. Fix the plane, or put the sketch "
+                                         "somewhere else.",
+                           {}}};
+    }
     if (!step.face()) return {planeAxes(step.plane()), {}};
     const auto& on = *step.face();
     const auto* body = report.result(on.body);
@@ -342,6 +353,15 @@ RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolve
                     continue;
                 }
                 if (report.shapeOf(dep)) continue;
+                if (d && d->type() == FeatureType::Plane) {
+                    // A plane is ready when it was worked out.
+                    const auto* input = report.result(dep);
+                    if (input && input->status == FeatureStatus::Ok && input->plane) continue;
+                    blocker = "This step uses " + d->name() + ", which " +
+                              (d->suppressed() ? "is turned off. Turn it back on, or change this step."
+                                               : "has a problem. Fix that plane first.");
+                    continue;
+                }
                 if (!d) {
                     blocker = "This step uses a step that no longer exists. Change or delete this step.";
                 } else if (d->type() == FeatureType::Sketch) {
@@ -373,6 +393,16 @@ RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolve
             if (blocker) {
                 r.status = FeatureStatus::Blocked;
                 r.issues.push_back({"feature.blocked", Severity::Error, *blocker, {}});
+            } else if (f->type() == FeatureType::Plane) {
+                // Planes are worked out, not built: a plane, no shape, and not a body.
+                Diagnostic why;
+                if (auto at = static_cast<const PlaneFeature&>(*f).where(report, why)) {
+                    r.status = FeatureStatus::Ok;
+                    r.plane = *at;
+                } else {
+                    r.status = FeatureStatus::Failed;
+                    r.issues.push_back(why);
+                }
             } else if (f->type() == FeatureType::Sketch) {
                 // Sketches are solved, not built: no shape, and not a body.
                 if (!solver) {

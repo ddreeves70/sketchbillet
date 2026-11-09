@@ -34,6 +34,7 @@ enum class FeatureType {
     Hole,      ///< A HoleFeature (sb/model/Holes.h).
     Pattern,   ///< A PatternFeature (sb/model/Pattern.h).
     Mirror,    ///< A MirrorFeature (sb/model/Mirror.h).
+    Plane,     ///< A PlaneFeature (sb/model/ConstructionPlane.h): a construction plane.
 };
 
 /// The flat plane a sketch is drawn on.
@@ -608,6 +609,15 @@ public:
     /// @param face The face, or nothing for the base plane.
     void setFace(std::optional<SketchFace> face) { face_ = std::move(face); }
 
+    /// Gives the Plane step (a construction plane) it's drawn on, if it's on one.
+    /// @return The Plane step, or nil.
+    const FeatureId& onPlane() const { return onPlane_; }
+
+    /// Puts the sketch on a Plane step (a construction plane), or off it (nil).
+    /// Use on a copy, or from a Command.
+    /// @param plane The Plane step, or nil.
+    void setOnPlane(FeatureId plane) { onPlane_ = plane; }
+
     /// Gives its entities and constraints, as drawn (not solved).
     /// @return The sketch.
     const sketch::Sketch& sketch() const { return sketch_; }
@@ -619,6 +629,7 @@ public:
     FeatureType type() const override { return FeatureType::Sketch; }
     std::unique_ptr<Feature> clone() const override { return std::make_unique<SketchFeature>(*this); }
     std::vector<FeatureId> dependencies() const override {
+        if (!onPlane_.isNil()) return {onPlane_};
         return face_ ? std::vector<FeatureId>{face_->body} : std::vector<FeatureId>{};
     }
     std::vector<FeatureId> referenceInputs() const override { return dependencies(); }
@@ -633,6 +644,7 @@ public:
 private:
     SketchPlane plane_;
     std::optional<SketchFace> face_;
+    FeatureId onPlane_{};
     sketch::Sketch sketch_;
 };
 

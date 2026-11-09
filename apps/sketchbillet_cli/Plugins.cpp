@@ -532,6 +532,9 @@ int runCommand(int argc, char** argv) {
             std::printf("  %s", sketchSummary(static_cast<const model::SketchFeature&>(f).sketch(),
                                               r->sketch->freedom)
                                     .c_str());
+        } else if (r->status == model::FeatureStatus::Ok && r->plane &&
+                   f.type() == model::FeatureType::Plane) {
+            std::printf("  %s", planeSummary(*r->plane).c_str());
         } else if (r->status == model::FeatureStatus::Ok) {
             const auto& material = design.materialOf(f.id());
             const auto mass = model::bodyMass(*kernel, r->shape, material);
@@ -593,6 +596,16 @@ void printParameters(const model::Document& doc) {
             }
         }
     }
+}
+
+std::string planeSummary(const model::PlaneAxes& a) {
+    const kernel::Vec3 n{a.x.y * a.y.z - a.x.z * a.y.y, a.x.z * a.y.x - a.x.x * a.y.z,
+                         a.x.x * a.y.y - a.x.y * a.y.x};
+    auto tidy = [](double v) { return std::abs(v) < 5e-7 ? 0.0 : v; };  // no "-0.00"
+    char text[160];
+    std::snprintf(text, sizeof text, "plane through %.2f,%.2f,%.2f mm, facing %.2f,%.2f,%.2f",
+                  tidy(a.origin.x), tidy(a.origin.y), tidy(a.origin.z), tidy(n.x), tidy(n.y), tidy(n.z));
+    return text;
 }
 
 std::string sketchSummary(const sketch::Sketch& sketch, int freedom) {

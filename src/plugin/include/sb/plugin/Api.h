@@ -122,7 +122,11 @@ class PluginContext;
 /// Version 42 added Mirror: kernel::IKernel::mirror(), sb/model/Mirror.h
 /// (model::MirrorFeature, model::MirrorPlane), FeatureType::Mirror and the
 /// feature.add_mirror command.
-inline constexpr int kPluginApiVersion = 42;
+/// Version 43 added construction planes: sb/model/ConstructionPlane.h
+/// (model::PlaneFeature, model::PlaneFrom, model::PlaneHinge),
+/// FeatureType::Plane, SketchFeature::onPlane() and setOnPlane(), the
+/// feature.add_plane command and feature.add_sketch's on= setting.
+inline constexpr int kPluginApiVersion = 43;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.
