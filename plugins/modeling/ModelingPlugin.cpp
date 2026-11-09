@@ -193,6 +193,20 @@ void registerModeling(plugin::PluginContext& ctx) {
             "Repeat the picked hole, join or cut 6 times round the z axis; or copy a picked body. Change how "
             "many and the axis in Properties.",
         .enabled = patternable});
+    // Mirror: the picked steps' holes, joins and cuts, or a picked body, across
+    // the YZ plane (left and right swap).
+    ctx.addAction(ActionSpec{
+        .id = "sb.modeling.mirror",
+        .text = "Mirror",
+        .menu = "Create",
+        .command = "feature.add_mirror",
+        .fromSelectionList = "steps",
+        .toolbar = true,
+        .icon = std::string(icons::modeling::mirror_svg),
+        .tip =
+            "Mirror the picked hole, join or cut, or a picked body, across the YZ plane, so left and right "
+            "match. Change the plane in Properties.",
+        .enabled = patternable});
     // Fillet and Chamfer: the picked edges of one body. With none picked, the
     // first click starts picking edges.
     ctx.addAction(ActionSpec{

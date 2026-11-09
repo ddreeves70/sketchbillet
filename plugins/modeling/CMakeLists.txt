@@ -8,4 +8,4 @@ sb_add_library(sb_plugin_modeling
 )
 sb_embed_files(sb_plugin_modeling HEADER ModelingIcons.h NAMESPACE sb::icons::modeling
   FILES icons/box.svg icons/cylinder.svg icons/union.svg icons/cut.svg icons/intersect.svg icons/move.svg icons/extrude.svg
-        icons/fillet.svg icons/chamfer.svg icons/revolve.svg icons/hole.svg icons/pattern-linear.svg icons/pattern-circular.svg)
+        icons/fillet.svg icons/chamfer.svg icons/revolve.svg icons/hole.svg icons/pattern-linear.svg icons/pattern-circular.svg icons/mirror.svg)

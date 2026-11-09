@@ -33,6 +33,7 @@ enum class FeatureType {
     Revolve,   ///< A RevolveFeature.
     Hole,      ///< A HoleFeature (sb/model/Holes.h).
     Pattern,   ///< A PatternFeature (sb/model/Pattern.h).
+    Mirror,    ///< A MirrorFeature (sb/model/Mirror.h).
 };
 
 /// The flat plane a sketch is drawn on.

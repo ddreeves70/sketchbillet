@@ -33,6 +33,7 @@
 #include "sb/model/Document.h"
 #include "sb/model/Holes.h"
 #include "sb/model/Material.h"
+#include "sb/model/Mirror.h"
 #include "sb/model/Pattern.h"
 #include "sb/plugin/Events.h"
 #include "sb/ui/UiRegistry.h"
@@ -540,6 +541,7 @@ private:
             case model::FeatureType::Revolve:  // see addRevolve()
             case model::FeatureType::Hole:     // see addHole()
             case model::FeatureType::Pattern:  // see addPattern()
+            case model::FeatureType::Mirror:   // see addMirror()
                 break;
             case model::FeatureType::Fillet:
             case model::FeatureType::Chamfer: {
@@ -638,6 +640,7 @@ private:
         if (f.type() == model::FeatureType::Revolve) addRevolve(form);
         if (f.type() == model::FeatureType::Hole) addHole(form, static_cast<const model::HoleFeature&>(f));
         if (f.type() == model::FeatureType::Pattern) addPattern(form);
+        if (f.type() == model::FeatureType::Mirror) addMirror(form);
         if (f.type() != model::FeatureType::Sketch) addMaterial(form);  // a sketch isn't a body
     }
 
@@ -910,21 +913,7 @@ private:
         form->addRow(tr("Repeats"), what);
         updaters_.push_back([this, what, pattern](const model::Feature& g) {
             const auto& p = pattern(g);
-            const auto* d = design();
-            auto nameOf = [d](const FeatureId& id) {
-                const auto* f = d ? d->find(id) : nullptr;
-                return f ? qs(f->name()) : QObject::tr("(missing)");
-            };
-            if (p.steps().empty()) {
-                what->setText(tr("Copies of %1").arg(nameOf(p.body())));
-                return;
-            }
-            QStringList names;
-            for (const auto& s : p.steps()) names << nameOf(s);
-            // "on <body>" only when it isn't one of the steps' own body.
-            const bool own = std::find(p.steps().begin(), p.steps().end(), p.body()) != p.steps().end();
-            what->setText(own ? names.join(QStringLiteral(", "))
-                              : tr("%1, on %2").arg(names.join(QStringLiteral(", ")), nameOf(p.body())));
+            what->setText(repeatsText(p.steps(), p.body(), tr("Copies of %1")));
         });
 
         auto* kind = new QComboBox(form_);
@@ -1040,6 +1029,71 @@ private:
             show("spacing2", row && l.count2 > 1);
             for (const char* key : {"axis", "center", "angle"}) show(key, !row);
         });
+    }
+
+    void addMirror(QFormLayout* form) {
+        using model::MirrorFeature;
+        using model::MirrorPlane;
+        auto mirror = [](const model::Feature& g) -> const MirrorFeature& {
+            return static_cast<const MirrorFeature&>(g);
+        };
+        auto* what = new QLabel(form_);
+        what->setObjectName(QStringLiteral("mirrors"));
+        what->setWordWrap(true);
+        form->addRow(tr("Mirrors"), what);
+        updaters_.push_back([this, what, mirror](const model::Feature& g) {
+            const auto& m = mirror(g);
+            what->setText(repeatsText(m.steps(), m.body(), tr("The whole of %1")));
+        });
+        auto* plane = new QComboBox(form_);
+        plane->setObjectName(QStringLiteral("plane"));
+        plane->addItem(tr("YZ (left and right swap)"), static_cast<int>(MirrorPlane::Kind::YZ));
+        plane->addItem(tr("XZ (front and back swap)"), static_cast<int>(MirrorPlane::Kind::XZ));
+        plane->addItem(tr("XY (top and bottom swap)"), static_cast<int>(MirrorPlane::Kind::XY));
+        plane->setToolTip(tr("The plane it mirrors across, through 0 unless it's moved by Offset."));
+        form->addRow(tr("Plane"), plane);
+        connect(plane, &QComboBox::activated, this, [this, plane](int index) {
+            const auto k = static_cast<MirrorPlane::Kind>(plane->itemData(index).toInt());
+            edit(QStringLiteral("plane"), [k](model::Feature& g) {
+                auto& m = static_cast<MirrorFeature&>(g);
+                auto p = m.plane();
+                p.kind = k;
+                m.setPlane(p);
+            });
+        });
+        addNumber(
+            form, QStringLiteral("offset"), tr("Offset"),
+            [mirror](const model::Feature& g) { return mirror(g).plane().offset; },
+            [](model::Feature& g, double v) { static_cast<MirrorFeature&>(g).setNumber("offset", v); },
+            false);
+        updaters_.push_back([this, form, mirror, plane](const model::Feature& g) {
+            const auto& p = mirror(g).plane();
+            // A face, from the command line, shows as one more choice.
+            const int faceAt = plane->findData(static_cast<int>(MirrorPlane::Kind::Face));
+            if (p.kind == MirrorPlane::Kind::Face && faceAt < 0) {
+                plane->addItem(tr("A face of the body"), static_cast<int>(MirrorPlane::Kind::Face));
+            }
+            plane->setCurrentIndex(plane->findData(static_cast<int>(p.kind)));
+            if (auto* w = form_->findChild<QWidget*>(QStringLiteral("offset")))
+                form->setRowVisible(w, p.kind != MirrorPlane::Kind::Face);
+        });
+    }
+
+    // What a Pattern or Mirror repeats, in words: its steps (and the body, when
+    // it's a later one), or `whole` with the body's name.
+    QString repeatsText(const std::vector<FeatureId>& steps, const FeatureId& body,
+                        const QString& whole) const {
+        const auto* d = design();
+        auto nameOf = [d](const FeatureId& id) {
+            const auto* f = d ? d->find(id) : nullptr;
+            return f ? qs(f->name()) : QObject::tr("(missing)");
+        };
+        if (steps.empty()) return whole.arg(nameOf(body));
+        QStringList names;
+        for (const auto& s : steps) names << nameOf(s);
+        const bool own = std::find(steps.begin(), steps.end(), body) != steps.end();
+        return own ? names.join(QStringLiteral(", "))
+                   : tr("%1, on %2").arg(names.join(QStringLiteral(", ")), nameOf(body));
     }
 
     // A sketch step's sketch, by name.
@@ -1294,10 +1348,12 @@ private:
         return s;
     }
 
+    // A length in the design's unit. `positive`: more than 0; otherwise 0 and
+    // less are fine too (like how far a plane is moved).
     void addNumber(QFormLayout* form, const QString& key, const QString& label,
                    std::function<double(const model::Feature&)> get,
-                   std::function<void(model::Feature&, double)> set) {
-        auto* s = spin(key, true, QLatin1Char(' ') + qs(std::string(unitSymbol(unit_))));
+                   std::function<void(model::Feature&, double)> set, bool positive = true) {
+        auto* s = spin(key, positive, QLatin1Char(' ') + qs(std::string(unitSymbol(unit_))));
         form->addRow(label, s);
         connect(s, &QDoubleSpinBox::valueChanged, this, [this, key, set](double v) {
             const double mm = fromUnit(v, unit_);

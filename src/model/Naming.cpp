@@ -355,6 +355,9 @@ std::string describeFace(const Document& doc, std::string_view name) {
         what = "side from " + curve + " (" + by + ")";
     } else if (role == "start" || role == "end") {
         what = std::string(role) + " of " + by;
+    } else if (role == "mirror") {
+        // A Mirror's image of a face.
+        return "mirror image (" + by + ") of " + describeFace(doc, from) + piece;
     } else if (role.starts_with("copy") && role.size() > 4) {
         // A Pattern's copy of a face: which copy, of what.
         return "copy " + std::string(role.substr(4)) + " (" + by + ") of " + describeFace(doc, from) + piece;

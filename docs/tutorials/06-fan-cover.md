@@ -170,3 +170,5 @@ cover and into the fan.
   unless you say otherwise.
 - A **linear pattern** makes a row; `count2` makes it a grid.
 - Make one, and pattern it: change the one, and every copy follows.
+
+Next: [Tutorial 7](07-u-bracket.md) models half a part and mirrors it.

@@ -44,6 +44,7 @@
 #include "sb/kernel_occt/OcctKernel.h"
 #include "sb/model/Feature.h"
 #include "sb/model/Holes.h"
+#include "sb/model/Mirror.h"
 #include "sb/model/Pattern.h"
 #include "sb/plugin/PluginHost.h"
 #include "sb/plugins/Axes.h"
@@ -256,7 +257,7 @@ TEST_CASE("every toolbar button has a picture", "[app][icons]") {
         CHECK_FALSE(a->icon().pixmap(24, 24).isNull());
     }
     CHECK(buttons ==
-          5 + 13 + 2 + 11 + 15);  // SketchBillet's own, sb.modeling, sb.sketcher, sketch tools, constraints
+          5 + 14 + 2 + 11 + 15);  // SketchBillet's own, sb.modeling, sb.sketcher, sketch tools, constraints
     // The menu item shows the same picture as its button.
     CHECK_FALSE(app.shell->action("sb.modeling.box")->icon().isNull());
 }
@@ -1719,6 +1720,45 @@ TEST_CASE("Linear pattern of a picked body copies it", "[app][pattern]") {
     CHECK(app.field<QLabel>("repeats")->text() == QStringLiteral("Copies of Box1"));
     CHECK(docs.kernel()->massProps(*docs.lastRebuild(doc)->shapeOf(id)).volume == Approx(375));
     CHECK(docs.lastRebuild(doc)->bodies() == std::vector{id});
+}
+
+TEST_CASE("Mirror the picked body across a plane; Properties changes the plane and offset", "[app][mirror]") {
+    App app;
+    auto& docs = app.host.documents();
+    const auto doc = app.shell->activeDesign();
+    REQUIRE(docs.run(doc, "feature.add_box", {{"size", kernel::Vec3{20, 10, 5}}}).empty());
+    settle();
+    auto* mirror = app.shell->action("sb.modeling.mirror");
+    REQUIRE(mirror);
+    CHECK_FALSE(mirror->isEnabled());  // nothing picked
+    app.pickRows({0});
+    REQUIRE(mirror->isEnabled());
+    app.click("sb.modeling.mirror");
+    REQUIRE(app.doc().featureCount() == 2);
+    const auto id = app.doc().featureAt(1).id();
+    CHECK(app.doc().featureAt(1).name() == "Mirror1");
+    auto bounds = [&] { return docs.kernel()->bounds(*docs.lastRebuild(doc)->shapeOf(id)); };
+    CHECK(bounds().min.x == Approx(-20).margin(1e-6));  // across YZ: left and right
+    CHECK(docs.lastRebuild(doc)->bodies() == std::vector{id});
+
+    CHECK(app.field<QLabel>("mirrors")->text() == QStringLiteral("The whole of Box1"));
+    CHECK(app.field<QDoubleSpinBox>("offset")->value() == 0);  // 0 shows as 0, not the smallest length
+    auto* plane = app.field<QComboBox>("plane");
+    REQUIRE(plane);
+    CHECK(plane->count() == 3);
+    plane->setCurrentIndex(2);  // XY: top and bottom
+    emit plane->activated(2);
+    settle();
+    CHECK(bounds().min.z == Approx(-5).margin(1e-6));
+    app.field<QDoubleSpinBox>("offset")->setValue(5);  // across z = 5: a stack 10 mm tall
+    settle();
+    CHECK(bounds().min.z == Approx(0).margin(1e-6));
+    CHECK(bounds().max.z == Approx(10).margin(1e-6));
+    CHECK(app.doc().undoLabel() == "Edit Mirror1");
+    app.field<QDoubleSpinBox>("offset")->setValue(
+        -5);  // below 0 too: across z = -5, the image is at -15 to -10
+    settle();
+    CHECK(bounds().min.z == Approx(-15).margin(1e-6));
 }
 
 TEST_CASE("Paste explains when the clipboard has no steps", "[app][copy]") {

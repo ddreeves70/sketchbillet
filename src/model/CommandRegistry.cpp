@@ -13,11 +13,60 @@
 #include "sb/model/Document.h"
 #include "sb/model/Formulas.h"
 #include "sb/model/Holes.h"
+#include "sb/model/Mirror.h"
 #include "sb/model/Pattern.h"
 
 namespace sb::model {
 
 namespace {
+
+// Checks the steps a Pattern or Mirror ("pattern", "mirror") repeats: holes, and
+// extrudes and revolves that join or cut. One step that makes a body of its own
+// (not a sketch) means its whole body instead. With steps and no body, the body is
+// the one the last step's body became, following each later step that uses it.
+// Gives a message for the student if a step can't be repeated.
+std::optional<std::string> repeatableSteps(const Document& doc, std::vector<FeatureId>& steps,
+                                           FeatureId& body, const std::string& verb) {
+    const auto repeats = [&doc](const FeatureId& id) {
+        const auto* f = doc.find(id);
+        const auto* e = dynamic_cast<const ExtrudeFeature*>(f);
+        const auto* r = dynamic_cast<const RevolveFeature*>(f);
+        return (f && f->type() == FeatureType::Hole) || (e && e->operation() != ExtrudeOp::NewBody) ||
+               (r && r->operation() != ExtrudeOp::NewBody);
+    };
+    if (steps.size() == 1 && body.isNil()) {
+        const auto* f = doc.find(steps[0]);
+        if (f && !repeats(steps[0]) && f->type() != FeatureType::Sketch) {
+            body = steps[0];
+            steps.clear();
+            return std::nullopt;
+        }
+    }
+    for (const auto& s : steps) {
+        if (repeats(s)) continue;
+        const auto* f = doc.find(s);
+        return (f ? f->name() : std::string("A step")) + " can't be " +
+               (verb == "mirror" ? "mirrored" : "repeated") + ": a " + verb +
+               " of steps repeats holes, and extrudes and revolves that join or cut. For " +
+               (verb == "mirror" ? "a mirror image" : "copies") + " of a whole body, use body= instead.";
+    }
+    if (!steps.empty() && body.isNil()) {
+        std::size_t last = 0;
+        for (std::size_t i = 0; i < doc.featureCount(); ++i)
+            if (std::find(steps.begin(), steps.end(), doc.featureAt(i).id()) != steps.end()) last = i;
+        body = doc.featureAt(last).id();
+        for (std::size_t i = last + 1; i < doc.featureCount(); ++i) {
+            const auto& f = doc.featureAt(i);
+            const auto deps = f.dependencies();
+            const auto refs = f.referenceInputs();
+            if (std::find(deps.begin(), deps.end(), body) != deps.end() &&
+                std::find(refs.begin(), refs.end(), body) == refs.end()) {
+                body = f.id();
+            }
+        }
+    }
+    return std::nullopt;
+}
 
 Diagnostic error(std::string code, std::string message) {
     return {std::move(code), Severity::Error, std::move(message), {}};
@@ -809,56 +858,14 @@ CommandRegistry makeBuiltin() {
             };
             auto steps = argFeatures(a, "steps");
             FeatureId body = argFeature(a, "body");
-            // One step that makes a body of its own (not a sketch): copies of its body.
-            if (steps.size() == 1 && body.isNil()) {
-                const auto* f = doc.find(steps[0]);
-                const auto* e = dynamic_cast<const ExtrudeFeature*>(f);
-                const auto* rv = dynamic_cast<const RevolveFeature*>(f);
-                const bool repeats = (f && f->type() == FeatureType::Hole) ||
-                                     (e && e->operation() != ExtrudeOp::NewBody) ||
-                                     (rv && rv->operation() != ExtrudeOp::NewBody);
-                if (f && !repeats && f->type() != FeatureType::Sketch) {
-                    body = steps[0];
-                    steps.clear();
-                }
+            if (const auto problems = repeatableSteps(doc, steps, body, "pattern"); problems) {
+                return problem("pattern.not_repeatable", *problems);
             }
             if (steps.empty() && body.isNil()) {
                 return problem(
                     "pattern.what",
                     "Say what to repeat: steps=, like steps=Hole1, or body=, for copies of a whole "
                     "body.");
-            }
-            for (const auto& s : steps) {
-                const auto* f = doc.find(s);
-                const auto* e = dynamic_cast<const ExtrudeFeature*>(f);
-                const auto* rev = dynamic_cast<const RevolveFeature*>(f);
-                const bool ok = (f && f->type() == FeatureType::Hole) ||
-                                (e && e->operation() != ExtrudeOp::NewBody) ||
-                                (rev && rev->operation() != ExtrudeOp::NewBody);
-                if (!ok) {
-                    return problem(
-                        "pattern.not_repeatable",
-                        (f ? f->name() : std::string("A step")) +
-                            " can't be repeated: a pattern of steps repeats holes, and extrudes and "
-                            "revolves that join or cut. For copies of a whole body, use body= "
-                            "instead.");
-                }
-            }
-            if (!steps.empty() && body.isNil()) {
-                // The body the last step's body became: follow each later step that uses it.
-                std::size_t last = 0;
-                for (std::size_t i = 0; i < doc.featureCount(); ++i)
-                    if (std::find(steps.begin(), steps.end(), doc.featureAt(i).id()) != steps.end()) last = i;
-                body = doc.featureAt(last).id();
-                for (std::size_t i = last + 1; i < doc.featureCount(); ++i) {
-                    const auto& f = doc.featureAt(i);
-                    const auto deps = f.dependencies();
-                    const auto refs = f.referenceInputs();
-                    if (std::find(deps.begin(), deps.end(), body) != deps.end() &&
-                        std::find(refs.begin(), refs.end(), body) == refs.end()) {
-                        body = f.id();
-                    }
-                }
             }
             PatternLayout l;
             const bool circular = argText(a, "kind", "linear") == "circular";
@@ -874,6 +881,70 @@ CommandRegistry makeBuiltin() {
             l.angle = argNumber(a, "angle", 360) * std::numbers::pi / 180.0;
             return std::make_unique<AddFeatureCommand>(std::make_unique<PatternFeature>(
                 argText(a, "name", doc.uniqueName("Pattern")), body, std::move(steps), l));
+        });
+
+    r.add(
+        {"feature.add_mirror",
+         "Mirror",
+         "A mirror image, across a plane, of what steps did (holes, and extrudes and revolves that join or "
+         "cut), or of a whole body, joined to it. Model half a part and mirror it to make the whole.",
+         {{"steps",
+           ArgType::FeatureList,
+           "The steps to mirror, like Hole1, or Hole1,Extrude2. One step that makes a body of its own, like "
+           "Box1, mirrors its whole body, like body=. Give this, or body.",
+           false,
+           {}},
+          {"body",
+           ArgType::FeatureRef,
+           "Mirror this whole body, like Box1. With steps: the body to change, default the body the last "
+           "step's body became.",
+           false,
+           {}},
+          {"plane",
+           ArgType::Choice,
+           "The plane to mirror across: yz (facing x: left and right swap), xz (facing y: front and back) or "
+           "xy (facing z: top and bottom). Default yz.",
+           false,
+           {"yz", "xz", "xy"}},
+          {"offset",
+           ArgType::Number,
+           "How far the plane is from 0 along its normal, in mm. Default 0.",
+           false,
+           {}},
+          {"face",
+           ArgType::Face,
+           "Instead of plane: a flat face of the body to mirror across, like its cut side, picked in the "
+           "app; on "
+           "the command line its number as `sketchbillet_cli open <design.sb> --faces <body>` lists it.",
+           false,
+           {}},
+          {"name", ArgType::Text, "Step name. Default Mirror1, Mirror2, ...", false, {}}}},
+        [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+            auto problem = [](std::string code, std::string message) {
+                return std::make_unique<ProblemCommand>(
+                    Diagnostic{std::move(code), Severity::Error, std::move(message), {}});
+            };
+            auto steps = argFeatures(a, "steps");
+            FeatureId body = argFeature(a, "body");
+            if (steps.empty() && body.isNil()) {
+                return problem("mirror.what",
+                               "Say what to mirror: steps=, like steps=Hole1, or body=, for a whole body.");
+            }
+            if (const auto problems = repeatableSteps(doc, steps, body, "mirror"); problems)
+                return problem("mirror.not_repeatable", *problems);
+            MirrorPlane plane;
+            if (const auto face = argFace(a, "face")) {
+                plane.kind = MirrorPlane::Kind::Face;
+                plane.face = *face;
+            } else {
+                const std::string p = argText(a, "plane", "yz");
+                plane.kind = p == "xz"   ? MirrorPlane::Kind::XZ
+                             : p == "xy" ? MirrorPlane::Kind::XY
+                                         : MirrorPlane::Kind::YZ;
+                plane.offset = argNumber(a, "offset", 0);
+            }
+            return std::make_unique<AddFeatureCommand>(std::make_unique<MirrorFeature>(
+                argText(a, "name", doc.uniqueName("Mirror")), body, std::move(steps), plane));
         });
 
     for (const bool fillet : {true, false}) {

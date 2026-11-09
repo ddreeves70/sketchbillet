@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "sb/model/Holes.h"
+#include "sb/model/Mirror.h"
 #include "sb/model/Pattern.h"
 #include "sb/sketch/Profiles.h"
 
@@ -1198,17 +1199,93 @@ void PatternFeature::remapInputs(const std::map<FeatureId, FeatureId>& map) {
 
 namespace {
 
-// A copy of a shape moved, its faces named for the copy: "<pattern>/copy<n>:<name>".
+// One copy a Pattern or Mirror makes: how it moves a shape, the role its faces'
+// names get ("copy3", "mirror"), and what messages call it ("copy 3").
+struct CopyOf {
+    std::function<kernel::OpResult(const kernel::ShapeHandle&)> move;
+    std::string role;
+    std::string label;
+};
+
+// A shape moved by `copy`, its faces named "<step>/<role>:<name>".
 Built movedCopy(kernel::IKernel& kernel, const kernel::ShapeHandle& shape, const ShapeNames* names,
-                const kernel::Motion& motion, const FeatureId& pattern, int n) {
+                const CopyOf& copy, const FeatureId& step) {
     std::shared_ptr<const ShapeNames> renamed;
     if (names) {
         std::vector<std::string> faces;
-        const std::string prefix = shortId(pattern.toString()) + "/copy" + std::to_string(n) + ":";
+        const std::string prefix = shortId(step.toString()) + "/" + copy.role + ":";
         for (const auto& f : names->faces) faces.push_back(prefix + f);
         renamed = std::make_shared<const ShapeNames>(nameFromFaces(names->elements, std::move(faces)));
     }
-    return carried(kernel, kernel.transform(shape, motion), {renamed.get()}, pattern);
+    return carried(kernel, copy.move(shape), {renamed.get()}, step);
+}
+
+// What a Pattern and a Mirror share: copies of what `steps` did (their holes,
+// joins and cuts) made on `body`, or, with no steps, copies of `body` itself
+// joined to it. `verb` ("pattern", "mirror") starts the codes; `hint` says what to
+// check when a copy misses.
+Built copyInto(kernel::IKernel& kernel, const ResultLookup& earlier, const FeatureId& id,
+               const std::string& name, const FeatureId& body, const std::vector<FeatureId>& steps,
+               const std::vector<CopyOf>& copies, const std::string& verb, const std::string& hint) {
+    const auto* shape = earlier.shapeOf(body);
+    if (!shape) return missingInput();
+    const ShapeNames* names = namesOf(earlier, body);
+    Built out{
+        kernel::OpResult{*shape, {}, {}}, names ? std::make_shared<const ShapeNames>(*names) : nullptr, {}};
+    if (steps.empty()) {
+        // Copies of the whole body, joined where they touch.
+        for (const auto& c : copies) {
+            auto copy = movedCopy(kernel, *shape, names, c, id);
+            if (!copy.op.ok()) return copy;
+            auto joined = kernel.boolean(kernel::BoolOp::Union, out.op.shape, copy.op.shape);
+            if (!joined.ok()) {
+                return stepFailed(verb + ".join_failed",
+                                  name + " couldn't join its " + c.label + " to the body. " + hint);
+            }
+            out = carried(kernel, std::move(joined), {out.names.get(), copy.names.get()}, id);
+        }
+        return out;
+    }
+
+    // Copies of what the steps did: their holes, joins and cuts, again at each copy.
+    std::vector<const StepTool*> tools;
+    for (const auto& s : steps) {
+        const FeatureResult* r = earlier.resultOf(s);
+        if (!r || r->status != FeatureStatus::Ok) return missingInput();
+        if (r->tools.empty()) {
+            return stepFailed(verb + ".not_repeatable",
+                              name +
+                                  " can repeat holes, and extrudes and revolves that join or cut. One of its "
+                                  "steps makes a body of its own: " +
+                                  verb + " that body instead.");
+        }
+        for (const auto& t : r->tools) tools.push_back(&t);
+    }
+    Diagnostics notes;
+    for (const auto& c : copies) {
+        for (const auto* tool : tools) {
+            auto copy = movedCopy(kernel, tool->shape, tool->names.get(), c, id);
+            if (!copy.op.ok()) return copy;
+            const double before = kernel.massProps(out.op.shape).volume;
+            auto done = kernel.boolean(tool->cut ? kernel::BoolOp::Cut : kernel::BoolOp::Union, out.op.shape,
+                                       copy.op.shape);
+            if (!done.ok()) {
+                return stepFailed(
+                    verb + ".combine_failed",
+                    name + " couldn't " + (tool->cut ? "cut" : "join") + " its " + c.label + ". " + hint);
+            }
+            auto next = carried(kernel, std::move(done), {out.names.get(), copy.names.get()}, id);
+            if (tool->cut && std::abs(kernel.massProps(next.op.shape).volume - before) < 1e-9) {
+                notes.push_back({verb + ".copy_missed",
+                                 Severity::Warning,
+                                 name + "'s " + c.label + " isn't on the body, so it cut nothing. " + hint,
+                                 {}});
+            }
+            out = std::move(next);
+        }
+    }
+    out.op.issues.insert(out.op.issues.end(), notes.begin(), notes.end());
+    return out;
 }
 
 }  // namespace
@@ -1249,69 +1326,105 @@ Built PatternFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier
             name() + " would make " + std::to_string(motions.size() + 1) +
                 " copies. SketchBillet makes up to 200 in one pattern: use fewer, or two patterns.");
     }
-    const auto* shape = earlier.shapeOf(body_);
-    if (!shape) return missingInput();
-    const ShapeNames* names = namesOf(earlier, body_);
-
-    Built out{
-        kernel::OpResult{*shape, {}, {}}, names ? std::make_shared<const ShapeNames>(*names) : nullptr, {}};
-    Diagnostics notes;
-    if (steps_.empty()) {
-        // Copies of the whole body, joined where they touch.
-        for (std::size_t k = 0; k < motions.size(); ++k) {
-            const int n = static_cast<int>(k) + 2;
-            auto copy = movedCopy(kernel, *shape, names, motions[k], id(), n);
-            if (!copy.op.ok()) return copy;
-            auto joined = kernel.boolean(kernel::BoolOp::Union, out.op.shape, copy.op.shape);
-            if (!joined.ok()) {
-                return stepFailed("pattern.join_failed", name() + " couldn't join copy " + std::to_string(n) +
-                                                             " to the others. Try another spacing.");
-            }
-            out = carried(kernel, std::move(joined), {out.names.get(), copy.names.get()}, id());
-        }
-        return out;
-    }
-
-    // Copies of what the steps did: their holes, joins and cuts, again at each copy.
-    std::vector<const StepTool*> tools;
-    for (const auto& s : steps_) {
-        const FeatureResult* r = earlier.resultOf(s);
-        if (!r || r->status != FeatureStatus::Ok) return missingInput();
-        if (r->tools.empty()) {
-            return stepFailed("pattern.not_repeatable",
-                              name() +
-                                  " can repeat holes, and extrudes and revolves that join or cut. One of its "
-                                  "steps makes a body of its own: pattern that body instead.");
-        }
-        for (const auto& t : r->tools) tools.push_back(&t);
-    }
+    std::vector<CopyOf> copies;
     for (std::size_t k = 0; k < motions.size(); ++k) {
-        const int n = static_cast<int>(k) + 2;
-        for (const auto* tool : tools) {
-            auto copy = movedCopy(kernel, tool->shape, tool->names.get(), motions[k], id(), n);
-            if (!copy.op.ok()) return copy;
-            const double before = kernel.massProps(out.op.shape).volume;
-            auto done = kernel.boolean(tool->cut ? kernel::BoolOp::Cut : kernel::BoolOp::Union, out.op.shape,
-                                       copy.op.shape);
-            if (!done.ok()) {
-                return stepFailed("pattern.combine_failed", name() + " couldn't " +
-                                                                (tool->cut ? "cut" : "join") + " copy " +
-                                                                std::to_string(n) + ". Try another spacing.");
+        const auto n = std::to_string(k + 2);
+        copies.push_back(
+            {[&kernel, m = motions[k]](const kernel::ShapeHandle& s) { return kernel.transform(s, m); },
+             "copy" + n, "copy " + n});
+    }
+    return copyInto(kernel, earlier, id(), name(), body_, steps_, copies, "pattern",
+                    "Check the spacing and direction.");
+}
+
+MirrorFeature::MirrorFeature(std::string name, FeatureId body, std::vector<FeatureId> steps,
+                             MirrorPlane plane)
+    : MirrorFeature(FeatureId::generate(), std::move(name), body, std::move(steps), std::move(plane)) {}
+
+MirrorFeature::MirrorFeature(FeatureId id, std::string name, FeatureId body, std::vector<FeatureId> steps,
+                             MirrorPlane plane)
+    : Feature(id, std::move(name)), body_(body), steps_(std::move(steps)), plane_(std::move(plane)) {}
+
+std::vector<StepNumber> MirrorFeature::numbers() const {
+    if (plane_.kind == MirrorPlane::Kind::Face) return {};
+    return {{"offset", kLength, false}};
+}
+
+std::optional<double> MirrorFeature::number(std::string_view key) const {
+    if (key == "offset") return plane_.offset;
+    return std::nullopt;
+}
+
+bool MirrorFeature::setNumber(std::string_view key, double value) {
+    if (key != "offset") return false;
+    plane_.offset = value;
+    return true;
+}
+
+std::vector<FeatureId> MirrorFeature::dependencies() const {
+    std::vector<FeatureId> out{body_};
+    for (const auto& s : steps_)
+        if (s != body_) out.push_back(s);
+    return out;
+}
+
+std::vector<FeatureId> MirrorFeature::referenceInputs() const {
+    std::vector<FeatureId> out;
+    for (const auto& s : steps_)
+        if (s != body_) out.push_back(s);
+    return out;
+}
+
+void MirrorFeature::remapInputs(const std::map<FeatureId, FeatureId>& map) {
+    if (auto it = map.find(body_); it != map.end()) body_ = it->second;
+    for (auto& s : steps_)
+        if (auto it = map.find(s); it != map.end()) s = it->second;
+    remapRef(plane_.face, map);
+}
+
+Built MirrorFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) const {
+    // The plane: a point on it and its normal.
+    kernel::Point3 point{};
+    kernel::Vec3 normal{1, 0, 0};
+    switch (plane_.kind) {
+        case MirrorPlane::Kind::YZ:
+            point = {plane_.offset, 0, 0};
+            break;
+        case MirrorPlane::Kind::XZ:
+            point = {0, plane_.offset, 0};
+            normal = {0, 1, 0};
+            break;
+        case MirrorPlane::Kind::XY:
+            point = {0, 0, plane_.offset};
+            normal = {0, 0, 1};
+            break;
+        case MirrorPlane::Kind::Face: {
+            const ShapeNames* names = namesOf(earlier, body_);
+            if (!names) return missingInput();
+            const auto where = resolve(plane_.face, *names);
+            if (where.status == ResolveStatus::Ambiguous || !where.found()) {
+                return stepFailed(
+                    "mirror.face_missing",
+                    name() + " can't find the face it mirrors across: an earlier change " +
+                        (where.status == ResolveStatus::Ambiguous ? "made several like it" : "took it away") +
+                        ". Pick a plane for it in Properties.");
             }
-            auto next = carried(kernel, std::move(done), {out.names.get(), copy.names.get()}, id());
-            if (tool->cut && std::abs(kernel.massProps(next.op.shape).volume - before) < 1e-9) {
-                notes.push_back(
-                    {"pattern.copy_missed",
-                     Severity::Warning,
-                     name() + "'s copy " + std::to_string(n) +
-                         " isn't on the body, so it cut nothing. Check the spacing and direction.",
-                     {}});
+            const auto& f = names->elements.faces[static_cast<std::size_t>(where.index)];
+            if (f.geom != kernel::GeomKind::Plane) {
+                return stepFailed(
+                    "mirror.face_curved",
+                    name() + " can only mirror across a flat face. Pick a flat face, or a plane.");
             }
-            out = std::move(next);
+            point = f.center;
+            normal = f.direction;
+            break;
         }
     }
-    out.op.issues.insert(out.op.issues.end(), notes.begin(), notes.end());
-    return out;
+    const std::vector<CopyOf> copies{
+        {[&kernel, point, normal](const kernel::ShapeHandle& s) { return kernel.mirror(s, point, normal); },
+         "mirror", "mirror image"}};
+    return copyInto(kernel, earlier, id(), name(), body_, steps_, copies, "mirror",
+                    "Check the mirror's plane.");
 }
 
 }  // namespace sb::model

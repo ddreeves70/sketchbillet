@@ -177,6 +177,15 @@ public:
     ///         turn the two ends from Start and End.
     virtual OpResult revolve(const ShapeHandle& face, const Point3& point, const Vec3& direction,
                              double angle) = 0;
+
+    /// Reflects a copy of a shape across a plane, as in a mirror: a left-hand
+    /// part becomes a right-hand one. The shape itself isn't changed.
+    /// @param shape The shape to reflect.
+    /// @param point A point on the plane (mm).
+    /// @param normal The plane's normal: square to it, any length but 0.
+    /// @return The reflected shape, or diagnostics if the normal is 0, 0, 0. Its
+    ///         history gives each face's Face in @p shape.
+    virtual OpResult mirror(const ShapeHandle& shape, const Point3& point, const Vec3& normal) = 0;
 };
 
 }  // namespace sb::kernel
