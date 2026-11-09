@@ -1947,7 +1947,7 @@ $ sketchbillet_cli run --open tray.sb feature.set_value feature=Shell1 setting=t
 tray: 2 steps
   Box1         ok  volume 24000.00 mm^3
   Shell1       failed
-    error [kernel.shell.failed]: The body couldn't be hollowed out. The walls may be too thick for it: try thinner ones.
+    error [kernel.shell.failed]: The body couldn't be hollowed out: walls that thick may not fit inside it. Try thinner ones.
 ```
 
 A face number the body doesn't have:

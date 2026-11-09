@@ -102,6 +102,13 @@ Diagnostic error(std::string code, std::string message, std::string detail = {})
     return Diagnostic{std::move(code), Severity::Error, std::move(message), std::move(detail)};
 }
 
+// A shape's volume (mm^3).
+double volumeOf(const TopoDS_Shape& shape) {
+    GProp_GProps props;
+    BRepGProp::VolumeProperties(shape, props);
+    return props.Mass();
+}
+
 OpResult failed(std::string code, std::string message, std::string detail = {}) {
     OpResult r;
     r.issues.push_back(error(std::move(code), std::move(message), std::move(detail)));
@@ -877,13 +884,19 @@ public:
             mk.Build();
             if (!mk.IsDone() || mk.Shape().IsNull() || !BRepCheck_Analyzer(mk.Shape()).IsValid()) {
                 return failed("kernel.shell.failed",
-                              "The body couldn't be hollowed out. The walls may be too thick for it: try "
-                              "thinner ones.");
+                              "The body couldn't be hollowed out: walls that thick may not fit inside it. "
+                              "Try thinner ones.");
             }
+            const auto tooThick = [] {
+                return failed("kernel.shell.failed",
+                              "The body couldn't be hollowed out: walls that thick may not fit inside it. "
+                              "Try thinner ones.");
+            };
             OpResult out{wrap(mk.Shape()), {}, {}};
             const Maps result(mk.Shape());
             traceFaces(mk, *s, 0, result, out.history);
             // Inside walls are made from the faces they're the inside of: tell them apart.
+            std::vector<int> insides;  // result face numbers, from 1
             for (int i = 1; i <= in.faces.Extent(); ++i) {
                 const TopoDS_Shape& f = in.faces(i);
                 for (TopTools_ListIteratorOfListOfShape it(mk.Generated(f)); it.More(); it.Next()) {
@@ -891,21 +904,34 @@ public:
                     if (at > 0 && !result.faces(at).IsSame(f)) {
                         out.history.faces[static_cast<std::size_t>(at - 1)] = {
                             {0, OriginKind::Inside, i - 1}};
-                        // Too thick for the body, OCCT can turn an offset inside out and still give a
-                        // valid solid, with thinner walls than asked: each wall must be the thickness.
+                        insides.push_back(at);
+                        // Each wall must be the thickness from the face it's the inside of.
                         BRepExtrema_DistShapeShape gap(f, result.faces(at));
-                        if (!gap.IsDone() || std::abs(gap.Value() - thickness) > 1e-4) {
-                            return failed(
-                                "kernel.shell.failed",
-                                "The body couldn't be hollowed out: walls that thick don't fit inside "
-                                "it. Try thinner ones.");
-                        }
+                        if (!gap.IsDone() || std::abs(gap.Value() - thickness) > 1e-4) return tooThick();
                     }
+                }
+            }
+            // Walls too thick to fit cross each other, and OCCT (7.9, at least) can still give a valid
+            // solid. In a real shell, every point of an inside wall is at least the thickness from every
+            // outside face that isn't open, and the body gets smaller.
+            if (insides.empty() || volumeOf(mk.Shape()) >= volumeOf(*s) - 1e-9) return tooThick();
+            for (int i = 1; i <= in.faces.Extent(); ++i) {
+                if (open.Contains(in.faces(i))) continue;
+                Bnd_Box outside;
+                BRepBndLib::Add(in.faces(i), outside);
+                for (const int at : insides) {
+                    Bnd_Box wall;
+                    BRepBndLib::Add(result.faces(at), wall);
+                    if (outside.Distance(wall) > thickness) continue;  // too far apart to matter
+                    BRepExtrema_DistShapeShape gap(in.faces(i), result.faces(at));
+                    if (!gap.IsDone() || gap.Value() < thickness - 1e-4) return tooThick();
                 }
             }
             return out;
         } catch (const Standard_Failure& e) {
-            return failed("kernel.shell.failed", "The body couldn't be hollowed out. Try thinner walls.",
+            return failed("kernel.shell.failed",
+                          "The body couldn't be hollowed out: walls that thick may not fit inside it. Try "
+                          "thinner ones.",
                           describe(e));
         }
     }

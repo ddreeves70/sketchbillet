@@ -269,7 +269,7 @@ TEST_CASE("buttons that don't fit go on a second row, which goes away when they 
     auto* row1 = app.shell->findChild<QToolBar*>(QStringLiteral("sb.shell.toolbar"));
     auto* row2 = app.shell->findChild<QToolBar*>(QStringLiteral("sb.shell.toolbar2"));
     REQUIRE(row2);
-    app.shell->resize(2400, 800);
+    app.shell->resize(4000, 800);  // wide enough for every button, in any system font
     settle();
     CHECK(row2->isHidden());
     CHECK(row1->actions().contains(app.shell->button("sb.sketcher.edit")));
@@ -288,7 +288,7 @@ TEST_CASE("buttons that don't fit go on a second row, which goes away when they 
     }
     CHECK(order.indexOf(QStringLiteral("sb.modeling.box.button")) <
           order.indexOf(QStringLiteral("sb.sketcher.edit.button")));
-    app.shell->resize(2400, 800);
+    app.shell->resize(4000, 800);
     settle();
     CHECK(row2->isHidden());
 }
