@@ -179,6 +179,8 @@ One feature file, the hole in a keychain tag after its placement is fixed:
 
 **Regeneration** recomputes only what changed, in timeline order, and stops cleanly at the first failure.
 
+(Built Nov 12, 2026, in `Document::regenerate()`, which takes the previous `RebuildReport`. In place of an input hash, every step has a revision number that changes whenever a command could have changed it; a step is reused when its revision matches the previous rebuild's and everything it uses was reused too. Formula warnings are worked out again every time. Worker threads and cancelling are still to come.)
+
 1. A command changes a parameter, sketch, or feature input and marks that feature dirty.
 2. `FeatureGraph::dirtyFrom()` marks every downstream feature dirty (graph edges come from parameter references and `GeometryRef` creators).
 3. For each feature in topological order up to the rollback marker:

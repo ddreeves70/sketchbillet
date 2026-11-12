@@ -53,6 +53,11 @@ Demo tag: 3 steps
 A step that fails doesn't stop the others. SketchBillet builds everything it can and
 tells you what to fix.
 
+In the desktop app, a change only rebuilds the steps it affects: the step you
+changed, and the steps after it that use it. A step that doesn't use the
+changed step keeps what it built last time. So changing the last step of a big
+design is quick, and changing the first step takes longest.
+
 ## Bodies
 
 A **body** is one solid piece. Each box or cylinder step makes a body. A step that

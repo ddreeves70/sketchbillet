@@ -50,11 +50,23 @@ public:
     /// @return True if every active (not suppressed) feature built successfully.
     bool ok() const;
 
+    /// Lists the steps whose results were taken from the previous rebuild instead
+    /// of being built again, because neither they nor anything they use changed.
+    /// @return The reused steps, in document order (empty for a full rebuild).
+    const std::vector<FeatureId>& reused() const { return reused_; }
+
 private:
     friend class Document;
     std::vector<FeatureId> order_;
     std::map<FeatureId, FeatureResult> results_;
     std::vector<FeatureId> bodies_;
+    std::vector<FeatureId> reused_;
+    // What each result was built from, so the next rebuild can tell what changed.
+    std::map<FeatureId, std::uint64_t> revisions_;
+    std::map<FeatureId, std::size_t> formulaIssues_;  // how many of a result's issues are formula warnings, at the end
+    const kernel::IKernel* kernel_ = nullptr;
+    const sketch::ISketchSolver* solver_ = nullptr;
+    LengthUnit unit_ = LengthUnit::Millimeter;
 };
 
 /// One design file: an ordered list of features plus its undo history.
@@ -69,6 +81,8 @@ private:
 /// doc.undo();
 /// doc.redo();
 /// RebuildReport report = doc.regenerate(kernel);
+/// // After a change, only the changed steps and the steps after them that use them build again.
+/// report = doc.regenerate(kernel, nullptr, &report);
 /// @endcode
 class Document {
 public:
@@ -264,10 +278,26 @@ public:
     ///
     /// Suppressed features are skipped. A feature whose input has no shape is
     /// Blocked and never reaches the kernel. The document itself is not changed.
+    ///
+    /// Given the previous rebuild of this document, a step that hasn't changed
+    /// since (see revision()), and whose inputs were all reused too, keeps its
+    /// previous result instead of being built again (see RebuildReport::reused()).
+    /// Its formula warnings are always worked out again. The result is the same
+    /// as a full rebuild's: kernel operations are deterministic.
     /// @param kernel The geometry kernel to build with.
     /// @param solver The sketch solver for Sketch steps. Without one, Sketch steps fail.
+    /// @param previous The last rebuild of this document, or nullptr to build everything.
+    ///     A rebuild with another kernel, solver or length unit builds everything.
     /// @return One result per feature, plus the finished bodies.
-    RebuildReport regenerate(kernel::IKernel& kernel, sketch::ISketchSolver* solver = nullptr) const;
+    RebuildReport regenerate(kernel::IKernel& kernel, sketch::ISketchSolver* solver = nullptr,
+                             const RebuildReport* previous = nullptr) const;
+
+    /// Says which version of a step this is. The number changes every time a
+    /// command could have changed the step, and is never used again for another
+    /// version of any step, in any document.
+    /// @param id The step.
+    /// @return Its revision, or 0 if it isn't in the document.
+    std::uint64_t revision(const FeatureId& id) const;
 
 private:
     friend class DocumentEditor;
@@ -284,6 +314,8 @@ private:
     DocKind kind_;
     std::string name_;
     std::vector<std::unique_ptr<Feature>> features_;
+    std::map<FeatureId, std::uint64_t> revisions_;  // see revision(); set by DocumentEditor
+    void touch(const FeatureId& id);               // gives a step a new revision
     LengthUnit lengthUnit_ = LengthUnit::Millimeter;  // what lengths are shown in
     std::vector<Material> materials_;                 // the design's own materials
     ParameterTable parameters_;                       // named values like wall = 3 mm

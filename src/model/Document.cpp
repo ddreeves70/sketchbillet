@@ -2,6 +2,7 @@
 #include "sb/model/ConstructionPlane.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <limits>
 #include <set>
@@ -15,15 +16,29 @@ namespace sb::model {
 // DocumentEditor
 // ---------------------------------------------------------------------------
 
+namespace {
+
+// Revisions count up across every document, so a number never stands for two
+// versions of a step, even in two designs open at once.
+std::atomic<std::uint64_t> lastRevision{0};
+
+}  // namespace
+
+// Anything that hands out a step to change gives it a new revision, so the next
+// rebuild builds it again (see Document::regenerate).
 Feature* DocumentEditor::find(const FeatureId& id) {
     for (auto& f : doc_.features_) {
-        if (f->id() == id) return f.get();
+        if (f->id() == id) {
+            doc_.touch(id);
+            return f.get();
+        }
     }
     return nullptr;
 }
 
 void DocumentEditor::insert(std::size_t index, std::unique_ptr<Feature> feature) {
     index = std::min(index, doc_.features_.size());
+    doc_.touch(feature->id());
     doc_.features_.insert(doc_.features_.begin() + static_cast<std::ptrdiff_t>(index), std::move(feature));
 }
 
@@ -61,6 +76,7 @@ void DocumentEditor::setMarker(std::size_t index) {
 std::unique_ptr<Feature> DocumentEditor::replace(std::unique_ptr<Feature> f) {
     for (auto& slot : doc_.features_) {
         if (slot->id() == f->id()) {
+            doc_.touch(f->id());
             std::swap(slot, f);
             return f;  // now holds the old feature
         }
@@ -109,6 +125,16 @@ bool RebuildReport::ok() const {
 // ---------------------------------------------------------------------------
 // Document
 // ---------------------------------------------------------------------------
+
+void Document::touch(const FeatureId& id) {
+    revisions_[id] = ++lastRevision;
+}
+
+std::uint64_t Document::revision(const FeatureId& id) const {
+    if (!find(id)) return 0;
+    auto it = revisions_.find(id);
+    return it == revisions_.end() ? 0 : it->second;
+}
 
 Document::Document(DocKind kind, std::string name) : Document(DocId::generate(), kind, std::move(name)) {}
 
@@ -360,11 +386,52 @@ SketchWhere sketchAxes(const SketchFeature& step, const RebuildReport& report) {
 
 }  // namespace
 
-RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolver* solver) const {
+RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolver* solver,
+                                   const RebuildReport* previous) const {
     RebuildReport report;
+    report.kernel_ = &kernel;
+    report.solver_ = solver;
+    report.unit_ = lengthUnit_;
     std::set<FeatureId> usedAsInput;
     const ParameterValues values = parameters_.evaluate();  // before any step, as the design says
     const std::size_t builtCount = markerIndex();
+
+    // The previous rebuild is only any use if it was made the same way.
+    if (previous &&
+        (previous->kernel_ != &kernel || previous->solver_ != solver || previous->unit_ != lengthUnit_))
+        previous = nullptr;
+    std::set<FeatureId> reused;
+    // A step keeps its last result if it hasn't changed since, every step it uses
+    // kept theirs, and it got as far as the kernel or the solver last time.
+    auto lastResult = [&](const Feature& f) -> const FeatureResult* {
+        if (!previous) return nullptr;
+        auto rev = previous->revisions_.find(f.id());
+        if (rev == previous->revisions_.end() || rev->second != revision(f.id())) return nullptr;
+        const auto* last = previous->result(f.id());
+        if (!last || (last->status != FeatureStatus::Ok && last->status != FeatureStatus::Failed)) return nullptr;
+        for (const auto& dep : f.dependencies())
+            if (!reused.count(dep)) return nullptr;
+        return last;
+    };
+    // A sketch's dimensions whose formulas can't be worked out keep the number
+    // they last had, and say why.
+    auto dimensionIssues = [&](const SketchFeature& step) {
+        Diagnostics out;
+        for (const auto& c : step.sketch().constraints) {
+            if (c.expression.empty() || !sketch::isDimension(c.kind)) continue;
+            const std::string what = c.name + " in " + step.name();
+            auto worked = evalDimension(c.kind, c.expression, values, what);
+            if (worked.ok()) continue;
+            out.push_back({"dimension.formula",
+                           Severity::Warning,
+                           worked.issues.front().message + " It keeps its last value, " +
+                               (c.kind == sketch::ConstraintKind::Angle ? quantityText({c.value, kAngle}, lengthUnit_)
+                                                                        : lengthText(c.value, lengthUnit_)) +
+                               ".",
+                           {}});
+        }
+        return out;
+    };
 
     for (std::size_t i = 0; i < features_.size(); ++i) {
         const auto& f = features_[i];
@@ -444,9 +511,23 @@ RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolve
                                              ".",
                                          {}});
             }
+            std::optional<std::size_t> ownIssues;  // issues before the formula warnings, if not all of them
             if (blocker) {
                 r.status = FeatureStatus::Blocked;
                 r.issues.push_back({"feature.blocked", Severity::Error, *blocker, {}});
+                ownIssues = r.issues.size();
+            } else if (const auto* last = lastResult(*f)) {
+                // Unchanged: the last result, without its formula warnings, which
+                // are worked out again below (a parameter may have changed).
+                r = *last;
+                r.issues.resize(r.issues.size() - previous->formulaIssues_.at(f->id()));
+                ownIssues = r.issues.size();
+                if (f->type() == FeatureType::Sketch) {
+                    const auto dims = dimensionIssues(static_cast<const SketchFeature&>(*f));
+                    r.issues.insert(r.issues.end(), dims.begin(), dims.end());
+                }
+                reused.insert(f->id());
+                report.reused_.push_back(f->id());
             } else if (f->type() == FeatureType::Plane) {
                 // Planes are worked out, not built: a plane, no shape, and not a body.
                 Diagnostic why;
@@ -474,23 +555,9 @@ RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolve
                         solver->solve(static_cast<const SketchFeature&>(*f).sketch()));
                     r.status = solved->ok() ? FeatureStatus::Ok : FeatureStatus::Failed;
                     r.issues = solved->issues;
-                    // A dimension whose formula can't be worked out keeps the
-                    // number it last had, and says why.
-                    const auto& step = static_cast<const SketchFeature&>(*f);
-                    for (const auto& c : step.sketch().constraints) {
-                        if (c.expression.empty() || !sketch::isDimension(c.kind)) continue;
-                        const std::string what = c.name + " in " + step.name();
-                        auto worked = evalDimension(c.kind, c.expression, values, what);
-                        if (worked.ok()) continue;
-                        r.issues.push_back({"dimension.formula",
-                                            Severity::Warning,
-                                            worked.issues.front().message + " It keeps its last value, " +
-                                                (c.kind == sketch::ConstraintKind::Angle
-                                                     ? quantityText({c.value, kAngle}, lengthUnit_)
-                                                     : lengthText(c.value, lengthUnit_)) +
-                                                ".",
-                                            {}});
-                    }
+                    ownIssues = r.issues.size();
+                    const auto dims = dimensionIssues(static_cast<const SketchFeature&>(*f));
+                    r.issues.insert(r.issues.end(), dims.begin(), dims.end());
                     r.sketch = std::move(solved);
                     r.plane = *where.axes;
                 }
@@ -504,8 +571,11 @@ RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolve
                     r.tools = std::move(built.tools);
                 }
             }
+            const std::size_t own = ownIssues.value_or(r.issues.size());
             r.issues.insert(r.issues.end(), formulaIssues.begin(), formulaIssues.end());
+            report.formulaIssues_[f->id()] = r.issues.size() - own;
         }
+        report.revisions_[f->id()] = revision(f->id());
         report.order_.push_back(f->id());
         report.results_.emplace(f->id(), std::move(r));
     }

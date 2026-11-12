@@ -131,7 +131,8 @@ void DocumentList::changed(Entry& e, ChangeKind kind, std::string label) {
 
 void DocumentList::rebuild(Entry& e) {
     if (!kernel_) return;
-    e.rebuild = e.doc->regenerate(*kernel_, solver_);
+    // Only the steps that changed, and the steps that use them, build again.
+    e.rebuild = e.doc->regenerate(*kernel_, solver_, e.rebuild ? &*e.rebuild : nullptr);
     bus_.publish(RebuildFinished{e.doc->id(), e.rebuild->ok()});
 }
 

@@ -138,7 +138,10 @@ class PluginContext;
 /// model::MoveFeatureCommand); and model::Feature::replaceInputs(). A Feature
 /// subclass with inputs now overrides the protected model::Feature::remap()
 /// instead of remapInputs(), which is no longer virtual.
-inline constexpr int kPluginApiVersion = 46;
+/// Version 47 added incremental rebuilds: model::Document::regenerate() takes the
+/// previous rebuild, model::Document::revision(), and
+/// model::RebuildReport::reused().
+inline constexpr int kPluginApiVersion = 47;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.
