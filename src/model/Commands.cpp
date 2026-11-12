@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <limits>
 #include <map>
 #include <numbers>
 #include <optional>
@@ -54,6 +55,21 @@ Diagnostics checkInputs(const Document& doc, const Feature& f, std::size_t index
     return {};
 }
 
+// The steps whose bodies a step uses: not its sketches, nor the faces and planes it
+// only sits on. Sketches and planes use no bodies.
+std::vector<FeatureId> bodyInputs(const Feature& f) {
+    if (f.type() == FeatureType::Sketch || f.type() == FeatureType::Plane) return {};
+    auto out = f.dependencies();
+    auto skip = f.sketchInputs();
+    const auto refs = f.referenceInputs();
+    skip.insert(skip.end(), refs.begin(), refs.end());
+    out.erase(std::remove_if(
+                  out.begin(), out.end(),
+                  [&](const FeatureId& id) { return std::find(skip.begin(), skip.end(), id) != skip.end(); }),
+              out.end());
+    return out;
+}
+
 bool nameTaken(const Document& doc, const std::string& name, const FeatureId& except) {
     for (std::size_t i = 0; i < doc.featureCount(); ++i) {
         const auto& f = doc.featureAt(i);
@@ -83,15 +99,39 @@ Diagnostics AddFeatureCommand::apply(DocumentEditor& editor) {
         return {error("feature.name_taken",
                       "Another step is already called " + name_ + ". Pick a different name.")};
     }
-    const std::size_t at = std::min(index_.value_or(doc.featureCount()), doc.featureCount());
+    const std::size_t at = index_ ? std::min(*index_, doc.featureCount()) : doc.markerIndex();
     if (auto issues = checkInputs(doc, *pending_, at); !issues.empty()) return issues;
 
     insertedAt_ = at;
-    editor.insert(at, std::move(pending_));
+    rewired_.clear();
+    const bool rolledBack = !index_ && doc.rolledBack();
+    const auto inputs = bodyInputs(*pending_);
+    if (index_) {
+        editor.insert(at, std::move(pending_));
+    } else {
+        editor.insertAtMarker(std::move(pending_));
+    }
+    if (!rolledBack || inputs.empty()) return {};
+
+    // Put in before later steps: those that used the same bodies use this step instead.
+    std::map<FeatureId, FeatureId> map;
+    for (const auto& input : inputs) map[input] = id_;
+    for (std::size_t i = at + 1; i < doc.featureCount(); ++i) {
+        const Feature& later = doc.featureAt(i);
+        const auto uses = bodyInputs(later);
+        const bool usesOne =
+            std::any_of(uses.begin(), uses.end(), [&](const FeatureId& u) { return map.count(u); });
+        if (!usesOne) continue;
+        auto copy = later.clone();
+        copy->replaceInputs(map);
+        rewired_.push_back(editor.replace(std::move(copy)));
+    }
     return {};
 }
 
 void AddFeatureCommand::revert(DocumentEditor& editor) {
+    for (auto it = rewired_.rbegin(); it != rewired_.rend(); ++it) editor.replace(std::move(*it));
+    rewired_.clear();
     pending_ = editor.remove(id_);
 }
 
@@ -527,13 +567,13 @@ Diagnostics AddFeaturesCommand::apply(DocumentEditor& editor) {
     for (auto& f : pending_) {
         if (f->name().empty() || nameTaken(doc, f->name(), f->id()))
             f->setName(doc.uniqueName(nameBase(f->name())));
-        if (auto issues = checkInputs(doc, *f, doc.featureCount()); !issues.empty()) {
+        if (auto issues = checkInputs(doc, *f, doc.markerIndex()); !issues.empty()) {
             // Put everything back: the design must be unchanged.
             for (std::size_t i = added; i-- > 0;) pending_[i] = editor.remove(ids_[i]);
             revertMaterials(editor);
             return issues;
         }
-        editor.insert(doc.featureCount(), std::move(f));
+        editor.insertAtMarker(std::move(f));
         ++added;
     }
     return {};
@@ -1407,11 +1447,11 @@ Diagnostics SlideBodyCommand::apply(DocumentEditor& editor) {
                         : f.type() == FeatureType::Move     ? "offset"
                                                             : nullptr;
     if (!start) {
-        // Any other body: a new Move step at the end slides it.
+        // Any other body: a new Move step at the marker (the end) slides it.
         kernel::Motion motion;
         motion.offset = by_;
         auto move = std::make_unique<MoveFeature>(moveId_, doc.uniqueName("Move"), step_, motion);
-        editor.insert(doc.featureCount(), std::move(move));
+        editor.insertAtMarker(std::move(move));
         added_ = true;
         return {};
     }
@@ -1444,6 +1484,128 @@ bool SlideBodyCommand::mergeWith(const Command& next) {
     if (slide->step_ != step_ && !(added_ && slide->step_ == moveId_)) return false;
     by_ = {by_.x + slide->by_.x, by_.y + slide->by_.y, by_.z + slide->by_.z};
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// RollbackCommand
+// ---------------------------------------------------------------------------
+
+RollbackCommand::RollbackCommand(std::size_t index) : index_(index) {}
+
+std::string RollbackCommand::label() const {
+    return label_;
+}
+
+Diagnostics RollbackCommand::apply(DocumentEditor& editor) {
+    const auto& doc = editor.document();
+    const std::size_t to = std::min(index_, doc.featureCount());
+    const std::size_t from = doc.markerIndex();
+    if (to == from) {
+        return {error("timeline.same", to == doc.featureCount() ? "The marker is already at the end."
+                                                                : "The marker is already there.")};
+    }
+    const std::string way = to < from ? "Roll back" : "Roll forward";
+    if (to == doc.featureCount()) {
+        label_ = way + " to the end";
+    } else if (to == 0) {
+        label_ = way + " to the start";
+    } else {
+        label_ = way + " to after " + doc.featureAt(to - 1).name();
+    }
+    editor.setMarker(to);
+    return {};
+}
+
+void RollbackCommand::revert(DocumentEditor& editor) {
+    (void)editor;  // Document::undo() puts the marker back
+}
+
+// ---------------------------------------------------------------------------
+// MoveFeatureCommand
+// ---------------------------------------------------------------------------
+
+MoveFeatureCommand::MoveFeatureCommand(FeatureId step, std::size_t to) : step_(step), to_(to) {}
+
+std::string MoveFeatureCommand::label() const {
+    return "Move " + name_ + " in the timeline";
+}
+
+Diagnostics MoveFeatureCommand::apply(DocumentEditor& editor) {
+    const auto& doc = editor.document();
+    const auto at = doc.indexOf(step_);
+    if (!at) return {error("feature.not_found", "That step isn't in the design anymore.")};
+    const Feature& f = doc.featureAt(*at);
+    name_ = f.name();
+    const std::size_t to = std::min(to_, doc.featureCount() - 1);
+    if (to == *at) return {error("timeline.same", name_ + " is already there.")};
+
+    // The order afterwards.
+    std::vector<FeatureId> order;
+    for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+        if (i != *at) order.push_back(doc.featureAt(i).id());
+    }
+    order.insert(order.begin() + static_cast<std::ptrdiff_t>(to), step_);
+    const auto place = [&](const FeatureId& id) {
+        return static_cast<std::size_t>(std::find(order.begin(), order.end(), id) - order.begin());
+    };
+    for (const auto& input : f.dependencies()) {
+        if (place(input) > to) {
+            const auto& used = *doc.find(input);
+            return {error("timeline.order", name_ + " uses " + used.name() + ", so it has to come after " +
+                                                used.name() + ". Put it somewhere after " + used.name() +
+                                                ".")};
+        }
+    }
+    for (const auto& user : doc.dependents(step_)) {
+        if (place(user) < to) {
+            const auto& later = *doc.find(user);
+            return {error("timeline.order", later.name() + " uses " + name_ + ", so " + name_ +
+                                                " has to come before " + later.name() +
+                                                ". Put it somewhere before " + later.name() + ".")};
+        }
+    }
+
+    from_ = *at;
+    folders_ = editor.folders();
+    auto moved = editor.remove(step_);  // the marker stays after the same step
+    editor.insert(to, std::move(moved));
+
+    // Folders: it leaves its own unless it's still next to it, and joins one it's put inside.
+    const auto prev = to > 0 ? std::optional<FeatureId>(order[to - 1]) : std::nullopt;
+    const auto next = to + 1 < order.size() ? std::optional<FeatureId>(order[to + 1]) : std::nullopt;
+    auto& folders = editor.folders();
+    const auto in = [](const Folder& folder, const std::optional<FeatureId>& id) {
+        return id && std::find(folder.steps.begin(), folder.steps.end(), *id) != folder.steps.end();
+    };
+    Folder* own = nullptr;
+    for (auto& folder : folders) {
+        auto it = std::find(folder.steps.begin(), folder.steps.end(), step_);
+        if (it != folder.steps.end()) {
+            folder.steps.erase(it);
+            own = &folder;
+        }
+    }
+    Folder* home = nullptr;
+    for (auto& folder : folders) {
+        if (in(folder, prev) && in(folder, next)) home = &folder;
+    }
+    if (!home && own && (own->steps.empty() || in(*own, prev) || in(*own, next))) home = own;
+    if (home) home->steps.push_back(step_);
+    // Each folder's steps in design order (deleted steps, which it hides, at the end).
+    constexpr auto kLast = std::numeric_limits<std::size_t>::max();
+    for (auto& folder : folders) {
+        std::stable_sort(folder.steps.begin(), folder.steps.end(),
+                         [&](const FeatureId& a, const FeatureId& b) {
+                             return doc.indexOf(a).value_or(kLast) < doc.indexOf(b).value_or(kLast);
+                         });
+    }
+    return {};
+}
+
+void MoveFeatureCommand::revert(DocumentEditor& editor) {
+    auto moved = editor.remove(step_);
+    editor.insert(from_, std::move(moved));
+    editor.folders() = folders_;
 }
 
 }  // namespace sb::model

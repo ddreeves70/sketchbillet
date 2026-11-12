@@ -89,6 +89,7 @@ if(TARGET sb_view)
   add_subdirectory(plugins/sketcher)     # sb.sketcher (Qt)
   add_subdirectory(plugins/movehandles)  # sb.movehandles
   add_subdirectory(plugins/parameters)   # sb.parameters (Qt)
+  add_subdirectory(plugins/timeline)     # sb.timeline (Qt)
 endif()
 if(SB_BUILD_EXAMPLE_PLUGINS)
   add_subdirectory(docs/plugin-guide/hello)

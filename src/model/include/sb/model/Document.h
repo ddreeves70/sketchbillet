@@ -126,6 +126,27 @@ public:
     /// @return The ids of the features that use it, in document order.
     std::vector<FeatureId> dependents(const FeatureId& id) const;
 
+    /// Says how many steps come before the rollback marker: the steps that are
+    /// built. The steps after it are kept but not built, and a new step goes in
+    /// at the marker.
+    /// @return A number from 0 (rolled back to before the first step) to
+    ///     featureCount() (at the end: not rolled back).
+    std::size_t markerIndex() const;
+
+    /// Says whether the rollback marker is before the end.
+    /// @return True if some steps are after the marker.
+    bool rolledBack() const { return markerIndex() < features_.size(); }
+
+    /// Says whether a step is after the rollback marker, so it isn't built.
+    /// @param id The step.
+    /// @return True if it's after the marker.
+    bool afterMarker(const FeatureId& id) const;
+
+    /// Gives the step the rollback marker is just after, as it's saved.
+    /// @return Nothing when it's at the end; a nil id when it's before the first
+    ///     step; otherwise the step.
+    std::optional<FeatureId> marker() const;
+
     /// Gives the unit the design shows its lengths in (its Document settings).
     /// Only what the student sees and types changes: every length in the design
     /// is still in mm. Change it with SetUnitsCommand.
@@ -253,7 +274,8 @@ private:
 
     struct Entry {
         std::unique_ptr<Command> command;
-        std::uint64_t serial;  // identifies the document state this entry produces
+        std::uint64_t serial;                   // identifies the document state this entry produces
+        std::optional<FeatureId> markerBefore;  // where the marker was before it: undo puts it back
     };
 
     std::uint64_t currentSerial() const { return done_.empty() ? 0 : done_.back().serial; }
@@ -268,6 +290,10 @@ private:
     std::vector<Folder> folders_;  // as the commands left them; folders() hides deleted steps
     std::vector<Folder> shown_;    // folders(), kept so findFolder() can hand out pointers
     void updateFolders();          // recomputes shown_ after every change
+    // The rollback marker: nothing at the end, a nil id before the first step, or
+    // the step it's just after. Undo puts it back where it was before each command.
+    std::optional<FeatureId> marker_;
+    void tidyMarker();  // a marker after the last step is at the end
 
     std::vector<Entry> done_;
     std::vector<Entry> undone_;

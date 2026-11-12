@@ -220,6 +220,10 @@ private:
                         case model::FeatureStatus::Suppressed:
                             status = tr("off");
                             break;
+                        case model::FeatureStatus::RolledBack:
+                            status = tr("rolled back");
+                            tip = tr("After the rollback marker: not built. Roll forward to build it.\n");
+                            break;
                     }
                     for (const auto& d : r->issues)
                         tip += QString::fromStdString(d.message) + QLatin1Char('\n');
@@ -263,8 +267,10 @@ private:
     void setStatus(QTreeWidgetItem* item, const QString& status) {
         item->setText(2, status);
         if (status != tr("ok")) {
-            const QColor c = status == tr("off") ? palette().color(QPalette::Disabled, QPalette::Text)
-                                                 : QColor(196, 43, 28);
+            // Grey for steps that are off or rolled back: nothing's wrong with them.
+            const bool quiet = status == tr("off") || status == tr("rolled back");
+            const QColor c =
+                quiet ? palette().color(QPalette::Disabled, QPalette::Text) : QColor(196, 43, 28);
             for (int col = 0; col < 3; ++col) item->setForeground(col, c);
         }
     }

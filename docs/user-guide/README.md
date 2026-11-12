@@ -29,6 +29,7 @@ works in either.
 | Shell: hollow a body to thin walls, leaving faces open | Walls of different thicknesses |
 | Name, rename and delete steps; undo and redo | |
 | Move and turn bodies; copy, paste and duplicate steps; turn steps off; folders | |
+| The timeline: roll back to see the part as it was, add steps in the middle, drag steps to reorder them | Folders shown in the timeline bar |
 | The desktop app: 3D viewer with 1, 2 or 4 panes, feature tree, Properties, layouts | |
 | Materials: mass, weight, material cost and color | |
 | Parameters: named values like `wall = 3 mm`, with formulas and units, used by sketch dimensions and steps' numbers, with a Parameters panel in the app; formulas typed straight into Properties and the Sketch panel | Formulas for a pattern's count, typed in the app |
@@ -57,9 +58,10 @@ works in either.
 17. [Shell](shell.md): hollow a body out to thin walls, for boxes and enclosures.
 18. [Materials](materials.md): what a body is made of, its mass, weight and cost.
 19. [Parameters](parameters.md): named values like `wall = 3 mm`, and formulas that use them.
-20. [Files](files.md): saving, opening, and exporting for 3D printing.
-21. [Plugins](plugins.md): adding features to SketchBillet.
-22. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
+20. [The timeline](timeline.md): roll back, add steps in the middle, change the order.
+21. [Files](files.md): saving, opening, and exporting for 3D printing.
+22. [Plugins](plugins.md): adding features to SketchBillet.
+23. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
 
 ## Other guides
 

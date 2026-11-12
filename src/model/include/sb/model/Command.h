@@ -45,6 +45,17 @@ public:
     /// @return The removed feature (the caller now owns it), or nullptr if not found.
     std::unique_ptr<Feature> remove(const FeatureId& id);
 
+    /// Puts a new feature in at the rollback marker, and moves the marker past it,
+    /// so it's built and the steps after the marker still aren't. Not rolled back,
+    /// it goes at the end.
+    /// @param feature The feature to add.
+    /// @return Where it went.
+    std::size_t insertAtMarker(std::unique_ptr<Feature> feature);
+
+    /// Moves the rollback marker.
+    /// @param index How many steps come before it; featureCount() or more puts it at the end.
+    void setMarker(std::size_t index);
+
     /// Swaps a feature for another with the same id, at the same position.
     /// @param f The new version. Its id must already be in the document.
     /// @return The old version, or nullptr if no feature has that id.

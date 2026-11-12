@@ -207,11 +207,11 @@ std::optional<PlaneAxes> faceAxes(const kernel::ElementInfo& face) {
     return PlaneAxes{clean({z.x * d, z.y * d, z.z * d}), clean(x), clean(y)};
 }
 
-void SketchFeature::remapInputs(const std::map<FeatureId, FeatureId>& map) {
+void SketchFeature::remap(const std::map<FeatureId, FeatureId>& map, bool renameRefs) {
     if (auto it = map.find(onPlane_); it != map.end()) onPlane_ = it->second;
     if (!face_) return;
     if (auto it = map.find(face_->body); it != map.end()) face_->body = it->second;
-    remapRef(face_->face, map);
+    if (renameRefs) remapRef(face_->face, map);
 }
 
 }  // namespace sb::model
@@ -651,11 +651,12 @@ bool EdgeFeature::setNumber(std::string_view key, double value) {
     return true;
 }
 
-void EdgeFeature::remapInputs(const std::map<FeatureId, FeatureId>& map) {
+void EdgeFeature::remap(const std::map<FeatureId, FeatureId>& map, bool renameRefs) {
     if (auto it = map.find(body_); it != map.end()) body_ = it->second;
     // Edge names hold the ids of the steps that made their faces: a copy's edges
     // are on the copied steps' faces.
-    for (auto& ref : edges_) remapRef(ref, map);
+    if (renameRefs)
+        for (auto& ref : edges_) remapRef(ref, map);
 }
 
 Built EdgeFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) const {
@@ -840,11 +841,11 @@ std::vector<FeatureId> HoleFeature::sketchInputs() const {
     return {};
 }
 
-void HoleFeature::remapInputs(const std::map<FeatureId, FeatureId>& map) {
+void HoleFeature::remap(const std::map<FeatureId, FeatureId>& map, bool renameRefs) {
     if (auto it = map.find(body_); it != map.end()) body_ = it->second;
     if (auto it = map.find(placement_.sketch); it != map.end()) placement_.sketch = it->second;
-    remapRef(placement_.edgeA, map);
-    remapRef(placement_.edgeB, map);
+    if (renameRefs) remapRef(placement_.edgeA, map);
+    if (renameRefs) remapRef(placement_.edgeB, map);
 }
 
 namespace {
@@ -1194,7 +1195,7 @@ std::vector<FeatureId> PatternFeature::referenceInputs() const {
     return out;
 }
 
-void PatternFeature::remapInputs(const std::map<FeatureId, FeatureId>& map) {
+void PatternFeature::remap(const std::map<FeatureId, FeatureId>& map, bool /*renameRefs*/) {
     if (auto it = map.find(body_); it != map.end()) body_ = it->second;
     for (auto& s : steps_)
         if (auto it = map.find(s); it != map.end()) s = it->second;
@@ -1378,11 +1379,11 @@ std::vector<FeatureId> MirrorFeature::referenceInputs() const {
     return out;
 }
 
-void MirrorFeature::remapInputs(const std::map<FeatureId, FeatureId>& map) {
+void MirrorFeature::remap(const std::map<FeatureId, FeatureId>& map, bool renameRefs) {
     if (auto it = map.find(body_); it != map.end()) body_ = it->second;
     for (auto& s : steps_)
         if (auto it = map.find(s); it != map.end()) s = it->second;
-    remapRef(plane_.face, map);
+    if (renameRefs) remapRef(plane_.face, map);
 }
 
 Built MirrorFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) const {
@@ -1463,11 +1464,11 @@ std::vector<FeatureId> PlaneFeature::dependencies() const {
     return {};
 }
 
-void PlaneFeature::remapInputs(const std::map<FeatureId, FeatureId>& map) {
+void PlaneFeature::remap(const std::map<FeatureId, FeatureId>& map, bool renameRefs) {
     if (auto it = map.find(from_.face.body); it != map.end()) from_.face.body = it->second;
     if (auto it = map.find(from_.plane); it != map.end()) from_.plane = it->second;
-    remapRef(from_.face.face, map);
-    remapRef(hinge_.edge, map);
+    if (renameRefs) remapRef(from_.face.face, map);
+    if (renameRefs) remapRef(hinge_.edge, map);
 }
 
 Built PlaneFeature::build(kernel::IKernel&, const ResultLookup&) const {
@@ -1594,9 +1595,10 @@ bool ShellFeature::setNumber(std::string_view key, double value) {
     return true;
 }
 
-void ShellFeature::remapInputs(const std::map<FeatureId, FeatureId>& map) {
+void ShellFeature::remap(const std::map<FeatureId, FeatureId>& map, bool renameRefs) {
     if (auto it = map.find(body_); it != map.end()) body_ = it->second;
-    for (auto& f : faces_) remapRef(f, map);
+    if (renameRefs)
+        for (auto& f : faces_) remapRef(f, map);
 }
 
 Built ShellFeature::build(kernel::IKernel& kernel, const ResultLookup& earlier) const {

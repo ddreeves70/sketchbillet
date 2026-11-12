@@ -60,6 +60,8 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command sketch.set_value
            command sketch.set_weight
            command sketch.trim
+           command timeline.move
+           command timeline.rollback
            action  Create > Box  (feature.add_box)
            action  Create > Cylinder  (feature.add_cylinder)
            action  Combine > Union  (feature.add_boolean)

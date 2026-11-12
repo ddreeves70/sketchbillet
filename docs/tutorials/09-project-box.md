@@ -8,7 +8,8 @@ solid at first; a **Shell** hollows it out.
 ![The finished project box, with its lid beside it, upside down, ready to print](images/box-done.png)
 
 **You'll learn:** shelling a body, leaving one face open or two, rounding
-corners before shelling, cutting a slot in a wall. **Time:** about 20 minutes.
+corners before shelling, cutting a slot in a wall, and going back in time with
+the timeline to add a step before the shell. **Time:** about 25 minutes.
 
 **Before you start:** do [Tutorial 8](08-phone-stand.md) first. [Shell](../user-guide/shell.md)
 in the user's guide has more about every step.
@@ -246,19 +247,108 @@ its 2 mm walls.
 The lid's lip would no longer fit the smaller opening, so keep 2 mm for this
 lid, or make the lip 2 mm smaller too.
 
-## Step 7: Export it for printing
+## Step 7: Bevel the bottom, back in time
+
+The box's bottom edges are sharp, and the first layer of a print squashes out a
+little (an "elephant's foot"). A 3 mm bevel, at 45°, fixes both, and prints with
+no supports. But it has to go on the solid case, **before** the shell, so the
+inside follows it.
+
+Roll back to just after Corners. The steps after it are kept, but not built:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open box.sb --save box.sb timeline.rollback after=Corners
+box: 11 steps
+  Case         ok  volume 144000.00 mm^3
+  Corners      ok  volume 143356.19 mm^3  mass 177.76 g (PLA)
+  -- rolled back to here: the steps below aren't built --
+  Hollow       rolled back
+  SlotTool     rolled back
+  Slot         rolled back
+  Lid          rolled back
+  LidCorners   rolled back
+  Lip          rolled back
+  LipCorners   rolled back
+  Ring         rolled back
+  LidDone      rolled back
+wrote box.sb
+```
+
+In the desktop app, drag the blue marker in the [timeline](../user-guide/timeline.md)
+bar to just after Corners instead. Corners' bottom edges are edges 1 to 8 (see
+them with `sketchbillet_cli open box.sb --edges Corners`). Bevel them: the new
+step goes in at the marker, and Hollow now hollows the bevelled case:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open box.sb --save box.sb feature.add_chamfer body=Corners edges=1,2,3,4,5,6,7,8 distance=3 name=Bevel
+box: 12 steps
+  Case         ok  volume 144000.00 mm^3
+  Corners      ok  volume 143356.19 mm^3
+  Bevel        ok  volume 142163.10 mm^3  mass 176.28 g (PLA)
+  -- rolled back to here: the steps below aren't built --
+  Hollow       rolled back
+  SlotTool     rolled back
+  Slot         rolled back
+  Lid          rolled back
+  LidCorners   rolled back
+  Lip          rolled back
+  LipCorners   rolled back
+  Ring         rolled back
+  LidDone      rolled back
+wrote box.sb
+```
+
+In the timeline, Bevel sits just after Corners, with the marker after it, and the
+steps that aren't built yet are faded:
+
+![The timeline bar: Case, Corners and the new Bevel, then the marker, then the faded steps](images/box-bevel-timeline.png)
+
+Roll forward to the end, and every step is built again on top:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open box.sb --save box.sb timeline.rollback to=end
+box: 12 steps
+  Case         ok  volume 144000.00 mm^3
+  Corners      ok  volume 143356.19 mm^3
+  Bevel        ok  volume 142163.10 mm^3
+  Hollow       ok  volume 23637.70 mm^3
+  SlotTool     ok  volume 360.00 mm^3
+  Slot         ok  volume 23493.70 mm^3  mass 29.13 g (PLA)
+  Lid          ok  volume 9600.00 mm^3
+  LidCorners   ok  volume 9557.08 mm^3
+  Lip          ok  volume 16813.44 mm^3
+  LipCorners   ok  volume 16786.52 mm^3
+  Ring         ok  volume 1517.28 mm^3
+  LidDone      ok  volume 11074.36 mm^3  mass 13.73 g (PLA)
+wrote box.sb
+```
+
+Check it by hand. Each bevel is a triangle of 3 × 3 ÷ 2 = 4.5 mm² along the bottom.
+Its middle runs 240 mm along the straight edges and 4 × (π/2 × 4 mm) = 25.13 mm
+round the corners, so it takes 4.5 × 265.13 = 1193.09 mm³ off: 142163.10 mm³.
+Inside, the bevel is smaller, 1.83 mm, because the walls are 2 mm thick all
+round. The slot still goes through: 23637.70 − 144 = 23493.70 mm³.
+
+A bevel or rounding has to be bigger than the wall is thick: a 1 mm bevel under
+2 mm walls would vanish inside, and the shell can't be made.
+
+## Step 8: Export it for printing
 
 Export the box and the lid as two files:
 
 <!-- cli-example -->
 ```console
 $ sketchbillet_cli open box.sb --export box.stl --step Slot
-box: 11 steps
+box: 12 steps
   Case         ok  volume 144000.00 mm^3
   Corners      ok  volume 143356.19 mm^3
-  Hollow       ok  volume 24404.51 mm^3
+  Bevel        ok  volume 142163.10 mm^3
+  Hollow       ok  volume 23637.70 mm^3
   SlotTool     ok  volume 360.00 mm^3
-  Slot         ok  volume 24260.51 mm^3  mass 30.08 g (PLA)
+  Slot         ok  volume 23493.70 mm^3  mass 29.13 g (PLA)
   Lid          ok  volume 9600.00 mm^3
   LidCorners   ok  volume 9557.08 mm^3
   Lip          ok  volume 16813.44 mm^3
@@ -267,12 +357,13 @@ box: 11 steps
   LidDone      ok  volume 11074.36 mm^3  mass 13.73 g (PLA)
 wrote box.stl
 $ sketchbillet_cli open box.sb --export lid.stl --step LidDone
-box: 11 steps
+box: 12 steps
   Case         ok  volume 144000.00 mm^3
   Corners      ok  volume 143356.19 mm^3
-  Hollow       ok  volume 24404.51 mm^3
+  Bevel        ok  volume 142163.10 mm^3
+  Hollow       ok  volume 23637.70 mm^3
   SlotTool     ok  volume 360.00 mm^3
-  Slot         ok  volume 24260.51 mm^3  mass 30.08 g (PLA)
+  Slot         ok  volume 23493.70 mm^3  mass 29.13 g (PLA)
   Lid          ok  volume 9600.00 mm^3
   LidCorners   ok  volume 9557.08 mm^3
   Lip          ok  volume 16813.44 mm^3
@@ -300,3 +391,5 @@ here. Neither needs supports.
 - Round corners **before** shelling, and the inside corners come out round too.
 - Shell with two faces open makes a tube or a ring.
 - Cut holes and slots after shelling.
+- Roll back with the **timeline** to add a step before others: steps after it
+  that used the same body build on the new step.

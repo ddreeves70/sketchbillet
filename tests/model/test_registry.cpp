@@ -50,7 +50,7 @@ TEST_CASE("The built-in registry lists its commands sorted by name", "[model][re
                          "sketch.constrain",     "sketch.delete",        "sketch.import_spline",
                          "sketch.reload_spline", "sketch.remove_pole",   "sketch.round_corner",
                          "sketch.set_spline",    "sketch.set_value",     "sketch.set_weight",
-                         "sketch.trim"});
+                         "sketch.trim",          "timeline.move",        "timeline.rollback"});
     for (const auto* c : cmds) {
         REQUIRE_FALSE(c->label.empty());
         REQUIRE_FALSE(c->description.empty());

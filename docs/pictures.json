@@ -188,6 +188,21 @@
       "run --open box.sb --save box.sb feature.add_fillet body=Lip edges=5,6,7,8 radius=2.8 name=LipCorners",
       "run --open box.sb --save box.sb feature.add_shell body=LipCorners faces=1,10 thickness=1.5 name=Ring",
       "run --open box.sb --save box.sb feature.add_boolean operation=union a=LidCorners b=Ring name=LidDone"
+    ],
+    "projectbox-bevel": [
+      "run --save box.sb feature.add_box size=80,60,30 name=Case",
+      "run --open box.sb --save box.sb feature.add_fillet body=Case edges=5,6,7,8 radius=5 name=Corners",
+      "run --open box.sb --save box.sb feature.add_shell body=Corners faces=10 name=Hollow",
+      "run --open box.sb --save box.sb feature.add_box corner=34,-1,8 size=12,5,6 name=SlotTool",
+      "run --open box.sb --save box.sb feature.add_boolean operation=cut a=Hollow b=SlotTool name=Slot",
+      "run --open box.sb --save box.sb feature.add_box corner=0,70,0 size=80,60,2 name=Lid",
+      "run --open box.sb --save box.sb feature.add_fillet body=Lid edges=5,6,7,8 radius=5 name=LidCorners",
+      "run --open box.sb --save box.sb feature.add_box corner=2.2,72.2,2 size=75.6,55.6,4 name=Lip",
+      "run --open box.sb --save box.sb feature.add_fillet body=Lip edges=5,6,7,8 radius=2.8 name=LipCorners",
+      "run --open box.sb --save box.sb feature.add_shell body=LipCorners faces=1,10 thickness=1.5 name=Ring",
+      "run --open box.sb --save box.sb feature.add_boolean operation=union a=LidCorners b=Ring name=LidDone",
+      "run --open box.sb --save box.sb timeline.rollback after=Corners",
+      "run --open box.sb --save box.sb feature.add_chamfer body=Corners edges=1,2,3,4,5,6,7,8 distance=3 name=Bevel"
     ]
   },
   "pictures": [
@@ -716,6 +731,13 @@
             789
           ],
           "n": 7
+        },
+        {
+          "at": [
+            520,
+            737
+          ],
+          "n": 8
         }
       ]
     },
@@ -796,7 +818,7 @@
         0,
         80,
         1280,
-        698
+        602
       ]
     },
     {
@@ -835,7 +857,7 @@
         0,
         78,
         1280,
-        700
+        604
       ]
     },
     {
@@ -853,7 +875,7 @@
         0,
         80,
         1280,
-        698
+        602
       ]
     },
     {
@@ -872,7 +894,7 @@
         0,
         80,
         1280,
-        698
+        602
       ]
     },
     {
@@ -891,7 +913,7 @@
         0,
         80,
         1280,
-        698
+        602
       ]
     },
     {
@@ -919,7 +941,7 @@
         0,
         80,
         1280,
-        698
+        602
       ]
     },
     {
@@ -989,7 +1011,7 @@
         0,
         80,
         1280,
-        698
+        602
       ]
     },
     {
@@ -1078,7 +1100,7 @@
         0,
         106,
         1280,
-        670
+        576
       ]
     },
     {
@@ -1102,7 +1124,7 @@
         300,
         140,
         980,
-        630
+        542
       ]
     },
     {
@@ -1125,7 +1147,7 @@
         300,
         140,
         980,
-        630
+        542
       ]
     },
     {
@@ -1203,7 +1225,7 @@
       },
       "crop": [
         505,
-        725,
+        631,
         270,
         50
       ]
@@ -1238,7 +1260,7 @@
         240,
         80,
         800,
-        698
+        602
       ]
     },
     {
@@ -1285,7 +1307,7 @@
       },
       "crop": [
         390,
-        300,
+        253,
         560,
         220
       ]
@@ -1308,7 +1330,7 @@
       },
       "crop": [
         570,
-        310,
+        263,
         390,
         200
       ]
@@ -1331,7 +1353,7 @@
       },
       "crop": [
         580,
-        250,
+        203,
         370,
         250
       ]
@@ -1832,7 +1854,7 @@
     {
       "out": "docs/tutorials/images/box-done.png",
       "size": "560x420",
-      "script": "projectbox",
+      "script": "projectbox-bevel",
       "show": [
         {
           "file": "box.sb",
@@ -1844,6 +1866,9 @@
           "step": "LidDone",
           "color": "green"
         }
+      ],
+      "commands": [
+        "run --open box.sb --save box.sb timeline.rollback to=end"
       ]
     },
     {
@@ -1870,6 +1895,66 @@
         198,
         380,
         330
+      ]
+    },
+    {
+      "out": "docs/user-guide/images/app-timeline.png",
+      "size": "1280x800",
+      "script": "projectbox",
+      "commands": [
+        "run --open box.sb --save box.sb timeline.rollback after=Corners"
+      ],
+      "app": {
+        "open": "box.sb",
+        "select": [
+          "Corners"
+        ],
+        "trigger": [
+          "sb.viewer.fit"
+        ]
+      }
+    },
+    {
+      "out": "docs/user-guide/images/app-timeline-bar.png",
+      "size": "1280x800",
+      "script": "projectbox",
+      "commands": [
+        "run --open box.sb --save box.sb timeline.rollback after=Corners"
+      ],
+      "app": {
+        "open": "box.sb",
+        "select": [
+          "Corners"
+        ],
+        "trigger": [
+          "sb.viewer.fit"
+        ]
+      },
+      "crop": [
+        0,
+        684,
+        700,
+        90
+      ]
+    },
+    {
+      "out": "docs/tutorials/images/box-bevel-timeline.png",
+      "size": "1280x800",
+      "script": "projectbox-bevel",
+      "app": {
+        "open": "box.sb",
+        "select": [
+          "Bevel"
+        ],
+        "trigger": [
+          "sb.viewer.fit"
+        ]
+      },
+      "crop": [
+        0,
+        684,
+        760,
+        90
       ]
     }
   ]

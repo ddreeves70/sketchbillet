@@ -31,9 +31,31 @@ std::unique_ptr<Feature> DocumentEditor::remove(const FeatureId& id) {
     auto& fs = doc_.features_;
     auto it = std::find_if(fs.begin(), fs.end(), [&](const auto& f) { return f->id() == id; });
     if (it == fs.end()) return nullptr;
+    // The marker was just after this step: it stays where it is, after the one before.
+    if (doc_.marker_ && *doc_.marker_ == id) {
+        doc_.marker_ = it == fs.begin() ? FeatureId{} : (*std::prev(it))->id();
+    }
     auto out = std::move(*it);
     fs.erase(it);
     return out;
+}
+
+std::size_t DocumentEditor::insertAtMarker(std::unique_ptr<Feature> feature) {
+    const std::size_t at = doc_.markerIndex();
+    const bool rolledBack = doc_.rolledBack();
+    const FeatureId id = feature->id();
+    insert(at, std::move(feature));
+    if (rolledBack) doc_.marker_ = id;
+    return at;
+}
+
+void DocumentEditor::setMarker(std::size_t index) {
+    const auto& fs = doc_.features_;
+    if (index >= fs.size()) {
+        doc_.marker_.reset();
+    } else {
+        doc_.marker_ = index == 0 ? FeatureId{} : fs[index - 1]->id();
+    }
 }
 
 std::unique_ptr<Feature> DocumentEditor::replace(std::unique_ptr<Feature> f) {
@@ -79,7 +101,8 @@ const kernel::ShapeHandle* RebuildReport::shapeOf(const FeatureId& id) const {
 
 bool RebuildReport::ok() const {
     return std::all_of(results_.begin(), results_.end(), [](const auto& kv) {
-        return kv.second.status == FeatureStatus::Ok || kv.second.status == FeatureStatus::Suppressed;
+        return kv.second.status == FeatureStatus::Ok || kv.second.status == FeatureStatus::Suppressed ||
+               kv.second.status == FeatureStatus::RolledBack;
     });
 }
 
@@ -114,6 +137,26 @@ std::vector<FeatureId> Document::dependents(const FeatureId& id) const {
         if (std::find(deps.begin(), deps.end(), id) != deps.end()) out.push_back(f->id());
     }
     return out;
+}
+
+std::size_t Document::markerIndex() const {
+    if (!marker_) return features_.size();
+    if (marker_->isNil()) return 0;
+    const auto at = indexOf(*marker_);
+    return at ? *at + 1 : features_.size();
+}
+
+bool Document::afterMarker(const FeatureId& id) const {
+    const auto at = indexOf(id);
+    return at && *at >= markerIndex();
+}
+
+std::optional<FeatureId> Document::marker() const {
+    return rolledBack() ? marker_ : std::nullopt;
+}
+
+void Document::tidyMarker() {
+    if (marker_ && markerIndex() >= features_.size()) marker_.reset();
 }
 
 std::string Document::uniqueName(const std::string& base) const {
@@ -186,16 +229,21 @@ Diagnostics Document::execute(std::unique_ptr<Command> command) {
     if (!command) return {{"command.missing", Severity::Error, "There was nothing to do.", {}}};
 
     DocumentEditor editor(*this);
+    const auto markerBefore = marker_;
     auto issues = command->apply(editor);
     updateFolders();
-    if (!issues.empty()) return issues;  // contract: the document is unchanged
+    if (!issues.empty()) {
+        marker_ = markerBefore;
+        return issues;  // contract: the document is unchanged
+    }
+    tidyMarker();
 
     undone_.clear();
     const std::uint64_t serial = nextSerial_++;
     if (!done_.empty() && done_.back().command->mergeWith(*command)) {
         done_.back().serial = serial;  // merged: same undo step, new state
     } else {
-        done_.push_back({std::move(command), serial});
+        done_.push_back({std::move(command), serial, markerBefore});
         if (done_.size() > undoLimit_) done_.erase(done_.begin());
     }
     return {};
@@ -205,6 +253,7 @@ bool Document::undo() {
     if (done_.empty()) return false;
     DocumentEditor editor(*this);
     done_.back().command->revert(editor);
+    marker_ = done_.back().markerBefore;
     updateFolders();
     undone_.push_back(std::move(done_.back()));
     done_.pop_back();
@@ -216,6 +265,7 @@ bool Document::redo() {
     DocumentEditor editor(*this);
     auto issues = undone_.back().command->apply(editor);
     updateFolders();
+    tidyMarker();
     if (!issues.empty()) return false;  // should not happen: it applied cleanly before
     done_.push_back(std::move(undone_.back()));
     undone_.pop_back();
@@ -314,10 +364,14 @@ RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolve
     RebuildReport report;
     std::set<FeatureId> usedAsInput;
     const ParameterValues values = parameters_.evaluate();  // before any step, as the design says
+    const std::size_t builtCount = markerIndex();
 
-    for (const auto& f : features_) {
+    for (std::size_t i = 0; i < features_.size(); ++i) {
+        const auto& f = features_[i];
         FeatureResult r;
-        if (f->suppressed()) {
+        if (i >= builtCount) {
+            r.status = FeatureStatus::RolledBack;
+        } else if (f->suppressed()) {
             r.status = FeatureStatus::Suppressed;
         } else {
             // A feature is blocked if any input has no shape (failed, blocked,

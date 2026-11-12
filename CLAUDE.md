@@ -46,7 +46,7 @@ below it.
 | Library | Purpose | May depend on |
 | --- | --- | --- |
 | `sketchbillet`, `sketchbillet_cli` | Applications (`sketchbillet` docks panels with Qt ADS, see `cmake/SbAds.cmake`) | anything below |
-| Built-in plugins (`plugins/`) | `sb.modeling`, `sb.viewoptions`, `sb.featuretree`, `sb.properties`, `sb.axes`, `sb.grid`, `sb.viewer`, `sb.sketcher`, `sb.movehandles`, `sb.parameters` | `sb_plugin`, anything below it |
+| Built-in plugins (`plugins/`) | `sb.modeling`, `sb.viewoptions`, `sb.featuretree`, `sb.properties`, `sb.axes`, `sb.grid`, `sb.viewer`, `sb.sketcher`, `sb.movehandles`, `sb.parameters`, `sb.timeline` | `sb_plugin`, anything below it |
 | `sb_view` | Qt + OCCT 3D view, and its flat fallback | `sb_kernel_occt`, `sb_kernel`, `sb_core`, Qt, OCCT |
 | `sb_ui` | Qt side of the plugin API: panels | `sb_plugin`, Qt |
 | `sb_plugin` | Plugin host, manifests, event bus, open documents | `sb_model`, `sb_kernel`, `sb_core` |

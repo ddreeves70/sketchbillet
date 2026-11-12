@@ -27,7 +27,7 @@
 // Format (schema 1), as described in docs/file-format.md:
 //
 //   manifest.json        format, schema, app version, units, document id/kind/name, file list
-//   timeline.json        feature order and suppressed flags
+//   timeline.json        feature order, suppressed flags and the rollback marker
 //   features/<id>.json   one file per feature: id, type, name, inputs, params
 //   materials.json       the design's own materials (only if it has any)
 //   folders.json         the feature tree's folders (only if it has any)
@@ -1228,7 +1228,11 @@ Diagnostics writeBytes(const Document& doc, Bytes& out) {
         {"app", std::string(version())}, {"units", {{"length", "mm"}, {"angle", "rad"}}},
         {"document", document},          {"files", files},
     };
-    entries.emplace_front("timeline.json", dump(json{{"features", timeline}}));
+    json timelineJson{{"features", timeline}};
+    // Only a rolled-back design says where the marker is, so others save exactly as before.
+    if (const auto marker = doc.marker())
+        timelineJson["rollback"] = marker->isNil() ? "start" : marker->toString();
+    entries.emplace_front("timeline.json", dump(timelineJson));
     entries.emplace_front("manifest.json", dump(manifest));
 
     auto failed = [](std::string detail) {
@@ -1471,6 +1475,21 @@ OpenResult readBytes(const Bytes& data, std::string_view displayName) {
         if (!issues.empty()) {
             return fail(damaged(displayName, "step " + name + ": " + issues.front().code));
         }
+    }
+
+    // The rollback marker, after the steps, through the same command a student uses.
+    // (A design that isn't rolled back has none.)
+    if (timeline->contains("rollback")) {
+        const json& marker = (*timeline)["rollback"];
+        const std::string text = marker.is_string() ? marker.get<std::string>() : std::string();
+        std::optional<std::size_t> index;
+        if (text == "start") {
+            index = 0;
+        } else if (const auto id = FeatureId::parse(text); id && doc->indexOf(*id)) {
+            index = *doc->indexOf(*id) + 1;
+        }
+        if (!index) return fail(damaged(displayName, "the rollback marker is after a step that isn't there"));
+        if (*index < doc->featureCount()) doc->execute(std::make_unique<model::RollbackCommand>(*index));
     }
 
     // Folders, after the steps they hold, through the same command a student uses.

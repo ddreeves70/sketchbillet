@@ -25,6 +25,8 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`folder.add`](#folderadd) | Puts steps in a folder in the feature tree |
 | [`folder.rename`](#folderrename) | Renames a folder |
 | [`folder.delete`](#folderdelete) | Removes a folder, keeping its steps |
+| [`timeline.rollback`](#timelinerollback) | Moves the rollback marker: later steps are kept but not built |
+| [`timeline.move`](#timelinemove) | Moves a step to another place in the order |
 | [`feature.add_sketch`](#featureadd_sketch) | Adds an empty sketch on a plane |
 | [`sketch.add_point`](#sketchadd_point), [`sketch.add_line`](#sketchadd_line), [`sketch.add_circle`](#sketchadd_circle), [`sketch.add_arc`](#sketchadd_arc), [`sketch.add_spline`](#sketchadd_spline) | Draw in a sketch |
 | [`sketch.constrain`](#sketchconstrain) | Adds a constraint or dimension to a sketch |
@@ -578,6 +580,115 @@ Demo tag: 3 steps
   Hole         ok  volume 117.81 mm^3
   Tag          ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
 wrote demo.sb
+```
+
+## timeline.rollback
+
+Moves the **rollback marker**. The steps after it are kept, but not built, so you
+see the part as it was then. A new step goes in at the marker, not at the end;
+steps after it that used the same body use the new step instead. The marker is
+saved with the design. See [The timeline](../user-guide/timeline.md).
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `after` | step name | one of these | The step the marker goes just after, like `Box1` |
+| `to` | `start` or `end` | one of these | Before the first step, or the end (every step built) |
+
+A tray: a box 40 × 30 × 20 mm, shelled with its top (face 6) open. Roll back to
+just after Box1, and the shell isn't built:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save tray.sb feature.add_box size=40,30,20
+tray: 1 step
+  Box1         ok  volume 24000.00 mm^3  mass 29.76 g (PLA)
+wrote tray.sb
+$ sketchbillet_cli run --open tray.sb --save tray.sb feature.add_shell body=Box1 faces=6
+tray: 2 steps
+  Box1         ok  volume 24000.00 mm^3
+  Shell1       ok  volume 7152.00 mm^3  mass 8.87 g (PLA)
+wrote tray.sb
+$ sketchbillet_cli run --open tray.sb --save tray.sb timeline.rollback after=Box1
+tray: 2 steps
+  Box1         ok  volume 24000.00 mm^3  mass 29.76 g (PLA)
+  -- rolled back to here: the steps below aren't built --
+  Shell1       rolled back
+wrote tray.sb
+```
+
+Round the box's four upright edges (5 to 8) now, and the fillet goes in before
+the shell, which now hollows the rounded box:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open tray.sb --save tray.sb feature.add_fillet body=Box1 edges=5,6,7,8 radius=5
+tray: 3 steps
+  Box1         ok  volume 24000.00 mm^3
+  Fillet1      ok  volume 23570.80 mm^3  mass 29.23 g (PLA)
+  -- rolled back to here: the steps below aren't built --
+  Shell1       rolled back
+wrote tray.sb
+$ sketchbillet_cli run --open tray.sb --save tray.sb timeline.rollback to=end
+tray: 3 steps
+  Box1         ok  volume 24000.00 mm^3
+  Fillet1      ok  volume 23570.80 mm^3
+  Shell1       ok  volume 6861.86 mm^3  mass 8.51 g (PLA)
+wrote tray.sb
+```
+
+Check it by hand. Each 5 mm rounding takes 25 − 25π/4 = 5.37 mm² off the box's
+outline, 20 mm tall: 24000 − 4 × 5.37 × 20 = 23570.80 mm³. Inside, the corners
+are rounded to 3 mm (5 mm less the 2 mm wall): (36 × 26 − 4 × 1.93) × 18 =
+16708.94 mm³, which leaves 6861.86 mm³.
+
+The marker must go somewhere new:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open tray.sb timeline.rollback to=end
+error [timeline.same]: The marker is already at the end.
+```
+
+## timeline.move
+
+Moves a step to another place in the order. A step must come after the steps it
+uses, and before the steps that use it. A step moved out of a folder leaves it;
+one put between two steps of a folder joins it. The rollback marker stays after
+the same step, so a step moved past it is rolled back.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `feature` | step name | yes | The step to move, like `Peg` |
+| `before` | step name | one of these | Put it just before this step |
+| `after` | step name | one of these | Or just after this step |
+| `to` | `start` or `end` | one of these | Or first, or last |
+
+Add a peg beside the tray, then move it to the start:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open tray.sb --save tray.sb feature.add_cylinder radius=4 height=10 base=60,0,0 name=Peg
+tray: 4 steps
+  Box1         ok  volume 24000.00 mm^3
+  Fillet1      ok  volume 23570.80 mm^3
+  Shell1       ok  volume 6861.86 mm^3  mass 8.51 g (PLA)
+  Peg          ok  volume 502.65 mm^3  mass 0.62 g (PLA)
+wrote tray.sb
+$ sketchbillet_cli run --open tray.sb --save tray.sb timeline.move feature=Peg to=start
+tray: 4 steps
+  Peg          ok  volume 502.65 mm^3  mass 0.62 g (PLA)
+  Box1         ok  volume 24000.00 mm^3
+  Fillet1      ok  volume 23570.80 mm^3
+  Shell1       ok  volume 6861.86 mm^3  mass 8.51 g (PLA)
+wrote tray.sb
+```
+
+Shell1 uses Fillet1, so it can't go before it:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open tray.sb timeline.move feature=Shell1 before=Fillet1
+error [timeline.order]: Shell1 uses Fillet1, so it has to come after Fillet1. Put it somewhere after Fillet1.
 ```
 
 ## feature.add_sketch

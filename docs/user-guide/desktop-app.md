@@ -15,6 +15,7 @@ step's numbers in Properties. Everything you do can be undone.
 | 5 | **Properties** | The selected step's name and numbers. Change them here. It floats over the viewer's top right, under the view cube |
 | 6 | **Status bar** | Messages, and what went wrong when something does |
 | 7 | **Grid status** | The grid's spacing and style, and whether snapping is on |
+| 8 | **Timeline** | The steps in order, left to right, and the blue rollback marker. Drag the marker to go back in time, or drag a step to change the order. See [The timeline](#the-timeline) |
 
 ## Starting it
 
@@ -163,6 +164,7 @@ Under them, each row is one step: its name, its kind, and its status.
 | `failed` | It couldn't be built. Rest the mouse on it, or look in Properties, to see why |
 | `blocked` | It uses a step that failed |
 | `off` | It's turned off |
+| `rolled back` | It's after the [rollback marker](timeline.md), so it isn't built. Roll forward to build it |
 
 - **Pick** a step by clicking it. Ctrl-click (⌘-click) picks more than one; SketchBillet
   remembers the order you picked them in.
@@ -182,6 +184,17 @@ Picking two steps turns on **Combine**: union, cut or intersect. For a cut, pick
 the body to keep first.
 
 ![Plate and Hole picked: Union, Cut and Intersect are on](images/app-combine.png)
+
+## The timeline
+
+The bar along the bottom of the window shows the steps in order, as their toolbar
+pictures, with the blue **rollback marker** after the last one. Click a step to
+pick it, drag a step to change the order, and drag the marker (or use the buttons
+at the left) to roll back: the steps after it are faded, and aren't built.
+
+![The timeline bar: four buttons, then each step, then the blue marker](images/app-timeline-bar.png)
+
+See [The timeline](timeline.md).
 
 ## Document settings and units
 

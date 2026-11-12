@@ -69,6 +69,21 @@ tag.sb
 The steps in the order they are built. `suppressed: true` means the step is turned
 off. Each `id` names a file `features/<id>.json`.
 
+A design saved [rolled back](user-guide/timeline.md) also has `rollback`: the id of
+the step the rollback marker is just after, or `"start"` for before the first step.
+The steps after the marker aren't built. A design that isn't rolled back has no
+`rollback`, and saves exactly as before.
+
+```json
+{
+  "features": [
+    { "id": "926bde46-9c5b-403a-bc25-c01e5cf11ce3", "suppressed": false },
+    { "id": "f153a811-ba41-4895-ab27-886a6ca3871e", "suppressed": false }
+  ],
+  "rollback": "926bde46-9c5b-403a-bc25-c01e5cf11ce3"
+}
+```
+
 ### features/&lt;id&gt;.json
 
 Every step has `id`, `type` and `name`. Steps that use other steps list them under
@@ -354,7 +369,9 @@ failed save never damages the last good copy.
   SketchBillet makes a body of its own instead of joining or cutting. `Revolve`,
   `Hole`, `Pattern`, `Mirror`, `Plane` and `Shell` steps (Nov 2026) are new step types, like `Fillet`.
   A `Sketch` can have the input `on`, a Plane step's id: an older SketchBillet
-  draws that sketch on its base `plane` instead.
+  draws that sketch on its base `plane` instead. The timeline's `rollback` (Nov 2026)
+  is a key an older SketchBillet skips: it opens the design rolled forward, with
+  every step built, and drops the marker if it saves the file again.
 - Anything an older SketchBillet would read wrongly bumps `schema` (in
   `src/core/include/sb/core/Version.h`) and adds a migration from the old schema.
 - `tests/files/` holds files saved with each schema. They are checked in and never
