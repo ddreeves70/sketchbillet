@@ -1956,6 +1956,106 @@
         760,
         90
       ]
+    },
+    {
+      "out": "docs/user-guide/images/ref-battery-holder.png",
+      "part": "battery-holder",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-boss-box.png",
+      "part": "boss-box",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-cabinet-knob.png",
+      "part": "cabinet-knob",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-card-box.png",
+      "part": "card-box",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-corner-brace.png",
+      "part": "corner-brace",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-d-shaft-knob.png",
+      "part": "d-shaft-knob",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-divider-tray.png",
+      "part": "divider-tray",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-flanged-spacer.png",
+      "part": "flanged-spacer",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-hinge-leaf.png",
+      "part": "hinge-leaf",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-l-bracket.png",
+      "part": "l-bracket",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-motor-plate.png",
+      "part": "motor-plate",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-pencil-cup.png",
+      "part": "pencil-cup",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-pipe-saddle.png",
+      "part": "pipe-saddle",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-rail-clamp.png",
+      "part": "rail-clamp",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-rod-clamp.png",
+      "part": "rod-clamp",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-shelf-bracket.png",
+      "part": "shelf-bracket",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-star-knob.png",
+      "part": "star-knob",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-thumb-wheel.png",
+      "part": "thumb-wheel",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-wall-hook.png",
+      "part": "wall-hook",
+      "size": "480x320"
+    },
+    {
+      "out": "docs/user-guide/images/ref-wing-knob.png",
+      "part": "wing-knob",
+      "size": "480x320"
     }
   ]
 }

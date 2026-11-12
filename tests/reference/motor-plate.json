@@ -1,0 +1,56 @@
+{
+  "title": "Motor plate",
+  "group": "Mounts",
+  "order": 1,
+  "about": "A plate that holds a NEMA 17 stepper motor, the motor in most 3D printers: a 60 mm square with rounded corners, a 23 mm hole for the round boss on the motor's face, and four 3.4 mm holes 31 mm apart for its M3 screws.",
+  "uses": [
+    "sketch",
+    "dimensions",
+    "extrude",
+    "rounding",
+    "sketch on a face",
+    "cut",
+    "hole"
+  ],
+  "picture_alt": "A square plate with rounded corners, a big hole in the middle and four small holes round it",
+  "numbers": {
+    "W": 60,
+    "t": 6,
+    "rc": 5,
+    "rb": 11.5,
+    "hd": 3.4
+  },
+  "steps": [
+    "feature.add_sketch plane=xy name=PlateSketch",
+    "sketch.add_rectangle sketch=PlateSketch from=0,0 to=60,60",
+    "sketch.constrain sketch=PlateSketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=PlateSketch kind=length on=Line1 value=60 name=Width",
+    "sketch.constrain sketch=PlateSketch kind=length on=Line2 value=60 name=Height",
+    "feature.add_extrude sketch=PlateSketch distance=6 name=Plate",
+    "feature.add_fillet body=Plate edges=5,6,7,8 radius=5 name=Corners",
+    "feature.add_sketch body=Corners face=10 name=BoreSketch",
+    "sketch.add_circle sketch=BoreSketch center=30,30 radius=11.5",
+    "sketch.constrain sketch=BoreSketch kind=radius on=Circle1 value=11.5 name=Bore",
+    "feature.add_extrude sketch=BoreSketch distance=6 operation=cut name=Bored",
+    "feature.add_sketch body=Bored face=11 name=ScrewSketch",
+    "sketch.add_point sketch=ScrewSketch at=14.5,14.5",
+    "sketch.add_point sketch=ScrewSketch at=45.5,14.5",
+    "sketch.add_point sketch=ScrewSketch at=14.5,45.5",
+    "sketch.add_point sketch=ScrewSketch at=45.5,45.5",
+    "feature.add_hole sketch=ScrewSketch diameter=3.4 name=MotorPlate"
+  ],
+  "expect": {
+    "Plate": "W*W*t",
+    "Corners": "W*W*t - 4*rounding(rc)*t",
+    "Bored": "W*W*t - 4*rounding(rc)*t - pi*rb**2*t",
+    "MotorPlate": "W*W*t - 4*rounding(rc)*t - pi*rb**2*t - 4*pi*(hd/2)**2*t"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=BoreSketch constraint=Bore value=12",
+    "numbers": {
+      "rb": 12
+    },
+    "about": "make the middle hole 24 mm across instead of 23 mm (BoreSketch's Bore), for a motor with a bigger boss."
+  },
+  "show": "MotorPlate"
+}

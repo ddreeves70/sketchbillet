@@ -27,6 +27,11 @@ An "app" recipe takes a screenshot of the desktop app instead (pass --sketchbill
                                 "trigger": ["sb.viewer.layout.fourpanes"], "flat": false},
      "crop": [x, y, width, height], "callouts": [{"at": [x, y], "n": 1}]}   both optional
 
+A "part" recipe pictures one of the reference parts in tests/reference/: it runs
+the part's steps and shows its "show" step, so the recipe needs no commands:
+
+    {"out": "docs/user-guide/images/ref-l-bracket.png", "part": "l-bracket", "size": "480x320"}
+
 A "sketch" recipe draws a sketch twice, side by side: as it was drawn (from the
 .sb file) and as the solver left it (from `sketchbillet_cli open --sketch`):
 
@@ -206,6 +211,11 @@ def main():
             continue
         with tempfile.TemporaryDirectory(prefix="sb_pictures_") as tmp:
             commands = scripts.get(recipe.get("script"), []) + recipe.get("commands", [])
+            if "part" in recipe:
+                part = json.loads((repo / "tests/reference" / f"{recipe['part']}.json").read_text(encoding="utf-8"))
+                commands = [("run --save part.sb " if i == 0 else "run --open part.sb --save part.sb ") + step
+                            for i, step in enumerate(part["steps"])]
+                recipe = {**recipe, "show": recipe.get("show", [{"file": "part.sb", "step": part["show"]}])}
             for command in commands:
                 argv = [sketchbillet_cli] + [str(repo / a) if a.startswith(("tests/", "docs/")) else a
                                    for a in shlex.split(command)]

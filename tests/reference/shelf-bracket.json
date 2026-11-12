@@ -1,0 +1,65 @@
+{
+  "title": "Shelf bracket",
+  "group": "Brackets",
+  "order": 2,
+  "about": "A bracket that holds up a shelf: a wall plate, a shelf arm, and a triangle gusset between them so the arm doesn't bend. The gusset is three lines joined at their ends, sketched standing up in the middle of the bracket and extruded both ways.",
+  "uses": [
+    "sketch",
+    "dimensions",
+    "lines joined into a shape",
+    "extrude both ways",
+    "sketch on a face",
+    "join",
+    "holes"
+  ],
+  "picture_alt": "A shelf bracket: a wall plate, an arm, and a triangle gusset between them",
+  "numbers": {
+    "L": 50,
+    "w": 30,
+    "t": 5,
+    "H": 50,
+    "g": 30,
+    "gt": 6,
+    "hd": 5
+  },
+  "steps": [
+    "feature.add_sketch plane=xy name=ArmSketch",
+    "sketch.add_rectangle sketch=ArmSketch from=0,-15 to=50,15",
+    "sketch.constrain sketch=ArmSketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=ArmSketch kind=length on=Line1 value=50 name=Length",
+    "sketch.constrain sketch=ArmSketch kind=length on=Line2 value=30 name=Width",
+    "feature.add_extrude sketch=ArmSketch distance=5 name=Arm",
+    "feature.add_sketch body=Arm face=3 name=WallSketch",
+    "sketch.add_rectangle sketch=WallSketch from=-15,0 to=15,50",
+    "feature.add_extrude sketch=WallSketch distance=5 name=Wall",
+    "feature.add_sketch plane=xz name=GussetSketch",
+    "sketch.add_line sketch=GussetSketch from=0,5 to=30,5",
+    "sketch.add_line sketch=GussetSketch from=30,5 to=0,35",
+    "sketch.add_line sketch=GussetSketch from=0,35 to=0,5",
+    "sketch.constrain sketch=GussetSketch kind=coincident on=Line1.end,Line2.start",
+    "sketch.constrain sketch=GussetSketch kind=coincident on=Line2.end,Line3.start",
+    "sketch.constrain sketch=GussetSketch kind=coincident on=Line3.end,Line1.start",
+    "feature.add_extrude sketch=GussetSketch distance=6 side=both operation=join body=Wall name=Gusset",
+    "feature.add_sketch body=Gusset face=11 name=WallHoles",
+    "sketch.add_point sketch=WallHoles at=-8,42",
+    "sketch.add_point sketch=WallHoles at=8,42",
+    "feature.add_hole sketch=WallHoles diameter=5 name=WallScrews",
+    "feature.add_sketch body=WallScrews face=6 name=ArmHole",
+    "sketch.add_point sketch=ArmHole at=40,0",
+    "feature.add_hole sketch=ArmHole diameter=5 name=Bracket"
+  ],
+  "expect": {
+    "Arm": "L*w*t",
+    "Wall": "L*w*t + w*t*H",
+    "Gusset": "L*w*t + w*t*H + g*g/2*gt",
+    "Bracket": "L*w*t + w*t*H + g*g/2*gt - 3*pi*(hd/2)**2*t"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=ArmSketch constraint=Length value=70",
+    "numbers": {
+      "L": 70
+    },
+    "about": "make the arm 70 mm long instead of 50 mm (ArmSketch's Length): the wall plate and gusset stay where they are."
+  },
+  "show": "Bracket"
+}

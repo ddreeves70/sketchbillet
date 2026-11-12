@@ -1,0 +1,55 @@
+{
+  "title": "Thumb wheel",
+  "group": "Knobs",
+  "order": 4,
+  "about": "A 50 mm thumb wheel, like the focus wheel on a pair of binoculars: a ring and a raised hub, each a rectangle revolved round the middle, and a knurled rim from one small cut repeated 24 times round.",
+  "uses": [
+    "sketch",
+    "dimensions",
+    "revolve",
+    "join",
+    "sketch on a face",
+    "cut",
+    "circular pattern"
+  ],
+  "picture_alt": "A flat wheel with a knurled rim and a raised hub",
+  "numbers": {
+    "R": 25,
+    "ri": 3,
+    "T": 6,
+    "rh": 8,
+    "hh": 4,
+    "rk": 1
+  },
+  "steps": [
+    "feature.add_sketch plane=xz name=WheelSketch",
+    "sketch.add_rectangle sketch=WheelSketch from=3,0 to=25,6",
+    "sketch.constrain sketch=WheelSketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=WheelSketch kind=length on=Line1 value=22 name=Ring",
+    "sketch.constrain sketch=WheelSketch kind=length on=Line2 value=6 name=Thickness",
+    "feature.add_revolve sketch=WheelSketch axis=y name=Wheel",
+    "feature.add_sketch plane=xz name=HubSketch",
+    "sketch.add_rectangle sketch=HubSketch from=3,6 to=8,10",
+    "sketch.constrain sketch=HubSketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=HubSketch kind=length on=Line1 value=5 name=HubWidth",
+    "sketch.constrain sketch=HubSketch kind=length on=Line2 value=4 name=HubHeight",
+    "feature.add_revolve sketch=HubSketch axis=y operation=join body=Wheel name=Hub",
+    "feature.add_sketch body=Hub face=1 name=KnurlSketch",
+    "sketch.add_circle sketch=KnurlSketch center=25,0 radius=1",
+    "feature.add_extrude sketch=KnurlSketch distance=6 operation=cut name=Notch",
+    "feature.add_pattern steps=Notch kind=circular count=24 name=ThumbWheel"
+  ],
+  "expect": {
+    "Wheel": "pi*(R**2 - ri**2)*T",
+    "Hub": "pi*(R**2 - ri**2)*T + pi*(rh**2 - ri**2)*hh",
+    "ThumbWheel": "pi*(R**2 - ri**2)*T + pi*(rh**2 - ri**2)*hh - 24*lens(R, rk, R)*T"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=HubSketch constraint=HubHeight value=7",
+    "numbers": {
+      "hh": 7
+    },
+    "about": "raise the hub to 7 mm instead of 4 mm (HubSketch's HubHeight): the revolve follows the rectangle."
+  },
+  "show": "ThumbWheel"
+}

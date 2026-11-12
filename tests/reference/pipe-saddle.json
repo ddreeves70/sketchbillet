@@ -1,0 +1,36 @@
+{
+  "title": "Pipe saddle",
+  "group": "Brackets",
+  "order": 3,
+  "about": "A block that holds a 22 mm pipe or rod on a wall or bench: a half-round channel cut across its top, and a screw hole through each side. The channel is a circle sketched on the front face, centered on the top edge, and cut back through the block.",
+  "uses": ["sketch", "dimensions", "extrude", "sketch on a face", "cut", "holes"],
+  "picture_alt": "A block with a half-round channel across its top and a screw hole on each side",
+  "numbers": {"W": 50, "D": 20, "H": 25, "R": 11, "hd": 5},
+  "steps": [
+    "feature.add_sketch plane=xy name=BlockSketch",
+    "sketch.add_rectangle sketch=BlockSketch from=0,0 to=50,20",
+    "sketch.constrain sketch=BlockSketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=BlockSketch kind=length on=Line1 value=50 name=Width",
+    "sketch.constrain sketch=BlockSketch kind=length on=Line2 value=20 name=Depth",
+    "feature.add_extrude sketch=BlockSketch distance=25 name=Block",
+    "feature.add_sketch body=Block face=2 name=ChannelSketch",
+    "sketch.add_circle sketch=ChannelSketch center=25,25 radius=11",
+    "sketch.constrain sketch=ChannelSketch kind=radius on=Circle1 value=11 name=Pipe",
+    "feature.add_extrude sketch=ChannelSketch distance=20 operation=cut name=Channel",
+    "feature.add_sketch body=Channel face=7 name=HoleSketch",
+    "sketch.add_point sketch=HoleSketch at=6,10",
+    "sketch.add_point sketch=HoleSketch at=44,10",
+    "feature.add_hole sketch=HoleSketch diameter=5 name=Saddle"
+  ],
+  "expect": {
+    "Block": "W*D*H",
+    "Channel": "W*D*H - pi*R**2/2*D",
+    "Saddle": "W*D*H - pi*R**2/2*D - 2*pi*(hd/2)**2*H"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=ChannelSketch constraint=Pipe value=12.5",
+    "numbers": {"R": 12.5},
+    "about": "fit a 25 mm pipe: make the channel's radius 12.5 mm instead of 11 mm (ChannelSketch's Pipe). The screw holes stay in the flanges."
+  },
+  "show": "Saddle"
+}

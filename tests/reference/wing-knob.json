@@ -1,0 +1,35 @@
+{
+  "title": "Wing knob",
+  "group": "Knobs",
+  "order": 3,
+  "about": "A wing knob for an M5 screw, turned by thumb and finger like a wing nut: a round hub, and one long wing drawn right across it and joined on. The wing is a little lower than the hub, so the hub stands up in the middle.",
+  "uses": ["sketch", "dimensions", "extrude", "join", "holes"],
+  "picture_alt": "A round hub with a flat wing through it, and a hole in the middle",
+  "numbers": {"R": 8, "H": 14, "S": 44, "w": 4, "hw": 12, "d": 5},
+  "steps": [
+    "feature.add_sketch plane=xy name=HubSketch",
+    "sketch.add_circle sketch=HubSketch center=0,0 radius=8",
+    "sketch.constrain sketch=HubSketch kind=fix on=Circle1.center",
+    "sketch.constrain sketch=HubSketch kind=radius on=Circle1 value=8 name=Hub",
+    "feature.add_extrude sketch=HubSketch distance=14 name=Core",
+    "feature.add_sketch plane=xy name=WingSketch",
+    "sketch.add_rectangle sketch=WingSketch from=-22,-2 to=22,2",
+    "sketch.constrain sketch=WingSketch kind=length on=Line1 value=44 name=Span",
+    "sketch.constrain sketch=WingSketch kind=length on=Line2 value=4 name=Thickness",
+    "feature.add_extrude sketch=WingSketch distance=12 operation=join body=Core name=Wings",
+    "feature.add_sketch body=Wings face=3 name=ScrewSketch",
+    "sketch.add_point sketch=ScrewSketch at=0,0",
+    "feature.add_hole sketch=ScrewSketch diameter=5 name=WingKnob"
+  ],
+  "expect": {
+    "Core": "pi*R**2*H",
+    "Wings": "pi*R**2*H + (S*w - band(R, w/2))*hw",
+    "WingKnob": "pi*R**2*H + (S*w - band(R, w/2))*hw - pi*(d/2)**2*H"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=WingSketch constraint=Span value=54",
+    "numbers": {"S": 54},
+    "about": "make the wing 54 mm across instead of 44 mm (WingSketch's Span), for more turning force."
+  },
+  "show": "WingKnob"
+}

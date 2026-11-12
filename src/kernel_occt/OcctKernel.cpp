@@ -445,7 +445,10 @@ ElementInfo faceInfo(const TopoDS_Face& face) {
     switch (surface.GetType()) {
         case GeomAbs_Plane: {
             info.geom = GeomKind::Plane;
-            gp_Dir n = surface.Plane().Axis().Direction();
+            const gp_Pln plane = surface.Plane();
+            gp_Dir n = plane.Axis().Direction();
+            // A left-handed plane (a revolve makes some) faces the other way from its axis.
+            if (!plane.Position().Direct()) n.Reverse();
             if (face.Orientation() == TopAbs_REVERSED) n.Reverse();  // outward
             info.direction = vec(n);
             break;

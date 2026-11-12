@@ -1,0 +1,56 @@
+{
+  "title": "Rail clamp block",
+  "group": "Mounts",
+  "order": 3,
+  "about": "A block that sits over a 20 mm rail, like the aluminum rails many 3D printers and CNC machines are built from: a channel cut across the bottom fits the rail, and two counterbored holes take M4 screws, their heads sunk below the top so a part can sit flat on it.",
+  "uses": [
+    "sketch",
+    "dimensions",
+    "extrude",
+    "sketch on a face",
+    "cut",
+    "counterbored hole"
+  ],
+  "picture_alt": "A rectangular block with a channel across its bottom and two stepped holes in its top",
+  "numbers": {
+    "L": 40,
+    "W": 30,
+    "H": 15,
+    "s": 20.4,
+    "sd": 5,
+    "d": 4.5,
+    "cd": 8,
+    "cdp": 4
+  },
+  "steps": [
+    "feature.add_sketch plane=xy name=BlockSketch",
+    "sketch.add_rectangle sketch=BlockSketch from=0,0 to=40,30",
+    "sketch.constrain sketch=BlockSketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=BlockSketch kind=length on=Line1 value=40 name=Length",
+    "sketch.constrain sketch=BlockSketch kind=length on=Line2 value=30 name=Width",
+    "feature.add_extrude sketch=BlockSketch distance=15 name=Block",
+    "feature.add_sketch body=Block face=2 name=ChannelSketch",
+    "sketch.add_rectangle sketch=ChannelSketch from=9.8,0 to=30.2,5",
+    "sketch.constrain sketch=ChannelSketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=ChannelSketch kind=length on=Line1 value=20.4 name=Rail",
+    "sketch.constrain sketch=ChannelSketch kind=length on=Line2 value=5 name=Depth",
+    "feature.add_extrude sketch=ChannelSketch distance=30 operation=cut name=Channel",
+    "feature.add_sketch body=Channel face=10 name=ScrewSketch",
+    "sketch.add_point sketch=ScrewSketch at=20,7.5",
+    "sketch.add_point sketch=ScrewSketch at=20,22.5",
+    "feature.add_hole sketch=ScrewSketch kind=counterbore diameter=4.5 counterbore_diameter=8 counterbore_depth=4 name=RailClamp"
+  ],
+  "expect": {
+    "Block": "L*W*H",
+    "Channel": "L*W*H - s*sd*W",
+    "RailClamp": "L*W*H - s*sd*W - 2*(pi*(cd/2)**2*cdp + pi*(d/2)**2*(H - sd - cdp))"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=ChannelSketch constraint=Rail value=20.8",
+    "numbers": {
+      "s": 20.8
+    },
+    "about": "make the channel 20.8 mm wide instead of 20.4 mm (ChannelSketch's Rail), for a looser fit on the rail."
+  },
+  "show": "RailClamp"
+}

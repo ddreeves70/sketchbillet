@@ -455,6 +455,20 @@ TEST_CASE("a rectangle beside an axis turns into a tube, or part of one", "[kern
         }
         CHECK(edges.size() == 4);  // one face per edge of the rectangle
     }
+    SECTION("its flat faces face out of it, so a sketch on one faces out too") {
+        // Found by the thumb wheel reference part: OCCT makes a revolve's flat faces
+        // on left-handed planes, whose normal is the opposite of the plane's axis.
+        const auto tube = k->revolve(face.shape, {0, 0, 0}, {0, 1, 0}, 2 * kPi);
+        REQUIRE(tube.ok());
+        int flat = 0;
+        for (const auto& f : k->elements(tube.shape).faces) {
+            if (f.geom != GeomKind::Plane) continue;
+            ++flat;
+            // The ring's two flat faces are at y = 0 (the bottom) and y = 20 (the top).
+            CHECK(f.direction.y == Approx(f.center.y < 10 ? -1.0 : 1.0));
+        }
+        CHECK(flat == 2);
+    }
     SECTION("less than a full turn has a start and an end") {
         const auto part = k->revolve(face.shape, {0, 0, 0}, {0, 1, 0}, kPi / 2);
         REQUIRE(part.ok());

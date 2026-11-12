@@ -1,0 +1,61 @@
+{
+  "title": "Wall hook",
+  "group": "Mounts",
+  "order": 2,
+  "about": "A hook for a coat or a bag: a back plate that screws to the wall, an arm that sticks out, and a lip at the end so nothing slides off. A rounding where the arm meets the plate makes it much stronger than a sharp corner.",
+  "uses": [
+    "sketch",
+    "dimensions",
+    "extrude",
+    "sketch on a face",
+    "join",
+    "rounding",
+    "countersunk hole"
+  ],
+  "picture_alt": "A hook: a tall flat plate with two screw holes, an arm sticking out near the bottom, and a lip turned up at its end",
+  "numbers": {
+    "t": 5,
+    "H": 60,
+    "w": 20,
+    "L": 30,
+    "a": 6,
+    "lip": 12,
+    "ri": 4,
+    "d": 4,
+    "cs": 8
+  },
+  "steps": [
+    "feature.add_sketch plane=xz name=BackSketch",
+    "sketch.add_rectangle sketch=BackSketch from=0,0 to=5,60",
+    "sketch.constrain sketch=BackSketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=BackSketch kind=length on=Line1 value=5 name=Thickness",
+    "sketch.constrain sketch=BackSketch kind=length on=Line2 value=60 name=Height",
+    "feature.add_extrude sketch=BackSketch distance=20 name=Back",
+    "feature.add_sketch body=Back face=4 name=ArmSketch",
+    "sketch.add_rectangle sketch=ArmSketch from=-20,0 to=0,6",
+    "feature.add_extrude sketch=ArmSketch distance=30 operation=join name=Arm",
+    "feature.add_sketch body=Arm face=6 name=LipSketch",
+    "sketch.add_rectangle sketch=LipSketch from=30,-20 to=35,0",
+    "feature.add_extrude sketch=LipSketch distance=12 operation=join name=Lip",
+    "feature.add_fillet body=Lip edges=14 radius=4 name=Inside",
+    "feature.add_sketch body=Inside face=16 name=ScrewSketch",
+    "sketch.add_point sketch=ScrewSketch at=-10,25",
+    "sketch.add_point sketch=ScrewSketch at=-10,50",
+    "feature.add_hole sketch=ScrewSketch kind=countersink diameter=4 countersink_diameter=8 name=WallHook"
+  ],
+  "expect": {
+    "Back": "t*H*w",
+    "Arm": "t*H*w + L*a*w",
+    "Lip": "t*H*w + L*a*w + t*lip*w",
+    "Inside": "t*H*w + L*a*w + t*lip*w + rounding(ri)*w",
+    "WallHook": "t*H*w + L*a*w + t*lip*w + rounding(ri)*w - 2*(pi*(d/2)**2*t + pi*((cs-d)/2)/3*((cs/2)**2 + cs/2*d/2 + (d/2)**2) - pi*(d/2)**2*(cs-d)/2)"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=BackSketch constraint=Height value=80",
+    "numbers": {
+      "H": 80
+    },
+    "about": "make the back plate 80 mm tall instead of 60 mm (BackSketch's Height)."
+  },
+  "show": "WallHook"
+}

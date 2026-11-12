@@ -1,0 +1,59 @@
+{
+  "title": "Box with screw bosses",
+  "group": "Enclosures",
+  "order": 1,
+  "about": "An electronics box with 2 mm walls and four bosses on its floor: posts with holes that self-tapping screws hold a circuit board on. One boss and one hole are drawn; a 2 by 2 pattern makes the other three of each.",
+  "uses": [
+    "sketch",
+    "dimensions",
+    "extrude",
+    "shell",
+    "sketch on a face",
+    "join",
+    "holes",
+    "grid pattern"
+  ],
+  "picture_alt": "An open box with four screw posts standing on its floor",
+  "numbers": {
+    "W": 60,
+    "D": 40,
+    "H": 25,
+    "t": 2,
+    "rb": 3.5,
+    "hb": 12,
+    "dh": 2.5,
+    "hh": 10
+  },
+  "steps": [
+    "feature.add_sketch plane=xy name=CaseSketch",
+    "sketch.add_rectangle sketch=CaseSketch from=0,0 to=60,40",
+    "sketch.constrain sketch=CaseSketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=CaseSketch kind=length on=Line1 value=60 name=Width",
+    "sketch.constrain sketch=CaseSketch kind=length on=Line2 value=40 name=Depth",
+    "feature.add_extrude sketch=CaseSketch distance=25 name=Case",
+    "feature.add_shell body=Case faces=6 thickness=2 name=Hollow",
+    "feature.add_sketch body=Hollow face=2 name=BossSketch",
+    "sketch.add_circle sketch=BossSketch center=8,8 radius=3.5",
+    "feature.add_extrude sketch=BossSketch distance=12 name=Boss",
+    "feature.add_pattern steps=Boss count=2 spacing=44 count2=2 spacing2=24 name=Bosses",
+    "feature.add_sketch body=Bosses face=15 name=PilotSketch",
+    "sketch.add_point sketch=PilotSketch at=8,8",
+    "feature.add_hole sketch=PilotSketch diameter=2.5 depth=10 name=Pilot",
+    "feature.add_pattern steps=Pilot count=2 spacing=44 count2=2 spacing2=24 name=Box"
+  ],
+  "expect": {
+    "Case": "W*D*H",
+    "Hollow": "W*D*H - (W-2*t)*(D-2*t)*(H-t)",
+    "Boss": "W*D*H - (W-2*t)*(D-2*t)*(H-t) + pi*rb**2*hb",
+    "Bosses": "W*D*H - (W-2*t)*(D-2*t)*(H-t) + 4*pi*rb**2*hb",
+    "Box": "W*D*H - (W-2*t)*(D-2*t)*(H-t) + 4*pi*rb**2*hb - 4*pi*(dh/2)**2*hh"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=CaseSketch constraint=Width value=70",
+    "numbers": {
+      "W": 70
+    },
+    "about": "make the box 70 mm wide instead of 60 mm (CaseSketch's Width): the walls follow, and the bosses stay where they are on the floor."
+  },
+  "show": "Box"
+}

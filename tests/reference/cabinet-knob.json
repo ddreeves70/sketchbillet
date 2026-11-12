@@ -1,0 +1,57 @@
+{
+  "title": "Cabinet knob",
+  "group": "Knobs",
+  "order": 5,
+  "about": "A round knob for a drawer or a cupboard door: a stem and a wider cap, each a rectangle revolved round the middle, a bevel round the cap's top edge so it's kind to fingers, and a hole up the stem for a 4 mm screw from inside the drawer.",
+  "uses": [
+    "sketch",
+    "dimensions",
+    "revolve",
+    "join",
+    "chamfer",
+    "sketch on a face",
+    "hole"
+  ],
+  "picture_alt": "A round cabinet knob: a narrow stem under a wide cap with a bevelled top edge",
+  "numbers": {
+    "rs": 7,
+    "hs": 15,
+    "R": 16,
+    "H": 12,
+    "c": 2,
+    "d": 3.5,
+    "hd": 12
+  },
+  "steps": [
+    "feature.add_sketch plane=xz name=StemSketch",
+    "sketch.add_rectangle sketch=StemSketch from=0,0 to=7,15",
+    "sketch.constrain sketch=StemSketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=StemSketch kind=length on=Line1 value=7 name=StemRadius",
+    "sketch.constrain sketch=StemSketch kind=length on=Line2 value=15 name=StemHeight",
+    "feature.add_revolve sketch=StemSketch axis=y name=Stem",
+    "feature.add_sketch plane=xz name=CapSketch",
+    "sketch.add_rectangle sketch=CapSketch from=0,15 to=16,27",
+    "sketch.constrain sketch=CapSketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=CapSketch kind=length on=Line1 value=16 name=CapRadius",
+    "sketch.constrain sketch=CapSketch kind=length on=Line2 value=12 name=CapHeight",
+    "feature.add_revolve sketch=CapSketch axis=y operation=join body=Stem name=Cap",
+    "feature.add_chamfer body=Cap edges=6 distance=2 name=Bevel",
+    "feature.add_sketch body=Bevel face=1 name=ScrewSketch",
+    "sketch.add_point sketch=ScrewSketch at=0,0",
+    "feature.add_hole sketch=ScrewSketch diameter=3.5 depth=12 name=CabinetKnob"
+  ],
+  "expect": {
+    "Stem": "pi*rs**2*hs",
+    "Cap": "pi*rs**2*hs + pi*R**2*H",
+    "Bevel": "pi*rs**2*hs + pi*R**2*H - 2*pi*(R-c/3)*bevel(c)",
+    "CabinetKnob": "pi*rs**2*hs + pi*R**2*H - 2*pi*(R-c/3)*bevel(c) - pi*(d/2)**2*hd"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=CapSketch constraint=CapRadius value=20",
+    "numbers": {
+      "R": 20
+    },
+    "about": "make the cap 40 mm across instead of 32 mm (CapSketch's CapRadius)."
+  },
+  "show": "CabinetKnob"
+}

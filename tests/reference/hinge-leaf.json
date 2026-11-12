@@ -1,0 +1,57 @@
+{
+  "title": "Hinge leaf",
+  "group": "Brackets",
+  "order": 4,
+  "about": "One half of a hinge: a plate with a round knuckle along its front edge, a hole down the knuckle for a 3 mm pin, and three screw holes made by repeating one hole with a pattern. Print two, turn one over, and push a pin through both knuckles.",
+  "uses": [
+    "sketch",
+    "dimensions",
+    "extrude",
+    "sketch on a face",
+    "join",
+    "cut",
+    "holes",
+    "pattern"
+  ],
+  "picture_alt": "A hinge leaf: a flat plate with a round knuckle along one edge and three screw holes",
+  "numbers": {
+    "L": 40,
+    "D": 25,
+    "t": 3,
+    "R": 4,
+    "rp": 1.6,
+    "hd": 3.5
+  },
+  "steps": [
+    "feature.add_sketch plane=xy name=PlateSketch",
+    "sketch.add_rectangle sketch=PlateSketch from=0,0 to=40,25",
+    "sketch.constrain sketch=PlateSketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=PlateSketch kind=length on=Line1 value=40 name=Length",
+    "sketch.constrain sketch=PlateSketch kind=length on=Line2 value=25 name=Depth",
+    "feature.add_extrude sketch=PlateSketch distance=3 name=Plate",
+    "feature.add_sketch body=Plate face=3 name=KnuckleSketch",
+    "sketch.add_circle sketch=KnuckleSketch center=0,1.5 radius=4",
+    "feature.add_extrude sketch=KnuckleSketch distance=40 side=flip name=Knuckle",
+    "feature.add_sketch body=Knuckle face=3 name=PinSketch",
+    "sketch.add_circle sketch=PinSketch center=0,1.5 radius=1.6",
+    "feature.add_extrude sketch=PinSketch distance=40 operation=cut name=PinHole",
+    "feature.add_sketch body=PinHole face=11 name=ScrewSketch",
+    "sketch.add_point sketch=ScrewSketch at=8,15",
+    "feature.add_hole sketch=ScrewSketch diameter=3.5 name=Screw",
+    "feature.add_pattern steps=Screw count=3 spacing=12 name=Leaf"
+  ],
+  "expect": {
+    "Plate": "L*D*t",
+    "Knuckle": "L*(D*t + pi*R**2 - band(R, t/2)/2)",
+    "PinHole": "L*(D*t + pi*R**2 - band(R, t/2)/2) - pi*rp**2*L",
+    "Leaf": "L*(D*t + pi*R**2 - band(R, t/2)/2) - pi*rp**2*L - 3*pi*(hd/2)**2*t"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=PlateSketch constraint=Depth value=35",
+    "numbers": {
+      "D": 35
+    },
+    "about": "make the leaf 35 mm deep instead of 25 mm (PlateSketch's Depth): the knuckle stays on the front edge, and the holes stay where they are."
+  },
+  "show": "Leaf"
+}
