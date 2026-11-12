@@ -1,0 +1,43 @@
+{
+  "title": "L bracket",
+  "group": "Brackets",
+  "order": 1,
+  "about": "A 60 mm wide angle bracket with two screw holes in each leg, and its bend rounded inside and out so it doesn't crack there. The upright is sketched on the base's back face, so it moves when the base gets deeper.",
+  "uses": ["sketch", "dimensions", "extrude", "sketch on a face", "join", "fillet", "holes"],
+  "picture_alt": "An L bracket: a flat base and an upright, each with two holes, its bend rounded",
+  "numbers": {"W": 60, "D": 40, "H": 40, "t": 5, "ri": 3, "ro": 4, "hd": 5},
+  "steps": [
+    "feature.add_sketch plane=xy name=BaseSketch",
+    "sketch.add_rectangle sketch=BaseSketch from=0,0 to=60,40",
+    "sketch.constrain sketch=BaseSketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=BaseSketch kind=length on=Line1 value=60 name=Width",
+    "sketch.constrain sketch=BaseSketch kind=length on=Line2 value=40 name=Depth",
+    "feature.add_extrude sketch=BaseSketch distance=5 name=Base",
+    "feature.add_sketch body=Base face=5 name=UpSketch",
+    "sketch.add_rectangle sketch=UpSketch from=-60,0 to=0,40",
+    "feature.add_extrude sketch=UpSketch distance=5 name=Upright",
+    "feature.add_fillet body=Upright edges=15 radius=3 name=Inside",
+    "feature.add_fillet body=Inside edges=7 radius=4 name=Outside",
+    "feature.add_sketch body=Outside face=7 name=BaseHoles",
+    "sketch.add_point sketch=BaseHoles at=15,15",
+    "sketch.add_point sketch=BaseHoles at=45,15",
+    "feature.add_hole sketch=BaseHoles diameter=5 name=BaseScrews",
+    "feature.add_sketch body=BaseScrews face=14 name=UpHoles",
+    "sketch.add_point sketch=UpHoles at=15,25",
+    "sketch.add_point sketch=UpHoles at=45,25",
+    "feature.add_hole sketch=UpHoles diameter=5 name=Bracket"
+  ],
+  "expect": {
+    "Base": "W*D*t",
+    "Upright": "W*D*t + W*H*t",
+    "Inside": "W*D*t + W*H*t + rounding(ri)*W",
+    "Outside": "W*D*t + W*H*t + rounding(ri)*W - rounding(ro)*W",
+    "Bracket": "W*D*t + W*H*t + rounding(ri)*W - rounding(ro)*W - 4*pi*(hd/2)**2*t"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=BaseSketch constraint=Depth value=55",
+    "numbers": {"D": 55},
+    "about": "make the base 55 mm deep instead of 40 mm (BaseSketch's Depth): the upright, its holes and both roundings move back with it."
+  },
+  "show": "Bracket"
+}

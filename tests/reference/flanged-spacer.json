@@ -1,0 +1,69 @@
+{
+  "title": "Flanged spacer",
+  "group": "Mounts",
+  "order": 5,
+  "about": "A spacer that holds a board or a panel off a surface, with a flange at the bottom that screws down: one stepped outline, drawn with lines and revolved round the middle, a 5.2 mm hole up the middle for an M5 bolt, and three screw holes round the flange from one hole repeated.",
+  "uses": [
+    "sketch",
+    "lines",
+    "constraints",
+    "dimensions",
+    "revolve",
+    "sketch on a face",
+    "hole",
+    "circular pattern"
+  ],
+  "picture_alt": "A short tube standing on a round flange, with a hole up the middle and three small holes round the flange",
+  "numbers": {
+    "ri": 2.6,
+    "fw": 9.4,
+    "tf": 3,
+    "tw": 3.4,
+    "H": 15,
+    "d": 3.4
+  },
+  "steps": [
+    "feature.add_sketch plane=xz name=ProfileSketch",
+    "sketch.add_line sketch=ProfileSketch from=2.6,0 to=12,0",
+    "sketch.add_line sketch=ProfileSketch from=12,0 to=12,3",
+    "sketch.add_line sketch=ProfileSketch from=12,3 to=6,3",
+    "sketch.add_line sketch=ProfileSketch from=6,3 to=6,15",
+    "sketch.add_line sketch=ProfileSketch from=6,15 to=2.6,15",
+    "sketch.add_line sketch=ProfileSketch from=2.6,15 to=2.6,0",
+    "sketch.constrain sketch=ProfileSketch kind=coincident on=Line1.end,Line2.start",
+    "sketch.constrain sketch=ProfileSketch kind=coincident on=Line2.end,Line3.start",
+    "sketch.constrain sketch=ProfileSketch kind=coincident on=Line3.end,Line4.start",
+    "sketch.constrain sketch=ProfileSketch kind=coincident on=Line4.end,Line5.start",
+    "sketch.constrain sketch=ProfileSketch kind=coincident on=Line5.end,Line6.start",
+    "sketch.constrain sketch=ProfileSketch kind=coincident on=Line6.end,Line1.start",
+    "sketch.constrain sketch=ProfileSketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=ProfileSketch kind=horizontal on=Line1",
+    "sketch.constrain sketch=ProfileSketch kind=vertical on=Line2",
+    "sketch.constrain sketch=ProfileSketch kind=horizontal on=Line3",
+    "sketch.constrain sketch=ProfileSketch kind=vertical on=Line4",
+    "sketch.constrain sketch=ProfileSketch kind=horizontal on=Line5",
+    "sketch.constrain sketch=ProfileSketch kind=vertical on=Line6",
+    "sketch.constrain sketch=ProfileSketch kind=length on=Line1 value=9.4 name=Flange",
+    "sketch.constrain sketch=ProfileSketch kind=length on=Line2 value=3 name=FlangeThickness",
+    "sketch.constrain sketch=ProfileSketch kind=length on=Line5 value=3.4 name=Wall",
+    "sketch.constrain sketch=ProfileSketch kind=length on=Line6 value=15 name=Height",
+    "feature.add_revolve sketch=ProfileSketch axis=y name=Spacer",
+    "feature.add_sketch body=Spacer face=3 name=ScrewSketch",
+    "sketch.add_point sketch=ScrewSketch at=9,0",
+    "feature.add_hole sketch=ScrewSketch diameter=3.4 name=Screw",
+    "feature.add_pattern steps=Screw kind=circular count=3 name=FlangedSpacer"
+  ],
+  "expect": {
+    "Spacer": "pi*((ri+fw)**2 - ri**2)*tf + pi*((ri+tw)**2 - ri**2)*(H - tf)",
+    "Screw": "pi*((ri+fw)**2 - ri**2)*tf + pi*((ri+tw)**2 - ri**2)*(H - tf) - pi*(d/2)**2*tf",
+    "FlangedSpacer": "pi*((ri+fw)**2 - ri**2)*tf + pi*((ri+tw)**2 - ri**2)*(H - tf) - 3*pi*(d/2)**2*tf"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=ProfileSketch constraint=Flange value=11.4",
+    "numbers": {
+      "fw": 11.4
+    },
+    "about": "make the flange 28 mm across instead of 24 mm (ProfileSketch's Flange): the screw holes stay put."
+  },
+  "show": "FlangedSpacer"
+}

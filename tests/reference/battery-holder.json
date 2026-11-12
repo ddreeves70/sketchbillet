@@ -1,0 +1,33 @@
+{
+  "title": "AA battery holder",
+  "group": "Enclosures",
+  "order": 2,
+  "about": "A block that holds four AA batteries standing up, in 15 mm round pockets, 15 mm deep. One pocket is drawn and cut; a pattern repeats it along the block every 16 mm.",
+  "uses": ["sketch", "dimensions", "extrude", "sketch on a face", "cut", "pattern"],
+  "picture_alt": "A block with four round pockets in a row, for AA batteries",
+  "numbers": {"L": 70, "D": 18, "H": 20, "r": 7.5, "dp": 15},
+  "steps": [
+    "feature.add_sketch plane=xy name=BlockSketch",
+    "sketch.add_rectangle sketch=BlockSketch from=0,0 to=70,18",
+    "sketch.constrain sketch=BlockSketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=BlockSketch kind=length on=Line1 value=70 name=Length",
+    "sketch.constrain sketch=BlockSketch kind=length on=Line2 value=18 name=Depth",
+    "feature.add_extrude sketch=BlockSketch distance=20 name=Block",
+    "feature.add_sketch body=Block face=6 name=PocketSketch",
+    "sketch.add_circle sketch=PocketSketch center=11,9 radius=7.5",
+    "sketch.constrain sketch=PocketSketch kind=radius on=Circle1 value=7.5 name=Fit",
+    "feature.add_extrude sketch=PocketSketch distance=15 operation=cut name=Pocket",
+    "feature.add_pattern steps=Pocket count=4 spacing=16 name=Holder"
+  ],
+  "expect": {
+    "Block": "L*D*H",
+    "Pocket": "L*D*H - pi*r**2*dp",
+    "Holder": "L*D*H - 4*pi*r**2*dp"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=PocketSketch constraint=Fit value=7.7",
+    "numbers": {"r": 7.7},
+    "about": "make the pockets a little looser, 7.7 mm radius instead of 7.5 mm (PocketSketch's Fit): all four change, because the pattern repeats the pocket."
+  },
+  "show": "Holder"
+}

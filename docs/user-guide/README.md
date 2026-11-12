@@ -62,6 +62,7 @@ works in either.
 21. [Files](files.md): saving, opening, and exporting for 3D printing.
 22. [Plugins](plugins.md): adding features to SketchBillet.
 23. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
+24. [Reference parts](reference-parts.md): twenty real parts to build, from brackets to knobs.
 
 ## Other guides
 

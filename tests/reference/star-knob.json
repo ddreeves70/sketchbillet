@@ -1,0 +1,51 @@
+{
+  "title": "Star knob",
+  "group": "Knobs",
+  "order": 2,
+  "about": "A clamping knob for an M8 bolt, like on a jig or a camera stand: a hub with five round lobes to turn it by. One lobe is joined on, and a circular pattern repeats it; the bolt hole goes through the middle.",
+  "uses": [
+    "sketch",
+    "dimensions",
+    "extrude",
+    "sketch on a face",
+    "join",
+    "circular pattern",
+    "holes"
+  ],
+  "picture_alt": "A five-lobed star knob with a hole through its middle",
+  "numbers": {
+    "R": 12,
+    "H": 15,
+    "rl": 5,
+    "dc": 8.4
+  },
+  "steps": [
+    "feature.add_sketch plane=xy name=HubSketch",
+    "sketch.add_circle sketch=HubSketch center=0,0 radius=12",
+    "sketch.constrain sketch=HubSketch kind=fix on=Circle1.center",
+    "sketch.constrain sketch=HubSketch kind=radius on=Circle1 value=12 name=Hub",
+    "feature.add_extrude sketch=HubSketch distance=15 name=Core",
+    "feature.add_sketch body=Core face=1 name=LobeSketch",
+    "sketch.add_circle sketch=LobeSketch center=12,0 radius=5",
+    "sketch.constrain sketch=LobeSketch kind=radius on=Circle1 value=5 name=Lobe",
+    "feature.add_extrude sketch=LobeSketch distance=15 side=flip name=OneLobe",
+    "feature.add_pattern steps=OneLobe kind=circular count=5 name=Lobes",
+    "feature.add_sketch body=Lobes face=5 name=BoltSketch",
+    "sketch.add_point sketch=BoltSketch at=0,0",
+    "feature.add_hole sketch=BoltSketch diameter=8.4 name=StarKnob"
+  ],
+  "expect": {
+    "Core": "pi*R**2*H",
+    "OneLobe": "(pi*R**2 + pi*rl**2 - lens(R, rl, R))*H",
+    "Lobes": "(pi*R**2 + 5*(pi*rl**2 - lens(R, rl, R)))*H",
+    "StarKnob": "(pi*R**2 + 5*(pi*rl**2 - lens(R, rl, R)) - pi*(dc/2)**2)*H"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=LobeSketch constraint=Lobe value=6",
+    "numbers": {
+      "rl": 6
+    },
+    "about": "make the lobes fatter, 6 mm radius instead of 5 mm (LobeSketch's Lobe): all five change, because the pattern repeats the one."
+  },
+  "show": "StarKnob"
+}

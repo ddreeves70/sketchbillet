@@ -96,7 +96,7 @@ Phase 2 started Oct 31, 2026, with the parameter table.
 - Linked copies: a copy that follows its original when it changes (a Move that keeps its input), built with the patterns.
 - Topological naming v1 (history-based names plus geometric fallback); ambiguous references flagged, never guessed. (Built Nov 6, 2026: every face, edge and vertex named from the kernel's history, references found again or reported; see [Naming faces and edges](naming.md). Picking edges in the 3D view: built Nov 6, 2026. Picking faces and sketching on a face: built Nov 7, 2026; see [Sketching on a face](../user-guide/sketch-on-face.md). Extrude that joins or cuts: built Nov 7, 2026; see [Join and cut](../user-guide/extrude.md#join-and-cut).)
 - Geometry regression corpus started: every bug becomes a test model.
-- **Exit:** 20 reference parts (brackets, enclosures, knobs, mounts) model cleanly, and changing an upstream sketch dimension breaks none of them.
+- **Exit:** 20 reference parts (brackets, enclosures, knobs, mounts) model cleanly, and changing an upstream sketch dimension breaks none of them. (Met Nov 12, 2026: the 20 parts in `tests/reference/` build on every change, match hand-worked volumes, and still do after an early sketch dimension changes; see [Reference parts](../user-guide/reference-parts.md). Modeling them found a bug, fixed in the same change: a sketch on a revolved part's flat bottom faced into the part.)
 
 ### Phase 3: v0.1 Functional modeler release
 

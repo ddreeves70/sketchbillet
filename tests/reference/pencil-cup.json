@@ -1,0 +1,42 @@
+{
+  "title": "Pencil cup",
+  "group": "Enclosures",
+  "order": 3,
+  "about": "A round cup for pens and pencils: a cylinder shelled to 2.5 mm walls with its top open, and its bottom edge bevelled so it doesn't snag. The bevel goes on after the shell, on the outside only.",
+  "uses": [
+    "sketch",
+    "dimensions",
+    "extrude",
+    "shell",
+    "chamfer"
+  ],
+  "picture_alt": "A round open cup with thin walls and a bevelled bottom edge",
+  "numbers": {
+    "r": 35,
+    "h": 90,
+    "t": 2.5,
+    "c": 2
+  },
+  "steps": [
+    "feature.add_sketch plane=xy name=CupSketch",
+    "sketch.add_circle sketch=CupSketch center=0,0 radius=35",
+    "sketch.constrain sketch=CupSketch kind=fix on=Circle1.center",
+    "sketch.constrain sketch=CupSketch kind=radius on=Circle1 value=35 name=Radius",
+    "feature.add_extrude sketch=CupSketch distance=90 name=Solid",
+    "feature.add_shell body=Solid faces=3 thickness=2.5 name=Cup",
+    "feature.add_chamfer body=Cup edges=1 distance=2 name=PencilCup"
+  ],
+  "expect": {
+    "Solid": "pi*r**2*h",
+    "Cup": "pi*r**2*h - pi*(r-t)**2*(h-t)",
+    "PencilCup": "pi*r**2*h - pi*(r-t)**2*(h-t) - 2*pi*(r-c/3)*bevel(c)"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=CupSketch constraint=Radius value=40",
+    "numbers": {
+      "r": 40
+    },
+    "about": "make it 80 mm across instead of 70 mm (CupSketch's Radius): the walls stay 2.5 mm, and the bevel follows the bottom edge."
+  },
+  "show": "PencilCup"
+}

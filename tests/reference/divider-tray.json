@@ -1,0 +1,34 @@
+{
+  "title": "Divider tray",
+  "group": "Enclosures",
+  "order": 4,
+  "about": "A desk tray split into three parts for screws, parts or stationery. It's a shelled box, then one divider drawn on the inside floor from wall to wall, as tall as the walls, and repeated with a pattern.",
+  "uses": ["sketch", "dimensions", "extrude", "shell", "sketch on a face", "join", "pattern"],
+  "picture_alt": "An open tray split into three parts by two thin walls",
+  "numbers": {"W": 120, "D": 80, "H": 25, "t": 2, "dw": 2},
+  "steps": [
+    "feature.add_sketch plane=xy name=TraySketch",
+    "sketch.add_rectangle sketch=TraySketch from=0,0 to=120,80",
+    "sketch.constrain sketch=TraySketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=TraySketch kind=length on=Line1 value=120 name=Width",
+    "sketch.constrain sketch=TraySketch kind=length on=Line2 value=80 name=Depth",
+    "feature.add_extrude sketch=TraySketch distance=25 name=Block",
+    "feature.add_shell body=Block faces=6 thickness=2 name=Tray",
+    "feature.add_sketch body=Tray face=2 name=DividerSketch",
+    "sketch.add_rectangle sketch=DividerSketch from=39,2 to=41,78",
+    "feature.add_extrude sketch=DividerSketch distance=23 name=Divider",
+    "feature.add_pattern steps=Divider count=2 spacing=40 name=Dividers"
+  ],
+  "expect": {
+    "Block": "W*D*H",
+    "Tray": "W*D*H - (W-2*t)*(D-2*t)*(H-t)",
+    "Divider": "W*D*H - (W-2*t)*(D-2*t)*(H-t) + dw*(D-2*t)*(H-t)",
+    "Dividers": "W*D*H - (W-2*t)*(D-2*t)*(H-t) + 2*dw*(D-2*t)*(H-t)"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=TraySketch constraint=Width value=150",
+    "numbers": {"W": 150},
+    "about": "make the tray 150 mm wide instead of 120 mm (TraySketch's Width): the right-hand part gets bigger, and the dividers stay put."
+  },
+  "show": "Dividers"
+}

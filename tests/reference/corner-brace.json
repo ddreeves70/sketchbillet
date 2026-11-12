@@ -1,0 +1,37 @@
+{
+  "title": "Flat corner brace",
+  "group": "Brackets",
+  "order": 5,
+  "about": "A flat L-shaped plate that holds the corner of a frame square, with four countersunk holes so the screw heads sit flush. The second strip is sketched on the first one's back face and extruded out from it.",
+  "uses": ["sketch", "dimensions", "extrude", "sketch on a face", "join", "countersunk holes"],
+  "picture_alt": "A flat L-shaped brace with four countersunk screw holes",
+  "numbers": {"Lx": 60, "Ly": 45, "w": 15, "t": 3, "d": 4, "cs": 8},
+  "steps": [
+    "feature.add_sketch plane=xy name=StripSketch",
+    "sketch.add_rectangle sketch=StripSketch from=0,0 to=60,15",
+    "sketch.constrain sketch=StripSketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=StripSketch kind=length on=Line1 value=60 name=Length",
+    "sketch.constrain sketch=StripSketch kind=length on=Line2 value=15 name=Width",
+    "feature.add_extrude sketch=StripSketch distance=3 name=Strip",
+    "feature.add_sketch body=Strip face=5 name=ArmSketch",
+    "sketch.add_rectangle sketch=ArmSketch from=-15,0 to=0,3",
+    "feature.add_extrude sketch=ArmSketch distance=45 name=Arm",
+    "feature.add_sketch body=Arm face=10 name=HoleSketch",
+    "sketch.add_point sketch=HoleSketch at=30,7.5",
+    "sketch.add_point sketch=HoleSketch at=52,7.5",
+    "sketch.add_point sketch=HoleSketch at=7.5,30",
+    "sketch.add_point sketch=HoleSketch at=7.5,52",
+    "feature.add_hole sketch=HoleSketch kind=countersink diameter=4 countersink_diameter=8 name=Brace"
+  ],
+  "expect": {
+    "Strip": "Lx*w*t",
+    "Arm": "Lx*w*t + w*Ly*t",
+    "Brace": "Lx*w*t + w*Ly*t - 4*(pi*(d/2)**2*t + pi*((cs-d)/2)/3*((cs/2)**2 + cs/2*d/2 + (d/2)**2) - pi*(d/2)**2*(cs-d)/2)"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=StripSketch constraint=Length value=80",
+    "numbers": {"Lx": 80},
+    "about": "make the long strip 80 mm instead of 60 mm (StripSketch's Length): the other strip and the holes stay put."
+  },
+  "show": "Brace"
+}

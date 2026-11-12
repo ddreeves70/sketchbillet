@@ -1,0 +1,56 @@
+{
+  "title": "Rod clamp",
+  "group": "Mounts",
+  "order": 4,
+  "about": "A clamp that holds an 8 mm rod, like the smooth rods a 3D printer slides along: a hole for the rod, a thin slit from the hole to the top, and a screw hole across the slit. Tighten the screw, the slit closes, and the clamp grips the rod.",
+  "uses": [
+    "sketch",
+    "dimensions",
+    "extrude",
+    "sketch on a face",
+    "cut",
+    "hole"
+  ],
+  "picture_alt": "A block with a round hole through it, a narrow slit from the hole up to the top, and a small hole across the slit",
+  "numbers": {
+    "W": 30,
+    "H": 36,
+    "T": 15,
+    "zr": 15,
+    "r": 4,
+    "g": 2,
+    "d": 3.4
+  },
+  "steps": [
+    "feature.add_sketch plane=xz name=BlockSketch",
+    "sketch.add_rectangle sketch=BlockSketch from=0,0 to=30,36",
+    "sketch.constrain sketch=BlockSketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=BlockSketch kind=length on=Line1 value=30 name=Width",
+    "sketch.constrain sketch=BlockSketch kind=length on=Line2 value=36 name=Height",
+    "feature.add_extrude sketch=BlockSketch distance=15 name=Block",
+    "feature.add_sketch body=Block face=2 name=RodSketch",
+    "sketch.add_circle sketch=RodSketch center=15,15 radius=4",
+    "sketch.constrain sketch=RodSketch kind=radius on=Circle1 value=4 name=Rod",
+    "feature.add_extrude sketch=RodSketch distance=15 operation=cut name=Bore",
+    "feature.add_sketch body=Bore face=5 name=SlitSketch",
+    "sketch.add_rectangle sketch=SlitSketch from=14,15 to=16,36",
+    "feature.add_extrude sketch=SlitSketch distance=15 operation=cut name=Slit",
+    "feature.add_sketch body=Slit face=7 name=ScrewSketch",
+    "sketch.add_point sketch=ScrewSketch at=-7.5,28",
+    "feature.add_hole sketch=ScrewSketch diameter=3.4 name=RodClamp"
+  ],
+  "expect": {
+    "Block": "W*H*T",
+    "Bore": "W*H*T - pi*r**2*T",
+    "Slit": "W*H*T - pi*r**2*T - (g*(H - zr) - band(r, g/2)/2)*T",
+    "RodClamp": "W*H*T - pi*r**2*T - (g*(H - zr) - band(r, g/2)/2)*T - pi*(d/2)**2*(W - g)"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=RodSketch constraint=Rod value=5",
+    "numbers": {
+      "r": 5
+    },
+    "about": "make the rod hole 10 mm across instead of 8 mm (RodSketch's Rod), for a 10 mm rod."
+  },
+  "show": "RodClamp"
+}

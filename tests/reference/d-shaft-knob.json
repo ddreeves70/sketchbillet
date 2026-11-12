@@ -1,0 +1,58 @@
+{
+  "title": "D-shaft knob",
+  "group": "Knobs",
+  "order": 1,
+  "about": "A 30 mm knob for a potentiometer or a motor's 6 mm D-shaft (a round shaft with one flat side). Twelve flutes round its rim give your fingers grip: one is cut, and a circular pattern repeats it. The D-shaped bore is a round hole with a flat added back into it, so the knob can't slip round on the shaft.",
+  "uses": [
+    "sketch",
+    "dimensions",
+    "extrude",
+    "sketch on a face",
+    "cut",
+    "circular pattern",
+    "join"
+  ],
+  "picture_alt": "A round knob with twelve grip flutes round its rim",
+  "numbers": {
+    "R": 15,
+    "H": 12,
+    "rf": 1.5,
+    "rb": 3,
+    "f": 1.5,
+    "db": 10
+  },
+  "steps": [
+    "feature.add_sketch plane=xy name=KnobSketch",
+    "sketch.add_circle sketch=KnobSketch center=0,0 radius=15",
+    "sketch.constrain sketch=KnobSketch kind=fix on=Circle1.center",
+    "sketch.constrain sketch=KnobSketch kind=radius on=Circle1 value=15 name=Radius",
+    "feature.add_extrude sketch=KnobSketch distance=12 name=Knob",
+    "feature.add_sketch body=Knob face=3 name=FluteSketch",
+    "sketch.add_circle sketch=FluteSketch center=15,0 radius=1.5",
+    "feature.add_extrude sketch=FluteSketch distance=12 operation=cut name=Flute",
+    "feature.add_pattern steps=Flute kind=circular count=12 name=Grip",
+    "feature.add_sketch body=Grip face=1 name=BoreSketch",
+    "sketch.add_circle sketch=BoreSketch center=0,0 radius=3",
+    "sketch.constrain sketch=BoreSketch kind=fix on=Circle1.center",
+    "sketch.constrain sketch=BoreSketch kind=radius on=Circle1 value=3 name=Bore",
+    "feature.add_extrude sketch=BoreSketch distance=10 operation=cut name=Bored",
+    "feature.add_sketch body=Bored face=1 name=FlatSketch",
+    "sketch.add_rectangle sketch=FlatSketch from=-4,1.5 to=4,5",
+    "feature.add_extrude sketch=FlatSketch distance=10 side=flip name=DKnob"
+  ],
+  "expect": {
+    "Knob": "pi*R**2*H",
+    "Flute": "pi*R**2*H - lens(R, rf, R)*H",
+    "Grip": "pi*R**2*H - 12*lens(R, rf, R)*H",
+    "Bored": "pi*R**2*H - 12*lens(R, rf, R)*H - pi*rb**2*db",
+    "DKnob": "pi*R**2*H - 12*lens(R, rf, R)*H - (pi*rb**2 - seg(rb, rb-f))*db"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=BoreSketch constraint=Bore value=4",
+    "numbers": {
+      "rb": 4
+    },
+    "about": "fit an 8 mm shaft: make the bore's radius 4 mm instead of 3 mm (BoreSketch's Bore). The flat stays 1.5 mm from the middle."
+  },
+  "show": "DKnob"
+}

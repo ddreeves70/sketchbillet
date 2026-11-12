@@ -99,6 +99,18 @@ if(TARGET sketchbillet_cli)
               --sketchbillet-cli $<TARGET_FILE:sketchbillet_cli> --build-dir ${CMAKE_BINARY_DIR} --repo ${PROJECT_SOURCE_DIR})
     add_test(NAME docs.checker
       COMMAND Python3::Interpreter -I ${PROJECT_SOURCE_DIR}/tools/docs/test_check_docs.py)
+    # The reference parts (Phase 2's exit test): each one builds, matches its
+    # hand-worked volumes, and still does after an early sketch dimension changes.
+    file(GLOB SB_REFERENCE_PARTS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/reference/*.json")
+    foreach(part_file IN LISTS SB_REFERENCE_PARTS)
+      get_filename_component(part_name "${part_file}" NAME_WE)
+      add_test(NAME "reference.${part_name}"
+        COMMAND Python3::Interpreter -I ${PROJECT_SOURCE_DIR}/tools/reference/check_parts.py
+                --sketchbillet-cli $<TARGET_FILE:sketchbillet_cli> ${part_name})
+    endforeach()
+    add_test(NAME reference.gallery
+      COMMAND Python3::Interpreter -I ${PROJECT_SOURCE_DIR}/tools/reference/check_parts.py
+              --gallery ${PROJECT_SOURCE_DIR}/docs/user-guide/reference-parts.md)
   else()
     message(STATUS "Python 3 not found: the docs.guides test is off")
   endif()

@@ -1,0 +1,51 @@
+{
+  "title": "Card box",
+  "group": "Enclosures",
+  "order": 5,
+  "about": "A box for a deck of playing cards, with rounded corners and a thumb notch in the front wall so you can pinch the cards out. The corners are rounded before the shell, so the inside corners come out round too; the notch is a circle on the front face, cut through the wall only.",
+  "uses": [
+    "sketch",
+    "dimensions",
+    "extrude",
+    "fillet",
+    "shell",
+    "sketch on a face",
+    "cut"
+  ],
+  "picture_alt": "An open box with rounded corners and a half-round notch in its front wall",
+  "numbers": {
+    "W": 95,
+    "D": 65,
+    "H": 30,
+    "R": 4,
+    "t": 2,
+    "rn": 12
+  },
+  "steps": [
+    "feature.add_sketch plane=xy name=BoxSketch",
+    "sketch.add_rectangle sketch=BoxSketch from=0,0 to=95,65",
+    "sketch.constrain sketch=BoxSketch kind=fix on=Line1.start",
+    "sketch.constrain sketch=BoxSketch kind=length on=Line1 value=95 name=Width",
+    "sketch.constrain sketch=BoxSketch kind=length on=Line2 value=65 name=Depth",
+    "feature.add_extrude sketch=BoxSketch distance=30 name=Block",
+    "feature.add_fillet body=Block edges=5,6,7,8 radius=4 name=Corners",
+    "feature.add_shell body=Corners faces=10 thickness=2 name=Hollow",
+    "feature.add_sketch body=Hollow face=3 name=NotchSketch",
+    "sketch.add_circle sketch=NotchSketch center=47.5,30 radius=12",
+    "feature.add_extrude sketch=NotchSketch distance=2 operation=cut name=CardBox"
+  ],
+  "expect": {
+    "Block": "W*D*H",
+    "Corners": "(W*D - 4*rounding(R))*H",
+    "Hollow": "(W*D - 4*rounding(R))*H - ((W-2*t)*(D-2*t) - 4*rounding(R-t))*(H-t)",
+    "CardBox": "(W*D - 4*rounding(R))*H - ((W-2*t)*(D-2*t) - 4*rounding(R-t))*(H-t) - pi*rn**2/2*t"
+  },
+  "change": {
+    "command": "sketch.set_value sketch=BoxSketch constraint=Width value=105",
+    "numbers": {
+      "W": 105
+    },
+    "about": "make the box 105 mm wide instead of 95 mm (BoxSketch's Width), for sleeved cards: the corners, walls and notch follow."
+  },
+  "show": "CardBox"
+}
