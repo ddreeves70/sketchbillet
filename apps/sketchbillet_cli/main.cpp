@@ -106,6 +106,8 @@ const char* statusName(sb::model::FeatureStatus s) {
             return "blocked";
         case sb::model::FeatureStatus::Suppressed:
             return "off";
+        case sb::model::FeatureStatus::RolledBack:
+            return "rolled back";
     }
     return "?";
 }
@@ -319,6 +321,8 @@ int openDesign(int argc, char** argv) {
         const auto& f = doc.featureAt(i);
         const auto* r = report.result(f.id());
         // A folder's name comes before its first step, and its steps are indented.
+        if (doc.rolledBack() && i == doc.markerIndex())
+            std::printf("  -- rolled back to here: the steps below aren't built --\n");
         const auto* folder = doc.findFolder(doc.folderOf(f.id()));
         if (folder && folder->steps.front() == f.id()) std::printf("  %s/\n", folder->name.c_str());
         std::printf(folder ? "    %-10s %s" : "  %-12s %s", f.name().c_str(), statusName(r->status));

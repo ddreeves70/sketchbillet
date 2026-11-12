@@ -16,14 +16,21 @@
 
 namespace sb::model {
 
-/// Adds a feature, at the end or at a given position.
+/// Adds a feature, at the rollback marker (the end, when it isn't rolled back) or
+/// at a given position.
+///
+/// Put in at the marker while it's rolled back, the feature also takes the place
+/// of the bodies it uses for the steps after it: a fillet put in on Corners before
+/// Shell1 makes Shell1 hollow the filleted body. Those steps keep the names of the
+/// faces and edges they use (Feature::replaceInputs()), which the fillet carries through.
 ///
 /// Fails if the name is empty or taken, or if an input is missing or comes later.
 class AddFeatureCommand final : public Command {
 public:
     /// Prepares to add a feature.
     /// @param feature The feature to add. The command owns it until it is applied.
-    /// @param index Position in the feature list; std::nullopt (the default) means at the end.
+    /// @param index Position in the feature list; std::nullopt (the default) means at the
+    ///     rollback marker, which is the end when the design isn't rolled back.
     explicit AddFeatureCommand(std::unique_ptr<Feature> feature,
                                std::optional<std::size_t> index = std::nullopt);
 
@@ -37,6 +44,7 @@ private:
     std::string name_;
     std::optional<std::size_t> index_;
     std::size_t insertedAt_ = 0;
+    std::vector<std::unique_ptr<Feature>> rewired_;  // later steps as they were, before using this one
 };
 
 /// Deletes a feature that no other step uses.
@@ -81,6 +89,69 @@ private:
     bool off_;
     std::vector<FeatureId> changed_;  // the steps that weren't already that way
     std::string label_;
+};
+
+/// Moves the rollback marker. The steps after it are kept but not built, so you
+/// see the part as it was then; a new step goes in at the marker. It's saved with
+/// the design, and undo puts it back.
+///
+/// @code
+/// // Roll back to just after Box1 (the first step), then forward to the end.
+/// doc.execute(std::make_unique<RollbackCommand>(1));
+/// doc.execute(std::make_unique<RollbackCommand>(doc.featureCount()));
+/// @endcode
+class RollbackCommand final : public Command {
+public:
+    /// Prepares the change.
+    /// @param index How many steps come before the marker: 0 for before the first
+    ///     step, Document::featureCount() or more for the end.
+    explicit RollbackCommand(std::size_t index);
+
+    std::string label() const override;
+    /// Fails if the marker is already there.
+    /// @param editor The document to change.
+    /// @return The problems, or none.
+    Diagnostics apply(DocumentEditor& editor) override;
+    /// Does nothing itself: Document::undo() puts the marker back.
+    /// @param editor Not used.
+    void revert(DocumentEditor& editor) override;
+
+private:
+    std::size_t index_;
+    std::string label_;
+};
+
+/// Moves a step to another place in the order. A step must still come after the
+/// steps it uses, and before the steps that use it. A step moved out of its
+/// folder leaves it; one moved in between two steps of a folder joins that folder.
+/// The rollback marker stays after the same step (or, if that's the step that
+/// moves, after the one before it), so a step moved past the marker is rolled back.
+///
+/// @code
+/// // Move Fillet1 to just before Shell1 (at Shell1's place).
+/// doc.execute(std::make_unique<MoveFeatureCommand>(filletId, *doc.indexOf(shellId)));
+/// @endcode
+class MoveFeatureCommand final : public Command {
+public:
+    /// Prepares the move.
+    /// @param step The step to move.
+    /// @param to Its place afterwards, from 0 (first) to Document::featureCount() - 1 (last).
+    MoveFeatureCommand(FeatureId step, std::size_t to);
+
+    std::string label() const override;
+    /// Fails if the step isn't there, is already at that place, or would come
+    /// before a step it uses or after a step that uses it.
+    /// @param editor The document to change.
+    /// @return The problems, or none.
+    Diagnostics apply(DocumentEditor& editor) override;
+    void revert(DocumentEditor& editor) override;
+
+private:
+    FeatureId step_;
+    std::size_t to_;
+    std::size_t from_ = 0;
+    std::string name_;
+    std::vector<Folder> folders_;  // as they were, for revert
 };
 
 /// Puts steps that are next to each other in the feature tree into a new folder.

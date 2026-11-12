@@ -30,6 +30,7 @@ Each step shows one of these:
 | `failed` | The step couldn't be built. The line under it says why |
 | `blocked` | The step uses another step that failed or is turned off |
 | `off` | The step is turned off (suppressed) |
+| `rolled back` | The step is after the [rollback marker](../user-guide/timeline.md), so it isn't built. A line, `-- rolled back to here: the steps below aren't built --`, shows where the marker is |
 
 A step number that comes from a formula is listed under its step, like
 `    distance = wall * 4  (12 mm)`. A design with

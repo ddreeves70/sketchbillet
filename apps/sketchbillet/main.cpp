@@ -47,6 +47,7 @@
 #include "sb/plugins/Parameters.h"
 #include "sb/plugins/Properties.h"
 #include "sb/plugins/Sketcher.h"
+#include "sb/plugins/Timeline.h"
 #include "sb/plugins/ViewOptions.h"
 #include "sb/plugins/Viewer.h"
 #include "sb/sketch_planegcs/PlaneGcsSolver.h"
@@ -133,6 +134,7 @@ int main(int argc, char** argv) {
     host.addBuiltin(sb::plugins::sketcherPlugin());
     host.addBuiltin(sb::plugins::moveHandlesPlugin());
     host.addBuiltin(sb::plugins::parametersPlugin());
+    host.addBuiltin(sb::plugins::timelinePlugin());
     host.addFolder((QCoreApplication::applicationDirPath() + QStringLiteral("/plugins")).toStdWString());
     host.addFolder(
         (QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/plugins"))

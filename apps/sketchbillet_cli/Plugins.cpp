@@ -46,6 +46,8 @@ const char* statusName(model::FeatureStatus s) {
             return "blocked";
         case model::FeatureStatus::Suppressed:
             return "off";
+        case model::FeatureStatus::RolledBack:
+            return "rolled back";
     }
     return "?";
 }
@@ -535,6 +537,8 @@ int runCommand(int argc, char** argv) {
         const auto& f = design.featureAt(i);
         const auto* r = report->result(f.id());
         // A folder's name comes before its first step, and its steps are indented.
+        if (design.rolledBack() && i == design.markerIndex())
+            std::printf("  -- rolled back to here: the steps below aren't built --\n");
         const auto* folder = design.findFolder(design.folderOf(f.id()));
         if (folder && folder->steps.front() == f.id()) std::printf("  %s/\n", folder->name.c_str());
         std::printf(folder ? "    %-10s %s" : "  %-12s %s", f.name().c_str(), statusName(r->status));

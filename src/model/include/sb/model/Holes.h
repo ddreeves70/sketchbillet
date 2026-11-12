@@ -222,7 +222,7 @@ public:
     bool setNumber(std::string_view key, double value) override;
     std::vector<FeatureId> dependencies() const override;
     std::vector<FeatureId> sketchInputs() const override;
-    void remapInputs(const std::map<FeatureId, FeatureId>& map) override;
+    void remap(const std::map<FeatureId, FeatureId>& map, bool renameRefs) override;
     Built build(kernel::IKernel& kernel, const ResultLookup& earlier) const override;
 
 private:

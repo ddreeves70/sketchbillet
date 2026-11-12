@@ -76,7 +76,7 @@ endif()
 target_compile_definitions(sb_tests PRIVATE SB_TEST_FILES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/files")
 
 if(SB_WITH_OCCT)
-  target_sources(sb_tests PRIVATE kernel/test_occt_kernel.cpp kernel/test_elements.cpp model/test_naming.cpp model/test_fillet.cpp model/test_sketch_face.cpp model/test_extrude_join_cut.cpp model/test_revolve.cpp model/test_hole.cpp model/test_pattern.cpp model/test_mirror.cpp model/test_plane.cpp model/test_shell.cpp model/test_rebuild_occt.cpp model/test_slide.cpp)
+  target_sources(sb_tests PRIVATE kernel/test_occt_kernel.cpp kernel/test_elements.cpp model/test_naming.cpp model/test_fillet.cpp model/test_sketch_face.cpp model/test_extrude_join_cut.cpp model/test_revolve.cpp model/test_hole.cpp model/test_pattern.cpp model/test_mirror.cpp model/test_plane.cpp model/test_shell.cpp model/test_timeline.cpp model/test_rebuild_occt.cpp model/test_slide.cpp)
   target_link_libraries(sb_tests PRIVATE sb::kernel_occt)
 endif()
 
@@ -139,12 +139,13 @@ endif()
 # The desktop shell and its panels, driven without a screen.
 if(TARGET sb_app_core)
   add_executable(sb_app_tests app/main.cpp app/test_shell.cpp app/test_grid_plugin.cpp app/test_axes.cpp
-  app/test_view_options.cpp app/test_constrain.cpp app/test_movehandles.cpp app/test_parameters_panel.cpp)
+  app/test_view_options.cpp app/test_constrain.cpp app/test_movehandles.cpp app/test_parameters_panel.cpp
+  app/test_timeline_bar.cpp)
   # The sketcher's constraint rules (Constrain.h) are tested on their own too.
   target_include_directories(sb_app_tests PRIVATE "${PROJECT_SOURCE_DIR}/plugins/sketcher")
   target_link_libraries(sb_app_tests PRIVATE Catch2::Catch2 sb_app_core sb::kernel_occt sb::view
     sb::plugin_modeling sb::plugin_featuretree sb::plugin_properties sb::plugin_viewoptions sb::plugin_axes sb::plugin_grid sb::plugin_viewer
-    sb::plugin_sketcher sb::plugin_movehandles sb::plugin_parameters sb::sketch_planegcs)
+    sb::plugin_sketcher sb::plugin_movehandles sb::plugin_parameters sb::plugin_timeline sb::sketch_planegcs)
   sb_set_warnings(sb_app_tests)
   if(WIN32)
     # Qt's DLLs and plugins (including the offscreen platform) and ADS, next to the .exe.

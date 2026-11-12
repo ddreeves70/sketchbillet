@@ -1031,7 +1031,8 @@ CommandRegistry makeBuiltin() {
 
     r.add({"feature.duplicate",
            "Duplicate step",
-           "Copies a step, and every step it uses, as new steps at the end of the design.",
+           "Copies a step, and every step it uses, as new steps at the rollback marker: the end of the "
+           "design, unless it's rolled back.",
            {{"feature", ArgType::FeatureRef, "The step to copy.", true, {}}}},
           [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
               const FeatureId id = argFeature(a, "feature");
@@ -1058,6 +1059,77 @@ CommandRegistry makeBuiltin() {
           [](const Document&, const Args& a) -> std::unique_ptr<Command> {
               return std::make_unique<SuppressFeaturesCommand>(argFeatures(a, "steps"),
                                                                argBool(a, "off", true));
+          });
+
+    r.add({"timeline.rollback",
+           "Roll back",
+           "Moves the rollback marker. The steps after it are kept but not built, so you see the part as it "
+           "was then. A new step goes in at the marker, and steps after it that used the same body use the "
+           "new one instead.",
+           {{"after",
+             ArgType::FeatureRef,
+             "The step the marker goes just after, like Corners. Leave it out to use to.",
+             false,
+             {}},
+            {"to",
+             ArgType::Choice,
+             "start (before the first step) or end (every step built). Use it instead of after.",
+             false,
+             {"start", "end"}}}},
+          [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+              const bool after = a.count("after") > 0, to = a.count("to") > 0;
+              if (after == to) {
+                  return std::make_unique<ProblemCommand>(
+                      Diagnostic{"timeline.where",
+                                 Severity::Error,
+                                 "Say where the marker goes: after=<step>, or to=start or to=end.",
+                                 {}});
+              }
+              if (to) {
+                  return std::make_unique<RollbackCommand>(argText(a, "to") == "start" ? 0
+                                                                                       : doc.featureCount());
+              }
+              return std::make_unique<RollbackCommand>(doc.indexOf(argFeature(a, "after")).value_or(0) + 1);
+          });
+
+    r.add({"timeline.move",
+           "Move in the timeline",
+           "Moves a step to another place in the order. A step must come after the steps it uses, and before "
+           "the steps that use it.",
+           {{"feature", ArgType::FeatureRef, "The step to move, like Fillet2.", true, {}},
+            {"before", ArgType::FeatureRef, "Put it just before this step, like Shell1.", false, {}},
+            {"after", ArgType::FeatureRef, "Or just after this step.", false, {}},
+            {"to", ArgType::Choice, "Or start (first) or end (last).", false, {"start", "end"}}}},
+          [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+              const int given = int(a.count("before")) + int(a.count("after")) + int(a.count("to"));
+              if (given != 1) {
+                  return std::make_unique<ProblemCommand>(Diagnostic{
+                      "timeline.where",
+                      Severity::Error,
+                      "Say where it goes, one way: before=<step>, after=<step>, or to=start or to=end.",
+                      {}});
+              }
+              const auto step = argFeature(a, "feature");
+              const std::size_t at = doc.indexOf(step).value_or(0);
+              std::size_t to = 0;
+              if (a.count("to")) {
+                  to = argText(a, "to") == "start" ? 0 : doc.featureCount() - 1;
+              } else {
+                  const bool before = a.count("before") > 0;
+                  const auto other = argFeature(a, before ? "before" : "after");
+                  if (other == step) {
+                      return std::make_unique<ProblemCommand>(
+                          Diagnostic{"timeline.where",
+                                     Severity::Error,
+                                     "A step can't go before or after itself. Pick another step.",
+                                     {}});
+                  }
+                  // Its place in the order without the step that moves, then just before or after it.
+                  std::size_t place = doc.indexOf(other).value_or(0);
+                  if (at < place) --place;
+                  to = before ? place : place + 1;
+              }
+              return std::make_unique<MoveFeatureCommand>(step, to);
           });
 
     r.add({"folder.add",

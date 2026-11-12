@@ -108,7 +108,7 @@ public:
     bool setNumber(std::string_view key, double value) override;
     std::vector<FeatureId> dependencies() const override;
     std::vector<FeatureId> referenceInputs() const override { return dependencies(); }
-    void remapInputs(const std::map<FeatureId, FeatureId>& map) override;
+    void remap(const std::map<FeatureId, FeatureId>& map, bool renameRefs) override;
     /// A Plane isn't built by the kernel: Document::regenerate() works it out with
     /// where() instead. This returns an error if it's called.
     /// @param kernel Not used.

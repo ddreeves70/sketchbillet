@@ -104,7 +104,7 @@ TEST_CASE("sb.modeling loads and its commands work", "[plugin][host]") {
                                    "sketch.constrain",     "sketch.delete",        "sketch.import_spline",
                                    "sketch.reload_spline", "sketch.remove_pole",   "sketch.round_corner",
                                    "sketch.set_spline",    "sketch.set_value",     "sketch.set_weight",
-                                   "sketch.trim"});
+                                   "sketch.trim",          "timeline.move",        "timeline.rollback"});
 
     const DocId doc = host.documents().add(std::make_unique<model::Document>());
     REQUIRE(host.documents().run(doc, "feature.add_box", {{"size", kernel::Vec3{2, 3, 4}}}).empty());

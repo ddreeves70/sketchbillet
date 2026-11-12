@@ -132,7 +132,13 @@ class PluginContext;
 /// plugin::ActionSpec::fromFaces and fromFacesBody.
 /// Version 45 added ui::FormulaBox (sb/ui/FormulaBox.h): a number box for panels
 /// that also takes a formula.
-inline constexpr int kPluginApiVersion = 45;
+/// Version 46 added the timeline: model::Document::markerIndex(), rolledBack(),
+/// afterMarker() and marker(); model::FeatureStatus::RolledBack; the
+/// timeline.rollback and timeline.move commands (model::RollbackCommand,
+/// model::MoveFeatureCommand); and model::Feature::replaceInputs(). A Feature
+/// subclass with inputs now overrides the protected model::Feature::remap()
+/// instead of remapInputs(), which is no longer virtual.
+inline constexpr int kPluginApiVersion = 46;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

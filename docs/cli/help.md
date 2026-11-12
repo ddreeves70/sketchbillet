@@ -67,6 +67,8 @@ Commands for sketchbillet_cli run:
   sketch.set_value         Change dimension
   sketch.set_weight        Change control point weight
   sketch.trim              Trim
+  timeline.move            Move in the timeline
+  timeline.rollback        Roll back
 Run "sketchbillet_cli help <command>" to see a command's settings.
 ```
 

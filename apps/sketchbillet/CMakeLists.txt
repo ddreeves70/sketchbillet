@@ -34,7 +34,7 @@ endif()
 qt_add_executable(sketchbillet main.cpp ${sb_app_icon})
 target_link_libraries(sketchbillet PRIVATE
   sb_app_core sb::kernel_occt sb::view sb::sketch_planegcs
-  sb::plugin_modeling sb::plugin_featuretree sb::plugin_properties sb::plugin_viewoptions sb::plugin_axes sb::plugin_grid sb::plugin_viewer sb::plugin_sketcher sb::plugin_movehandles sb::plugin_parameters)
+  sb::plugin_modeling sb::plugin_featuretree sb::plugin_properties sb::plugin_viewoptions sb::plugin_axes sb::plugin_grid sb::plugin_viewer sb::plugin_sketcher sb::plugin_movehandles sb::plugin_parameters sb::plugin_timeline)
 sb_set_warnings(sketchbillet)
 sb_embed_files(sketchbillet HEADER AppLogo.h NAMESPACE sb::icons::app
   FILES ../../packaging/icons/sketchbillet.svg)

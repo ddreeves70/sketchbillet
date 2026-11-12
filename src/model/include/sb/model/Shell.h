@@ -69,7 +69,7 @@ public:
     std::optional<double> number(std::string_view key) const override;
     bool setNumber(std::string_view key, double value) override;
     std::vector<FeatureId> dependencies() const override { return {body_}; }
-    void remapInputs(const std::map<FeatureId, FeatureId>& map) override;
+    void remap(const std::map<FeatureId, FeatureId>& map, bool renameRefs) override;
     Built build(kernel::IKernel& kernel, const ResultLookup& earlier) const override;
 
 private:

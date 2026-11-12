@@ -68,6 +68,7 @@ enum class FeatureStatus {
     Failed,      ///< The kernel could not build it.
     Blocked,     ///< An earlier step it uses has a problem or is turned off.
     Suppressed,  ///< Turned off by the user.
+    RolledBack,  ///< After the rollback marker (Document::markerIndex()): kept, but not built.
 };
 
 /// What a step that joins, cuts or drills added to its body or took from it,
@@ -259,11 +260,31 @@ public:
     }
 
     /// Points this feature's inputs at other features: an input found in @p map
-    /// is replaced by the id it maps to; others are left alone. Used when a set of
-    /// steps is copied, so the copies use each other, not the originals.
+    /// is replaced by the id it maps to; others are left alone. The faces and edges
+    /// it refers to are renamed too, to the copies' names. Used when a set of steps
+    /// is copied, so the copies use each other, not the originals.
     /// @param map Old input id to new input id.
-    virtual void remapInputs(const std::map<FeatureId, FeatureId>& map) { (void)map; }
+    void remapInputs(const std::map<FeatureId, FeatureId>& map) { remap(map, true); }
 
+    /// Points this feature's inputs at other features, like remapInputs(), but
+    /// keeps the names of the faces and edges it refers to. Used when a step is put
+    /// in just before it on the same body (at the rollback marker): that step carries
+    /// the names through, so the same names find the same faces.
+    /// @param map Old input id to new input id.
+    void replaceInputs(const std::map<FeatureId, FeatureId>& map) { remap(map, false); }
+
+protected:
+    /// Points this feature's inputs at other features: what remapInputs() and
+    /// replaceInputs() do. A feature with inputs overrides it.
+    /// @param map Old input id to new input id.
+    /// @param renameRefs True to rename the faces and edges it refers to as well
+    ///     (with remapRef()), false to keep their names.
+    virtual void remap(const std::map<FeatureId, FeatureId>& map, bool renameRefs) {
+        (void)map;
+        (void)renameRefs;
+    }
+
+public:
     /// Builds this feature's shape and names its faces, edges and vertices. Must
     /// be deterministic and must not throw.
     /// @param kernel The geometry kernel to build with.
@@ -458,7 +479,7 @@ public:
     FeatureType type() const override { return FeatureType::Boolean; }
     std::unique_ptr<Feature> clone() const override { return std::make_unique<BooleanFeature>(*this); }
     std::vector<FeatureId> dependencies() const override { return {a_, b_}; }
-    void remapInputs(const std::map<FeatureId, FeatureId>& map) override {
+    void remap(const std::map<FeatureId, FeatureId>& map, bool /*renameRefs*/) override {
         if (auto it = map.find(a_); it != map.end()) a_ = it->second;
         if (auto it = map.find(b_); it != map.end()) b_ = it->second;
     }
@@ -510,7 +531,7 @@ public:
     std::optional<double> number(std::string_view key) const override;
     bool setNumber(std::string_view key, double value) override;
     std::vector<FeatureId> dependencies() const override { return {body_}; }
-    void remapInputs(const std::map<FeatureId, FeatureId>& map) override {
+    void remap(const std::map<FeatureId, FeatureId>& map, bool /*renameRefs*/) override {
         if (auto it = map.find(body_); it != map.end()) body_ = it->second;
     }
     Built build(kernel::IKernel& kernel, const ResultLookup& earlier) const override;
@@ -634,7 +655,7 @@ public:
         return face_ ? std::vector<FeatureId>{face_->body} : std::vector<FeatureId>{};
     }
     std::vector<FeatureId> referenceInputs() const override { return dependencies(); }
-    void remapInputs(const std::map<FeatureId, FeatureId>& map) override;
+    void remap(const std::map<FeatureId, FeatureId>& map, bool renameRefs) override;
     /// A sketch isn't built by the kernel: Document::regenerate() solves it with
     /// the sketch solver instead. This returns an error if it's called.
     /// @param kernel Not used.
@@ -737,7 +758,7 @@ public:
         return {sketch_, body_};
     }
     std::vector<FeatureId> sketchInputs() const override { return {sketch_}; }
-    void remapInputs(const std::map<FeatureId, FeatureId>& map) override {
+    void remap(const std::map<FeatureId, FeatureId>& map, bool /*renameRefs*/) override {
         if (auto it = map.find(sketch_); it != map.end()) sketch_ = it->second;
         if (auto it = map.find(body_); it != map.end()) body_ = it->second;
     }
@@ -850,7 +871,7 @@ public:
         return {sketch_, body_};
     }
     std::vector<FeatureId> sketchInputs() const override { return {sketch_}; }
-    void remapInputs(const std::map<FeatureId, FeatureId>& map) override {
+    void remap(const std::map<FeatureId, FeatureId>& map, bool /*renameRefs*/) override {
         if (auto it = map.find(sketch_); it != map.end()) sketch_ = it->second;
         if (auto it = map.find(body_); it != map.end()) body_ = it->second;
     }
@@ -896,7 +917,7 @@ public:
     std::optional<double> number(std::string_view key) const override;
     bool setNumber(std::string_view key, double value) override;
     std::vector<FeatureId> dependencies() const override { return {body_}; }
-    void remapInputs(const std::map<FeatureId, FeatureId>& map) override;
+    void remap(const std::map<FeatureId, FeatureId>& map, bool renameRefs) override;
     Built build(kernel::IKernel& kernel, const ResultLookup& earlier) const override;
 
 protected:

@@ -22,6 +22,10 @@ A step has:
 Steps that use other steps point at them by **id**, not by name. That's why
 renaming a step never breaks the steps that use it.
 
+The steps are built in order, first to last. You can go back in time with the
+**rollback marker**: the steps after it are kept but not built, and a new step
+goes in at the marker. See [The timeline](timeline.md).
+
 ## Rebuilding
 
 When you open a design, or change it, SketchBillet **rebuilds** it: it runs every step in
@@ -43,7 +47,8 @@ Demo tag: 3 steps
 | `ok` | The step built |
 | `failed` | The step couldn't be built, for example a box with a size of 0 mm. A message says why |
 | `blocked` | The step uses a step that failed or is turned off, so it can't build either |
-| `off` | The step is turned off (suppressed). Turning steps off arrives with the desktop app |
+| `off` | The step is turned off (suppressed), with [`feature.suppress`](../cli/commands.md#featuresuppress) or in the app |
+| `rolled back` | The step is after the [rollback marker](timeline.md), so it isn't built |
 
 A step that fails doesn't stop the others. SketchBillet builds everything it can and
 tells you what to fix.
