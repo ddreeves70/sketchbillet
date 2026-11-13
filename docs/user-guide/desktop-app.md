@@ -418,6 +418,7 @@ Opening a design starts a fresh undo history.
 | File > Save | Ctrl+S | Saves to the design's file (asks for a name the first time) |
 | File > Save as... | Ctrl+Shift+S | Saves under a new name |
 | File > Export... | Ctrl+E | Writes the part as STL or 3MF (for 3D printing) or STEP (for other CAD programs) |
+| File > Check for Printing... | Ctrl+Shift+P | Checks the part is closed all round and has no wall too thin to print (see [Getting ready to print](printing.md)) |
 
 A `*` after the name in the title bar means there are unsaved changes. SketchBillet asks
 before closing or replacing a design with unsaved changes. SketchBillet has one design

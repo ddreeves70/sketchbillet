@@ -8,9 +8,12 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "sb/model/PrintCheck.h"
 #include "sb/core/Diagnostic.h"
 #include "sb/core/Id.h"
 #include "sb/plugin/PluginHost.h"
@@ -51,8 +54,10 @@ public:
     std::function<Unsaved(const QString& name)> askUnsaved;
     // Asks where to save. Tests replace it. Empty means cancelled.
     std::function<QString(const QString& suggested)> askSavePath;
-    // Asks where to export (.stl or .step). Tests replace it. Empty means cancelled.
+    // Asks where to export (.stl, .3mf or .step). Tests replace it. Empty means cancelled.
     std::function<QString(const QString& suggested)> askExportPath;
+    // Shows the print check's findings. Tests replace it so no dialog opens.
+    std::function<void(const model::PrintCheckResult& result)> showPrintCheck;
 
     // Designs. Each returns what went wrong, if anything (also shown in the status bar).
     bool newDesign();  // false if the student cancelled
@@ -62,6 +67,10 @@ public:
     // Writes one body of the active design as STL or STEP, chosen by the file's
     // ending: the picked step if exactly one is picked, else the only finished body.
     Diagnostics exportDesign(const std::filesystem::path& path);
+    // Checks one body of the active design for 3D printing (closed all round, no
+    // wall thinner than 0.8 mm), picked the same way as for export, and shows
+    // what it found with showPrintCheck.
+    model::PrintCheckResult checkForPrinting();
     DocId activeDesign() const;
     std::filesystem::path activePath() const;
 
@@ -119,6 +128,9 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
 
 private:
+    std::optional<std::pair<std::string, QString>> bodyToUse(const model::RebuildReport& report, FeatureId& which,
+                                                             const std::string& code, const QString& verb,
+                                                             const QString& onlyOne) const;
     void buildMenus();
     void buildPanels();
     void runAction(const plugin::ActionSpec& spec);

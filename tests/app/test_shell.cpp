@@ -1985,6 +1985,55 @@ TEST_CASE("File > Export writes the part as STL, 3MF or STEP", "[app][export]") 
     CHECK(app.shell->statusBar()->currentMessage() == QStringLiteral("Exported Box1 to part.3mf"));
 }
 
+TEST_CASE("File > Check for Printing says whether the part is ready, and why not", "[app][export][print]") {
+    App app;
+    model::PrintCheckResult shown;
+    int dialogs = 0;
+    app.shell->showPrintCheck = [&](const model::PrintCheckResult& r) {
+        shown = r;
+        ++dialogs;
+    };
+    auto* check = app.menu("sb.shell.check_print");
+    REQUIRE(check);
+    CHECK(check->shortcut() == QKeySequence(QStringLiteral("Ctrl+Shift+P")));
+
+    check->trigger();  // nothing made yet
+    settle();
+    CHECK(dialogs == 1);
+    REQUIRE(shown.issues.size() == 1);
+    CHECK(shown.issues[0].code == "print.nothing");
+
+    app.click("sb.modeling.box");  // a 20 mm box: fine
+    check->trigger();
+    settle();
+    CHECK(shown.ready());
+    CHECK(shown.issues[0].message.find("Box1 is ready to print") == 0);
+    CHECK(app.shell->statusBar()->currentMessage() == QStringLiteral("Ready to print."));
+
+    // Squash it to 0.5 mm: too thin.
+    const auto box = app.doc().featureAt(0).id();
+    REQUIRE(app.host.documents().run(app.shell->activeDesign(), "feature.set_value",
+                                     {{"feature", box}, {"setting", std::string("size_z")}, {"value", 0.5}})
+                .empty());
+    settle();
+    check->trigger();
+    settle();
+    REQUIRE(shown.issues.size() == 1);
+    CHECK(shown.issues[0].code == "print.thin");
+    CHECK(app.shell->statusBar()->currentMessage() ==
+          QStringLiteral("Not ready to print: see what the check found."));
+
+    app.click("sb.modeling.cylinder");  // two bodies, none picked
+    app.tree()->clearSelection();
+    settle();
+    check->trigger();
+    settle();
+    CHECK(shown.issues[0].code == "print.which");
+    CHECK(shown.issues[0].message ==
+          "This design has 2 bodies, and Check for Printing looks at one. Pick the step to check in the "
+          "feature tree, or join them with Combine > Union.");
+}
+
 TEST_CASE("Export explains what to do when it can't pick one body", "[app][export]") {
     App app;
     const auto path = [&](const char* name) {
