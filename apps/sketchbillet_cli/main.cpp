@@ -1,7 +1,7 @@
 // sketchbillet_cli: headless tool for scripting, smoke tests and the geometry regression corpus.
 //
 //   sketchbillet_cli --version
-//   sketchbillet_cli demo <out.stl|out.step|out.sb> box with a hole, as a toolchain smoke test
+//   sketchbillet_cli demo <out.stl|out.3mf|out.step|out.sb> box with a hole, as a toolchain smoke test
 //   sketchbillet_cli open <file.sb> [--export out [--step name]]  open a design, rebuild it, report each step
 //   sketchbillet_cli open <file.sb> --sketch <name>               ... and list a sketch, solved
 //   sketchbillet_cli open <file.sb> --edges|--faces <name>        ... and list a body's edges or faces,
@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cctype>
 #include <cstdio>
 #include <filesystem>
 #include <memory>
@@ -26,6 +27,7 @@
 #include "Regression.h"
 #include "sb/core/Version.h"
 #include "sb/io/SketchBilletFile.h"
+#include "sb/io/ThreeMf.h"
 #include "sb/kernel_occt/OcctKernel.h"
 #include "sb/model/Commands.h"
 #include "sb/model/Document.h"
@@ -37,8 +39,8 @@ namespace {
 int usage() {
     std::puts(
         "usage: sketchbillet_cli --version\n"
-        "       sketchbillet_cli demo <out.stl|out.step|out.sb>\n"
-        "       sketchbillet_cli open <file.sb> [--export <out.stl|out.step> [--step <name>]]\n"
+        "       sketchbillet_cli demo <out.stl|out.3mf|out.step|out.sb>\n"
+        "       sketchbillet_cli open <file.sb> [--export <out.stl|out.3mf|out.step> [--step <name>]]\n"
         "       sketchbillet_cli open <file.sb> --sketch <name>\n"
         "       sketchbillet_cli open <file.sb> --edges <name>\n"
         "       sketchbillet_cli open <file.sb> --faces <name>\n"
@@ -62,6 +64,12 @@ void printIssues(const sb::Diagnostics& issues, const char* indent = "") {
         if (!d.detail.empty()) std::fprintf(stderr, " (%s)", d.detail.c_str());
         std::fprintf(stderr, "\n");
     }
+}
+
+bool isThreeMf(const std::filesystem::path& out) {
+    std::string ext = out.extension().string();
+    for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return ext == ".3mf";
 }
 
 sb::kernel::ExportFormat formatFor(const std::filesystem::path& out) {
@@ -382,11 +390,15 @@ int openDesign(int argc, char** argv) {
     if (exporting) {
         const std::filesystem::path out = argv[4];
         const sb::kernel::ShapeHandle* shape = nullptr;
+        sb::FeatureId which{};
         if (oneStep) {
             // Export the shape of one named step, even if later steps use it.
             const std::string_view stepName = argv[6];
             for (std::size_t i = 0; i < doc.featureCount(); ++i) {
-                if (doc.featureAt(i).name() == stepName) shape = report.shapeOf(doc.featureAt(i).id());
+                if (doc.featureAt(i).name() == stepName && report.shapeOf(doc.featureAt(i).id())) {
+                    which = doc.featureAt(i).id();
+                    shape = report.shapeOf(which);
+                }
             }
             if (!shape) {
                 std::fprintf(stderr, "error: this design has no step called %s.\n", argv[6]);
@@ -399,9 +411,12 @@ int openDesign(int argc, char** argv) {
                          report.bodies().size());
             return 1;
         } else {
-            shape = report.shapeOf(report.bodies().front());
+            which = report.bodies().front();
+            shape = report.shapeOf(which);
         }
-        auto issues = kernel->exportFile(*shape, formatFor(out), out);
+        // 3MF carries the step's name and material too, so it's written from the design.
+        auto issues = isThreeMf(out) ? sb::io::export3mf(doc, report, *kernel, which, out)
+                                     : kernel->exportFile(*shape, formatFor(out), out);
         if (!issues.empty()) {
             printIssues(issues);
             return 1;
@@ -466,7 +481,11 @@ int demo(const std::filesystem::path& out) {
     const auto mp = kernel->massProps(tag.shape);
     std::printf("volume: %.2f mm^3\n", mp.volume);
 
-    auto issues = kernel->exportFile(tag.shape, formatFor(out), out);
+    auto issues = isThreeMf(out)
+                      ? sb::io::write3mf({{"Tag", kernel->tessellate(tag.shape, MeshQuality{}),
+                                           sb::model::defaultMaterial()}},
+                                         "Demo tag", out)
+                      : kernel->exportFile(tag.shape, formatFor(out), out);
     if (!issues.empty()) {
         printIssues(issues);
         return 1;

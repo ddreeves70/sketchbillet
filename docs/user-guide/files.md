@@ -40,6 +40,7 @@ shape, not the steps, so keep the `.sb` file too. In the desktop app, use
 | Format | Ending | Use it for |
 | --- | --- | --- |
 | STL | `.stl` | 3D printing: open it in your slicer (Cura, PrusaSlicer, Bambu Studio, ...) |
+| 3MF | `.3mf` | 3D printing too, with more than an STL holds: the part's name, its material and color, and that it's in millimeters, so it never opens 25 times too big or small |
 | STEP | `.step` or `.stp` | Other CAD programs (Fusion, SolidWorks, FreeCAD, Onshape), and machine shops |
 
 <!-- cli-example -->
@@ -51,6 +52,22 @@ Demo tag: 3 steps
   Tag          ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
 wrote tag.stl
 ```
+
+A 3MF file works the same way. The slicer lists the part as `Tag`, made of PLA,
+in PLA's blue:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli open tag.sb --export tag.3mf
+Demo tag: 3 steps
+  Plate        ok  volume 7200.00 mm^3
+  Hole         ok  volume 117.81 mm^3
+  Tag          ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
+wrote tag.3mf
+```
+
+Both STL and 3MF turn the part's curved faces into flat triangles, never more
+than 0.05 mm from the true surface: much finer than a printer can print.
 
 Export writes the design's one finished body. If the design has more than one,
 join them with a [union](combining.md#union), or pick one step with `--step`:

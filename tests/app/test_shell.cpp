@@ -1954,7 +1954,7 @@ QByteArray fileStart(const QString& path) {
 
 }  // namespace
 
-TEST_CASE("File > Export writes the part as STL or STEP", "[app][export]") {
+TEST_CASE("File > Export writes the part as STL, 3MF or STEP", "[app][export]") {
     App app;
     app.click("sb.modeling.box");
     auto* exportAct = app.menu("sb.shell.export");
@@ -1978,6 +1978,11 @@ TEST_CASE("File > Export writes the part as STL or STEP", "[app][export]") {
     const QString step = app.dir.filePath(QStringLiteral("part.STEP"));  // any capitals
     REQUIRE(app.shell->exportDesign(step.toStdWString()).empty());
     CHECK(fileStart(step).startsWith("ISO-10303-21"));
+
+    const QString threeMf = app.dir.filePath(QStringLiteral("part.3mf"));
+    REQUIRE(app.shell->exportDesign(threeMf.toStdWString()).empty());
+    CHECK(fileStart(threeMf).startsWith("PK"));  // a zip
+    CHECK(app.shell->statusBar()->currentMessage() == QStringLiteral("Exported Box1 to part.3mf"));
 }
 
 TEST_CASE("Export explains what to do when it can't pick one body", "[app][export]") {
@@ -2016,7 +2021,7 @@ TEST_CASE("Export explains what to do when it can't pick one body", "[app][expor
     problems = app.shell->exportDesign(path("part.obj"));
     REQUIRE(problems.size() == 1);
     CHECK(problems[0].code == "export.format");
-    CHECK(problems[0].message.find(".stl") != std::string::npos);
+    CHECK(problems[0].message.find(".stl, .3mf or .step") != std::string::npos);
 }
 
 TEST_CASE("Phase 0 exit check: box, undo, save, reopen, export STL, all through plugins", "[app][export]") {

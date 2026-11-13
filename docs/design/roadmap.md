@@ -101,7 +101,7 @@ Phase 2 started Oct 31, 2026, with the parameter table.
 ### Phase 3: v0.1 Functional modeler release
 
 - Measure tool, materials/appearances, mass properties. (Materials with density, color, strength numbers and price, per body, and mass, weight and cost: built Oct 24, 2026.)
-- Export STL and 3MF for 3D printing, STEP for interop; print-ready checks (watertight, minimum wall).
+- Export STL and 3MF for 3D printing, STEP for interop; print-ready checks (watertight, minimum wall). (STL and STEP built in Phase 0; 3MF built Nov 13, 2026, with the part's name, material and color.)
 - Installers for all three OSes, auto-update check, crash reporter (opt-in).
 - STEP, STL and 3MF import; sample parts; the user's guide, CLI reference and tutorials cover every feature so far.
 - **Gate:** the 20 reference parts are modeled end to end in the desktop app on all three systems, and someone outside the project models a part of their own using only the user's guide.

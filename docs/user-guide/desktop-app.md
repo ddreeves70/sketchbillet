@@ -417,7 +417,7 @@ Opening a design starts a fresh undo history.
 | File > Open... | Ctrl+O | Opens a `.sb` design |
 | File > Save | Ctrl+S | Saves to the design's file (asks for a name the first time) |
 | File > Save as... | Ctrl+Shift+S | Saves under a new name |
-| File > Export... | Ctrl+E | Writes the part as STL (for 3D printing) or STEP (for other CAD programs) |
+| File > Export... | Ctrl+E | Writes the part as STL or 3MF (for 3D printing) or STEP (for other CAD programs) |
 
 A `*` after the name in the title bar means there are unsaved changes. SketchBillet asks
 before closing or replacing a design with unsaved changes. SketchBillet has one design
@@ -426,9 +426,10 @@ open at a time for now.
 ## Exporting
 
 **File > Export...** writes your part to a file another program can use: an
-`.stl` file for your 3D printer's slicer, or a `.step` file for other CAD
-programs. Pick the type in the box under the file name, or just end the name with
-`.stl` or `.step`. The status bar says what was written, like "Exported Tag to
+`.stl` or `.3mf` file for your 3D printer's slicer, or a `.step` file for other
+CAD programs. A `.3mf` file also carries the part's name, material and color.
+Pick the type in the box under the file name, or just end the name with `.stl`,
+`.3mf` or `.step`. The status bar says what was written, like "Exported Tag to
 tag.stl".
 
 Export writes one body:
