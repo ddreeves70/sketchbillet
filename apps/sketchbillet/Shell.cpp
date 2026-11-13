@@ -109,6 +109,14 @@ Shell::Shell(plugin::PluginHost& host, AppUi& ui, QSettings& settings, QWidget* 
         }
         return path;
     };
+    showPrintCheck = [this](const model::PrintCheckResult& result) {
+        QStringList lines;
+        for (const auto& issue : result.issues) lines << QString::fromStdString(issue.message);
+        if (result.ready())
+            QMessageBox::information(this, tr("Check for Printing"), lines.join(QStringLiteral("\n\n")));
+        else
+            QMessageBox::warning(this, tr("Check for Printing"), lines.join(QStringLiteral("\n\n")));
+    };
     askExportPath = [this](const QString& suggested) {
         const QString stl = tr("STL, for 3D printing (*.stl)");
         const QString threeMf = tr("3MF, for 3D printing, with the part's name, material and color (*.3mf)");
@@ -232,7 +240,11 @@ void Shell::buildMenus() {
     });
     export_->setObjectName(QStringLiteral("sb.shell.export"));
     export_->setShortcut(QKeySequence(QStringLiteral("Ctrl+E")));
-    export_->setStatusTip(tr("Write the part as STL (for 3D printing) or STEP (for other CAD programs)."));
+    export_->setStatusTip(tr("Write the part as STL or 3MF (for 3D printing) or STEP (for other CAD programs)."));
+    auto* check = file->addAction(tr("Check for &Printing..."), this, [this] { checkForPrinting(); });
+    check->setObjectName(QStringLiteral("sb.shell.check_print"));
+    check->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+P")));
+    check->setStatusTip(tr("Check the part is closed all round and has no walls too thin to print."));
     file->addSeparator();
     file->addAction(tr("&Quit"), this, [this] { close(); })->setShortcut(QKeySequence::Quit);
 
@@ -866,6 +878,51 @@ Diagnostics Shell::saveDesign(const std::filesystem::path& path) {
     return {};
 }
 
+// The picked step, if exactly one built step is picked; otherwise the one
+// finished body. Otherwise, the problem's code and message.
+std::optional<std::pair<std::string, QString>> Shell::bodyToUse(const model::RebuildReport& report, FeatureId& which,
+                                                                const std::string& code, const QString& verb,
+                                                                const QString& onlyOne) const {
+    const auto& picked = host_.selection().features();
+    if (host_.selection().doc() == activeDesign() && picked.size() == 1 && report.shapeOf(picked.front())) {
+        which = picked.front();
+    } else if (report.bodies().size() == 1) {
+        which = report.bodies().front();
+    } else if (report.bodies().empty()) {
+        return std::pair{code + ".nothing",
+                         tr("There's nothing to %1 yet. Make a shape first, like Create > Box.").arg(verb)};
+    } else {
+        return std::pair{code + ".which",
+                         tr("This design has %1 bodies, and %2. Pick the step to %3 in the feature tree, or "
+                            "join them with Combine > Union.")
+                             .arg(report.bodies().size())
+                             .arg(onlyOne, verb)};
+    }
+    return std::nullopt;
+}
+
+model::PrintCheckResult Shell::checkForPrinting() {
+    model::PrintCheckResult result;
+    auto& docs = host_.documents();
+    const auto* doc = docs.find(activeDesign());
+    const auto* report = docs.lastRebuild(activeDesign());
+    const auto* kernel = docs.kernel();
+    FeatureId which{};
+    if (!doc || !report || !kernel) {
+        result.issues.push_back({"print.nothing", Severity::Error,
+                                 tr("There's nothing to check yet. Make a shape first, like Create > Box.")
+                                     .toStdString(),
+                                 {}});
+    } else if (auto problem = bodyToUse(*report, which, "print", tr("check"), tr("Check for Printing looks at one"))) {
+        result.issues.push_back({problem->first, Severity::Error, problem->second.toStdString(), {}});
+    } else {
+        result = model::checkPrint(*doc, *report, *kernel, which, {});
+    }
+    showMessage(result.ready() ? tr("Ready to print.") : tr("Not ready to print: see what the check found."));
+    showPrintCheck(result);
+    return result;
+}
+
 Diagnostics Shell::exportDesign(const std::filesystem::path& path) {
     auto fail = [this](std::string code, QString message) {
         Diagnostics problems{{std::move(code), Severity::Error, message.toStdString(), {}}};
@@ -894,22 +951,9 @@ Diagnostics Shell::exportDesign(const std::filesystem::path& path) {
                        "other CAD programs). End the file name with .stl, .3mf or .step."));
     }
 
-    // The picked step, if exactly one built step is picked; otherwise the one
-    // finished body.
     FeatureId which{};
-    const auto& picked = host_.selection().features();
-    if (host_.selection().doc() == id && picked.size() == 1 && report->shapeOf(picked.front())) {
-        which = picked.front();
-    } else if (report->bodies().size() == 1) {
-        which = report->bodies().front();
-    } else if (report->bodies().empty()) {
-        return fail("export.nothing",
-                    tr("There's nothing to export yet. Make a shape first, like Create > Box."));
-    } else {
-        return fail("export.which",
-                    tr("This design has %1 bodies, and Export writes one. Pick the step to export in the "
-                       "feature tree, or join them with Combine > Union.")
-                        .arg(report->bodies().size()));
+    if (auto problem = bodyToUse(*report, which, "export", tr("export"), tr("Export writes one"))) {
+        return fail(problem->first, problem->second);
     }
     const auto* shape = report->shapeOf(which);
     if (!shape) return fail("export.nothing", tr("That step didn't build, so there's nothing to export."));

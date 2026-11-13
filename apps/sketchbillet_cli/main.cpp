@@ -16,6 +16,7 @@
 #include <cmath>
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <numbers>
@@ -31,6 +32,7 @@
 #include "sb/kernel_occt/OcctKernel.h"
 #include "sb/model/Commands.h"
 #include "sb/model/Document.h"
+#include "sb/model/PrintCheck.h"
 #include "sb/sketch/Profiles.h"
 #include "sb/sketch_planegcs/PlaneGcsSolver.h"
 
@@ -44,6 +46,7 @@ int usage() {
         "       sketchbillet_cli open <file.sb> --sketch <name>\n"
         "       sketchbillet_cli open <file.sb> --edges <name>\n"
         "       sketchbillet_cli open <file.sb> --faces <name>\n"
+        "       sketchbillet_cli check <file.sb> [--step <name>] [--min-wall <mm>]\n"
         "       sketchbillet_cli materials [<file.sb>]\n"
         "       sketchbillet_cli regress [--update] <case.json|folder>...\n"
         "       sketchbillet_cli plugins [--plugins <folder>]... [--slow-start-ms <n>] [--strict]\n"
@@ -426,6 +429,74 @@ int openDesign(int argc, char** argv) {
     return 0;
 }
 
+// Checks a design's body for 3D printing: closed all round, and no wall too
+// thin. Returns 0 if it's ready to print, 1 if not (or the design can't be
+// opened), 2 for a mistake in how it was run.
+int checkDesign(int argc, char** argv) {
+    if (argc < 3) return usage();
+    std::string stepName;
+    sb::model::PrintCheckOptions options;
+    for (int i = 3; i < argc; i += 2) {
+        const std::string_view flag = argv[i];
+        if (i + 1 >= argc) return usage();
+        if (flag == "--step") {
+            stepName = argv[i + 1];
+        } else if (flag == "--min-wall") {
+            char* end = nullptr;
+            options.minWall = std::strtod(argv[i + 1], &end);
+            if (end == argv[i + 1] || *end != '\0' || !(options.minWall > 0)) {
+                std::fprintf(stderr, "error: --min-wall needs a thickness in mm bigger than 0, like 0.8.\n");
+                return 2;
+            }
+        } else {
+            return usage();
+        }
+    }
+    auto opened = sb::io::openFile(argv[2]);
+    if (!opened.ok()) {
+        printIssues(opened.issues);
+        return 1;
+    }
+    const auto& doc = *opened.document;
+    auto kernel = sb::kernel::makeOcctKernel();
+    auto solver = sb::sketch::makePlaneGcsSolver();
+    const auto report = doc.regenerate(*kernel, solver.get());
+
+    sb::FeatureId which{};
+    if (!stepName.empty()) {
+        bool found = false;
+        for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+            if (doc.featureAt(i).name() == stepName) {
+                which = doc.featureAt(i).id();
+                found = true;
+            }
+        }
+        if (!found) {
+            std::fprintf(stderr, "error: this design has no step called %s.\n", stepName.c_str());
+            return 1;
+        }
+    } else if (report.bodies().size() != 1) {
+        std::fprintf(stderr,
+                     "error: this design has %zu finished bodies, and check looks at one. "
+                     "Combine them with feature.add_boolean, or pick one with --step <name>.\n",
+                     report.bodies().size());
+        return 1;
+    } else {
+        which = report.bodies().front();
+    }
+    const auto result = sb::model::checkPrint(doc, report, *kernel, which, options);
+    for (const auto& issue : result.issues) {
+        if (issue.severity == sb::Severity::Info) std::printf("%s\n", issue.message.c_str());
+    }
+    printIssues([&] {
+        sb::Diagnostics problems;
+        for (const auto& issue : result.issues)
+            if (issue.severity != sb::Severity::Info) problems.push_back(issue);
+        return problems;
+    }());
+    return result.ready() ? 0 : 1;
+}
+
 // Lists SketchBillet's materials, and a design's own ones after them.
 int materials(int argc, char** argv) {
     if (argc > 3) return usage();
@@ -524,6 +595,7 @@ int main(int argc, char** argv) {
     }
     if (cmd == "demo" && argc == 3) return demo(argv[2]);
     if (cmd == "open") return openDesign(argc, argv);
+    if (cmd == "check") return checkDesign(argc, argv);
     if (cmd == "materials") return materials(argc, argv);
     if (cmd == "regress") return regress(argc, argv);
     if (cmd == "plugins") return sb::cli::listPlugins(argc, argv);

@@ -33,7 +33,8 @@ to your `PATH`.
 | Command | What it does |
 | --- | --- |
 | [`sketchbillet_cli run`](run.md) | Runs one modeling command on a new or saved design, and saves it |
-| [`sketchbillet_cli open`](open.md) | Opens a design, rebuilds it, reports each step, and exports STL or STEP |
+| [`sketchbillet_cli open`](open.md) | Opens a design, rebuilds it, reports each step, and exports STL, 3MF or STEP |
+| [`sketchbillet_cli check`](check.md) | Checks a design is ready to 3D print: closed all round, with no wall too thin |
 | [`sketchbillet_cli materials`](materials.md) | Lists the materials a body can be made of |
 | [`sketchbillet_cli help`](help.md) | Lists the modeling commands, or explains one |
 | [`sketchbillet_cli plugins`](plugins.md) | Lists the plugins SketchBillet finds, and what's wrong with any that don't load |

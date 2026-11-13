@@ -65,6 +65,18 @@ The desktop app shows these in the status bar after **File > Export...**:
 | `export.format` | The file name doesn't end with `.stl`, `.3mf`, `.step` or `.stp` | End the name with `.stl` or `.3mf` (3D printing) or `.step` (other CAD programs) |
 | `export.stl.failed`, `export.step.failed`, `export.cant_write` | The file couldn't be written | Check the folder is still there, that you're allowed to save in it, and that the disk isn't full |
 
+## The print check found a problem
+
+**File > Check for Printing...** and `sketchbillet_cli check` show these. The
+[Getting ready to print](printing.md) page has more on each.
+
+| Code | What it means | How to fix it |
+| --- | --- | --- |
+| `print.thin` | Some walls are thinner than 0.8 mm (or the `--min-wall` you gave) | Make them thicker, or move a hole or pocket away from the edge |
+| `print.open` | The surface has gaps, so a slicer can't tell what's inside | Make touching bodies overlap by 0.1 mm or more, and join them |
+| `print.invalid` | The shape itself has problems | Look at the step that made it; try changing its sizes a little |
+| `print.nothing`, `print.which` | There's no shape to check, or more than one and none is picked | Make a shape, or pick the step to check |
+
 ## Paste didn't work
 
 The desktop app shows these in the status bar after **Edit > Paste**:

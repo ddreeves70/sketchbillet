@@ -34,7 +34,8 @@ works in either.
 | Materials: mass, weight, material cost and color | |
 | Parameters: named values like `wall = 3 mm`, with formulas and units, used by sketch dimensions and steps' numbers, with a Parameters panel in the app; formulas typed straight into Properties and the Sketch panel | Formulas for a pattern's count, typed in the app |
 | Save and open `.sb` designs | |
-| Export STL (3D printing) and STEP (other CAD programs), from the app's File menu or `sketchbillet_cli` | |
+| Export STL and 3MF (3D printing) and STEP (other CAD programs), from the app's File menu or `sketchbillet_cli` | |
+| Check a part is ready to print: closed all round, no walls too thin | Overhang checks |
 | Add plugins | Import STEP, STL and 3MF |
 
 ## Contents
@@ -60,9 +61,10 @@ works in either.
 19. [Parameters](parameters.md): named values like `wall = 3 mm`, and formulas that use them.
 20. [The timeline](timeline.md): roll back, add steps in the middle, change the order.
 21. [Files](files.md): saving, opening, and exporting for 3D printing.
-22. [Plugins](plugins.md): adding features to SketchBillet.
-23. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
-24. [Reference parts](reference-parts.md): twenty real parts to build, from brackets to knobs.
+22. [Getting ready to print](printing.md): check for gaps and walls too thin to print.
+23. [Plugins](plugins.md): adding features to SketchBillet.
+24. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
+25. [Reference parts](reference-parts.md): twenty real parts to build, from brackets to knobs.
 
 ## Other guides
 

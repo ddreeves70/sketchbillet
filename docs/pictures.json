@@ -1034,6 +1034,22 @@
       ]
     },
     {
+      "out": "docs/user-guide/images/print-thin-wall.png",
+      "size": "560x360",
+      "commands": [
+        "run --save h.sb feature.add_box size=30,20,5 name=Block",
+        "run --open h.sb --save h.sb feature.add_cylinder radius=5 height=9 base=15,5.6,-2 name=Pen",
+        "run --open h.sb --save h.sb feature.add_boolean operation=cut a=Block b=Pen name=Holder"
+      ],
+      "show": [
+        {
+          "file": "h.sb",
+          "step": "Holder",
+          "color": "blue"
+        }
+      ]
+    },
+    {
       "out": "docs/user-guide/images/app-drag-handles.png",
       "size": "1280x800",
       "commands": [

@@ -98,7 +98,17 @@ Check the volume: the hole takes away the part of the cylinder inside the plate,
 
 ## Step 4: Export it for 3D printing
 
-In the desktop app, open `tag.sb` and pick **File > Export...** (Ctrl+E), then
+First, check it's ready to print: closed all round, with no wall too thin. In the
+desktop app, that's **File > Check for Printing...** (Ctrl+Shift+P). With
+`sketchbillet_cli`:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli check tag.sb
+Tag is ready to print: its surface is closed all round, and its thinnest wall is 4 mm (0.8 mm or more prints well).
+```
+
+Then, in the desktop app, pick **File > Export...** (Ctrl+E), then
 save it as `tag.stl`. With `sketchbillet_cli`:
 
 <!-- cli-example -->
