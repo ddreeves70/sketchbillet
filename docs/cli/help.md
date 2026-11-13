@@ -42,6 +42,7 @@ Commands for sketchbillet_cli run:
   feature.set_value        Change a step's number
   feature.slide            Slide body
   feature.suppress         Turn steps off or on
+  feature.unlink           Unlink copy
   folder.add               New folder
   folder.delete            Remove folder
   folder.rename            Rename folder

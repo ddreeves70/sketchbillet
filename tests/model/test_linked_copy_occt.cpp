@@ -55,14 +55,19 @@ struct Design {
     Design() {
         run("feature.add_sketch", {{"plane", std::string("xy")}});
         const auto sketch = last();
-        run("sketch.add_rectangle", {{"sketch", sketch}, {"from", sketch::Point2{0, 0}}, {"to", sketch::Point2{40, 10}}});
-        run("sketch.constrain", {{"sketch", sketch}, {"kind", std::string("fix")}, {"on", std::string("Line1.start")}});
+        run("sketch.add_rectangle",
+            {{"sketch", sketch}, {"from", sketch::Point2{0, 0}}, {"to", sketch::Point2{40, 10}}});
+        run("sketch.constrain",
+            {{"sketch", sketch}, {"kind", std::string("fix")}, {"on", std::string("Line1.start")}});
         run("sketch.constrain", {{"sketch", sketch},
                                  {"kind", std::string("length")},
                                  {"on", std::string("Line1")},
                                  {"value", 40.0},
                                  {"name", std::string("Width")}});
-        run("sketch.constrain", {{"sketch", sketch}, {"kind", std::string("length")}, {"on", std::string("Line2")}, {"value", 10.0}});
+        run("sketch.constrain", {{"sketch", sketch},
+                                 {"kind", std::string("length")},
+                                 {"on", std::string("Line2")},
+                                 {"value", 10.0}});
         run("feature.add_extrude", {{"sketch", sketch}, {"distance", 4.0}, {"name", std::string("Plate")}});
         run("feature.add_move", {{"body", id("Plate")},
                                  {"turn", 90.0},
@@ -85,7 +90,8 @@ TEST_CASE("A linked copy follows its original's sketch, and joins to it", "[mode
     CHECK(box.max.z - box.min.z == Approx(10));
     CHECK(box.max.y - box.min.y == Approx(4));
 
-    d.run("sketch.set_value", {{"sketch", d.id("Sketch1")}, {"constraint", std::string("Width")}, {"value", 55.0}});
+    d.run("sketch.set_value",
+          {{"sketch", d.id("Sketch1")}, {"constraint", std::string("Width")}, {"value", 55.0}});
     report = d.rebuild();
     REQUIRE(report.ok());
     CHECK(d.volume(report, "Copy1") == Approx(55 * 10 * 4));
@@ -102,7 +108,8 @@ TEST_CASE("A linked copy follows its original's sketch, and joins to it", "[mode
     CHECK(d.kernel->validate(*report.shapeOf(d.id("Angle"))).empty());
 }
 
-TEST_CASE("A linked copy's faces can be sketched on, apart from its original's", "[model][move][linked][occt]") {
+TEST_CASE("A linked copy's faces can be sketched on, apart from its original's",
+          "[model][move][linked][occt]") {
     Design d;
     auto report = d.rebuild();
     // The copy's face that looks forward (-y).
@@ -125,8 +132,147 @@ TEST_CASE("A linked copy's faces can be sketched on, apart from its original's",
     CHECK(report.bodies() == std::vector{d.id("Plate"), d.id("Hole1")});
 
     // A change to the original still reaches the copy's hole.
-    d.run("sketch.set_value", {{"sketch", d.id("Sketch1")}, {"constraint", std::string("Width")}, {"value", 50.0}});
+    d.run("sketch.set_value",
+          {{"sketch", d.id("Sketch1")}, {"constraint", std::string("Width")}, {"value", 50.0}});
     report = d.rebuild();
     REQUIRE(report.ok());
     CHECK(d.volume(report, "Hole1") == Approx(50 * 10 * 4 - std::numbers::pi * 1.5 * 1.5 * 4));
+}
+
+namespace {
+
+// Every step built with nothing to say: no warnings, like a face found by how it
+// looks instead of by its name.
+void checkQuiet(const Design& d, const RebuildReport& report) {
+    for (std::size_t i = 0; i < d.doc.featureCount(); ++i) {
+        const auto& f = d.doc.featureAt(i);
+        const auto* r = report.result(f.id());
+        REQUIRE(r);
+        INFO(f.name() << ": " << (r->issues.empty() ? std::string() : r->issues.front().message));
+        CHECK(r->issues.empty());
+    }
+}
+
+}  // namespace
+
+TEST_CASE("An unlinked copy stops following its original, and has steps of its own",
+          "[model][move][linked][occt]") {
+    Design d;
+    d.run("feature.unlink", {{"feature", d.id("Copy1")}});
+    CHECK(d.doc.undoLabel() == "Unlink Copy1");
+    // The copy's own steps, just before it, named like duplicates.
+    REQUIRE(d.doc.featureCount() == 5);
+    CHECK(d.doc.featureAt(2).name() == "Sketch2");
+    CHECK(d.doc.featureAt(3).name() == "Plate1");
+    CHECK(d.doc.featureAt(4).name() == "Copy1");
+    CHECK_FALSE(static_cast<const MoveFeature&>(d.doc.featureAt(4)).copy());
+
+    // It looks just the same, where it was.
+    auto report = d.rebuild();
+    REQUIRE(report.ok());
+    checkQuiet(d, report);
+    CHECK(report.bodies() == std::vector{d.id("Plate"), d.id("Copy1")});
+    CHECK(d.volume(report, "Copy1") == Approx(40 * 10 * 4));
+    auto box = d.kernel->bounds(*report.shapeOf(d.id("Copy1")));
+    CHECK(box.max.z - box.min.z == Approx(10));
+
+    // A change to the original leaves the copy alone...
+    d.run("sketch.set_value",
+          {{"sketch", d.id("Sketch1")}, {"constraint", std::string("Width")}, {"value", 55.0}});
+    report = d.rebuild();
+    REQUIRE(report.ok());
+    CHECK(d.volume(report, "Plate") == Approx(55 * 10 * 4));
+    CHECK(d.volume(report, "Copy1") == Approx(40 * 10 * 4));
+    // ...and a change to the copy's own sketch leaves the original alone.
+    d.run("sketch.set_value",
+          {{"sketch", d.id("Sketch2")}, {"constraint", std::string("Width")}, {"value", 30.0}});
+    report = d.rebuild();
+    REQUIRE(report.ok());
+    CHECK(d.volume(report, "Plate") == Approx(55 * 10 * 4));
+    CHECK(d.volume(report, "Copy1") == Approx(30 * 10 * 4));
+    box = d.kernel->bounds(*report.shapeOf(d.id("Copy1")));
+    CHECK(box.max.x - box.min.x == Approx(30));
+
+    // Undo puts the link back: the two sketch changes, then the unlink.
+    REQUIRE(d.doc.undo());
+    REQUIRE(d.doc.undo());
+    REQUIRE(d.doc.undo());
+    CHECK(d.doc.featureCount() == 3);
+    CHECK(static_cast<const MoveFeature&>(d.doc.featureAt(2)).copy());
+    report = d.rebuild();
+    REQUIRE(report.ok());
+    CHECK(d.volume(report, "Copy1") == Approx(40 * 10 * 4));
+    // And redo takes it away again, with the same steps.
+    REQUIRE(d.doc.redo());
+    CHECK(d.doc.featureCount() == 5);
+    CHECK(d.doc.featureAt(3).name() == "Plate1");
+    report = d.rebuild();
+    REQUIRE(report.ok());
+    CHECK(report.bodies() == std::vector{d.id("Plate"), d.id("Copy1")});
+}
+
+TEST_CASE("Steps built on a linked copy still find their faces after it's unlinked",
+          "[model][move][linked][occt]") {
+    Design d;
+    auto report = d.rebuild();
+    const auto& names = *report.result(d.id("Copy1"))->names;
+    int front = -1;
+    for (std::size_t i = 0; i < names.elements.faces.size(); ++i) {
+        const auto& f = names.elements.faces[i];
+        if (f.geom == kernel::GeomKind::Plane && f.direction.y < -0.999) front = static_cast<int>(i);
+    }
+    REQUIRE(front >= 0);
+    d.run("feature.add_sketch",
+          {{"body", d.id("Copy1")}, {"face", referTo(names, kernel::TopoKind::Face, front)}});
+    d.run("sketch.add_point", {{"sketch", d.last()}, {"at", sketch::Point2{20, -5}}});
+    d.run("feature.add_hole", {{"sketch", d.last()}, {"diameter", 3.0}});
+
+    d.run("feature.unlink", {{"feature", d.id("Copy1")}});
+    report = d.rebuild();
+    REQUIRE(report.ok());
+    checkQuiet(d, report);  // the hole's sketch found its face by name, not by how it looks
+    CHECK(d.volume(report, "Hole1") == Approx(40 * 10 * 4 - std::numbers::pi * 1.5 * 1.5 * 4));
+    CHECK(report.bodies() == std::vector{d.id("Plate"), d.id("Hole1")});
+
+    // The copy's own sketch changes the copy, and its hole moves with it.
+    d.run("sketch.set_value",
+          {{"sketch", d.id("Sketch3")}, {"constraint", std::string("Width")}, {"value", 50.0}});
+    report = d.rebuild();
+    REQUIRE(report.ok());
+    checkQuiet(d, report);
+    CHECK(d.volume(report, "Hole1") == Approx(50 * 10 * 4 - std::numbers::pi * 1.5 * 1.5 * 4));
+    CHECK(d.volume(report, "Plate") == Approx(40 * 10 * 4));
+}
+
+TEST_CASE("A linked copy joined to its original can be unlinked", "[model][move][linked][occt]") {
+    Design d;
+    d.run("feature.add_boolean", {{"operation", std::string("union")},
+                                  {"a", d.id("Plate")},
+                                  {"b", d.id("Copy1")},
+                                  {"name", std::string("Angle")}});
+    d.run("feature.unlink", {{"feature", d.id("Copy1")}});
+    auto report = d.rebuild();
+    REQUIRE(report.ok());
+    CHECK(report.bodies() == std::vector{d.id("Angle")});
+    CHECK(d.volume(report, "Angle") == Approx(2 * 40 * 10 * 4));
+    // Now only the top of the L follows Width.
+    d.run("sketch.set_value",
+          {{"sketch", d.id("Sketch1")}, {"constraint", std::string("Width")}, {"value", 55.0}});
+    report = d.rebuild();
+    REQUIRE(report.ok());
+    CHECK(d.volume(report, "Angle") == Approx((55 + 40) * 10 * 4));
+}
+
+TEST_CASE("Only a linked copy can be unlinked", "[model][move][linked][occt]") {
+    Design d;
+    d.run("feature.add_move", {{"body", d.id("Copy1")}, {"by", kernel::Vec3{0, 0, 5}}});
+    for (const auto* name : {"Plate", "Move1"}) {
+        auto made = CommandRegistry::builtin().create("feature.unlink", {{"feature", d.id(name)}}, d.doc);
+        REQUIRE(made.ok());
+        const auto issues = d.doc.execute(std::move(made.command));
+        REQUIRE(issues.size() == 1);
+        CHECK(issues.front().code == "unlink.not_linked");
+        CHECK(issues.front().message.find(std::string(name) + " isn't a linked copy") == 0);
+    }
+    CHECK(d.doc.featureCount() == 4);
 }
