@@ -43,7 +43,7 @@ error [command.arg_missing]: Add box needs size: Width, depth and height in mm.
 | Code | Meaning | Fix |
 | --- | --- | --- |
 | `file.cant_read` | The file isn't there, or you aren't allowed to open it | Check the name and folder |
-| `file.not_sketchbillet` | It isn't a SketchBillet design | Open `.sb` files only; export files (STL, STEP) can't be opened as designs yet |
+| `file.not_sketchbillet` | It isn't a SketchBillet design | Open `.sb` files only; export files (STL, 3MF, STEP) can't be opened as designs yet |
 | `file.damaged` | Part of the file is missing or broken | Open an older copy |
 | `file.too_new` | A newer SketchBillet saved it | Update SketchBillet |
 | `file.unknown_step` | It uses a kind of step this SketchBillet doesn't know | Update SketchBillet, or add the plugin that makes that step |
@@ -62,8 +62,8 @@ The desktop app shows these in the status bar after **File > Export...**:
 | --- | --- | --- |
 | `export.nothing` | There's no shape to export yet, or the picked step didn't build | Make a shape (Create > Box), or fix the step that failed |
 | `export.which` | The design has two or more finished bodies, and Export writes one | Pick one step in the feature tree, or join the bodies with Combine > Union |
-| `export.format` | The file name doesn't end with `.stl`, `.step` or `.stp` | End the name with `.stl` (3D printing) or `.step` (other CAD programs) |
-| `export.stl.failed`, `export.step.failed` | The file couldn't be written | Check the folder is still there and you're allowed to save in it |
+| `export.format` | The file name doesn't end with `.stl`, `.3mf`, `.step` or `.stp` | End the name with `.stl` or `.3mf` (3D printing) or `.step` (other CAD programs) |
+| `export.stl.failed`, `export.step.failed`, `export.cant_write` | The file couldn't be written | Check the folder is still there, that you're allowed to save in it, and that the disk isn't full |
 
 ## Paste didn't work
 

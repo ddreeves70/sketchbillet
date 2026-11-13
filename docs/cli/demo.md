@@ -4,13 +4,14 @@ Makes a sample part, a keychain tag with a hole, so you can check that SketchBil
 its geometry kernel work.
 
 ```text
-sketchbillet_cli demo <out.sb|out.stl|out.step>
+sketchbillet_cli demo <out.sb|out.stl|out.3mf|out.step>
 ```
 
 | Argument | Meaning |
 | --- | --- |
 | `out.sb` | Save the tag as a SketchBillet design: three steps you can open and change |
 | `out.stl` | Save only the shape, as a mesh for 3D printing |
+| `out.3mf` | Save only the shape, as a 3MF file for 3D printing, named Tag and made of PLA |
 | `out.step` | Save only the shape, as a STEP file for other CAD programs |
 
 ![The demo keychain tag: a 60 x 30 x 4 mm plate with a 5 mm hole](images/demo-tag.png)
@@ -40,6 +41,9 @@ wrote tag.stl
 $ sketchbillet_cli demo tag.step
 volume: 7121.46 mm^3
 wrote tag.step
+$ sketchbillet_cli demo tag.3mf
+volume: 7121.46 mm^3
+wrote tag.3mf
 ```
 
 The plate is 60 × 30 × 4 mm = 7200 mm^3. The hole takes away

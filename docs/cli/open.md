@@ -6,7 +6,7 @@ also export the finished shape for 3D printing or another CAD program, list a
 sketch as the solver left it, or list a body's edges and faces.
 
 ```text
-sketchbillet_cli open <file.sb> [--export <out.stl|out.step> [--step <name>]]
+sketchbillet_cli open <file.sb> [--export <out.stl|out.3mf|out.step> [--step <name>]]
 sketchbillet_cli open <file.sb> --sketch <name>
 sketchbillet_cli open <file.sb> --edges <name>
 sketchbillet_cli open <file.sb> --faces <name>
@@ -16,6 +16,7 @@ sketchbillet_cli open <file.sb> --faces <name>
 | --- | --- |
 | `<file.sb>` | The design to open |
 | `--export <out.stl>` | Write the finished shape as an STL mesh, for slicers and 3D printing |
+| `--export <out.3mf>` | Write the finished shape as a 3MF file, for slicers and 3D printing: a mesh in millimeters, named after its step, with its material and color |
 | `--export <out.step>` | Write the finished shape as a STEP file, for other CAD programs (`.stp` works too) |
 | `--step <name>` | Export the shape of this step instead, even if later steps use it |
 | `--sketch <name>` | Also list this sketch: each line, circle, arc, spline and point where the solver put it (in the design's unit, angles in degrees; a spline lists its degree and control points), each constraint (a dimension with a formula shows it after its number, like `40.00 mm = wall * 10`), then its closed shapes (with their areas) and any ends that aren't joined |
@@ -62,6 +63,18 @@ Demo tag: 3 steps
   Hole         ok  volume 117.81 mm^3
   Tag          ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
 wrote tag.stl
+```
+
+Or as 3MF, which keeps the part's name, material and color:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli open tag.sb --export tag.3mf
+Demo tag: 3 steps
+  Plate        ok  volume 7200.00 mm^3
+  Hole         ok  volume 117.81 mm^3
+  Tag          ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
+wrote tag.3mf
 ```
 
 Export just the hole's cylinder:

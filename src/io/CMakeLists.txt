@@ -3,6 +3,8 @@
 sb_add_library(sb_io
   SOURCES
     SketchBilletFile.cpp
+    ThreeMf.cpp
+    Zip.cpp
   DEPS
     sb::core
     sb::model

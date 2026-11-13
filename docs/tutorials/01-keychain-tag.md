@@ -112,6 +112,8 @@ wrote tag.stl
 ```
 
 Open `tag.stl` in your slicer (Cura, PrusaSlicer, Bambu Studio, ...) and print it.
+Or save it as `tag.3mf` instead: a 3MF file also tells the slicer the part's name
+and that it's made of PLA.
 A 4 mm tag prints in about 15 minutes.
 
 ## Step 5: Choose what it's made of

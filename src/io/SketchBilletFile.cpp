@@ -1,6 +1,8 @@
 #include "sb/io/SketchBilletFile.h"
 #include "sb/io/Steps.h"
 
+#include "Zip.h"
+
 #include <zip.h>
 
 #include <algorithm>
@@ -47,11 +49,6 @@ using model::FeatureType;
 using nlohmann::json;
 
 constexpr std::uint64_t kMaxEntryBytes = 64ull * 1024 * 1024;  // refuse absurd entries (zip bombs)
-// Every entry is stamped 1980-01-01 00:00, the earliest zip date, written directly in
-// zip's DOS format. (zip_file_set_mtime would convert through the local time zone,
-// so the same design saved in two time zones would give different bytes.)
-constexpr zip_uint16_t kDosTime = 0;                        // 00:00:00
-constexpr zip_uint16_t kDosDate = (0 << 9) | (1 << 5) | 1;  // years since 1980, month, day
 
 // ---------------------------------------------------------------------------
 // Messages (plain words for students; technical detail goes in `detail`)
@@ -1242,45 +1239,8 @@ Diagnostics writeBytes(const Document& doc, Bytes& out) {
     entries.emplace_front("timeline.json", dump(timelineJson));
     entries.emplace_front("manifest.json", dump(manifest));
 
-    auto failed = [](std::string detail) {
-        return Diagnostics{problem("file.cant_write", "SketchBillet couldn't put the design into a file.",
-                                   std::move(detail))};
-    };
-
-    zip_error_t err;
-    zip_error_init(&err);
-    SourcePtr src(zip_source_buffer_create(nullptr, 0, 0, &err));
-    if (!src) return failed(zipErrorText(&err));
-    ZipPtr za(zip_open_from_source(src.get(), ZIP_TRUNCATE, &err));
-    if (!za) return failed(zipErrorText(&err));
-    zip_source_keep(src.get());  // za now shares src; keep it alive after closing za
-
-    for (const auto& [name, text] : entries) {
-        zip_source_t* s = zip_source_buffer(za.get(), text.data(), text.size(), 0);
-        if (!s) return failed(zip_strerror(za.get()));
-        const zip_int64_t index =
-            zip_file_add(za.get(), name.c_str(), s, ZIP_FL_ENC_UTF_8 | ZIP_FL_OVERWRITE);
-        if (index < 0) {
-            zip_source_free(s);
-            return failed(zip_strerror(za.get()));
-        }
-        if (zip_file_set_dostime(za.get(), static_cast<zip_uint64_t>(index), kDosTime, kDosDate, 0) != 0) {
-            return failed(zip_strerror(za.get()));
-        }
-    }
-    if (zip_close(za.get()) != 0) return failed(zip_strerror(za.get()));
-    (void)za.release();  // zip_close freed it
-
-    // Copy the finished archive out of the memory source.
-    if (zip_source_open(src.get()) != 0) return failed("cannot reopen archive buffer");
-    zip_source_seek(src.get(), 0, SEEK_END);
-    const zip_int64_t size = zip_source_tell(src.get());
-    zip_source_seek(src.get(), 0, SEEK_SET);
-    out.assign(static_cast<std::size_t>(size < 0 ? 0 : size), 0);
-    const zip_int64_t got = zip_source_read(src.get(), out.data(), out.size());
-    zip_source_close(src.get());
-    if (size < 0 || got != size) return failed("cannot read archive buffer");
-    return {};
+    return zip::pack(entries, out,
+                     problem("file.cant_write", "SketchBillet couldn't put the design into a file."));
 }
 
 Diagnostics saveFile(Document& doc, const std::filesystem::path& path) {
@@ -1302,29 +1262,9 @@ Diagnostics writeFile(const Document& doc, const std::filesystem::path& path) {
     Bytes bytes;
     if (auto issues = writeBytes(doc, bytes); !issues.empty()) return issues;
 
-    // Write next to the target, then move into place, so a failed save never
+    // Written next to the target, then moved into place, so a failed save never
     // leaves a half-written design behind.
-    auto tmp = path;
-    tmp += ".saving";
-    {
-        std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
-        if (!f) return cantWrite("cannot create " + tmp.string());
-        f.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-        f.close();
-        if (!f) {
-            std::error_code ignore;
-            std::filesystem::remove(tmp, ignore);
-            return cantWrite("cannot write " + tmp.string());
-        }
-    }
-    std::error_code ec;
-    std::filesystem::rename(tmp, path, ec);
-    if (ec) {
-        std::error_code ignore;
-        std::filesystem::remove(tmp, ignore);
-        return cantWrite("cannot replace " + path.string() + ": " + ec.message());
-    }
-    return {};
+    return zip::writeAtomically(bytes, path, cantWrite("").front());
 }
 
 // ---------------------------------------------------------------------------

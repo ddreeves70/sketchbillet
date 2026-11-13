@@ -36,6 +36,7 @@
 #include "ViewOverlay.h"
 #include "sb/core/Version.h"
 #include "sb/io/SketchBilletFile.h"
+#include "sb/io/ThreeMf.h"
 #include "sb/io/Steps.h"
 #include "sb/model/Commands.h"
 #include "sb/plugin/Events.h"
@@ -110,12 +111,16 @@ Shell::Shell(plugin::PluginHost& host, AppUi& ui, QSettings& settings, QWidget* 
     };
     askExportPath = [this](const QString& suggested) {
         const QString stl = tr("STL, for 3D printing (*.stl)");
+        const QString threeMf = tr("3MF, for 3D printing, with the part's name, material and color (*.3mf)");
         const QString step = tr("STEP, for other CAD programs (*.step *.stp)");
         QString filter = stl;
-        QString path = QFileDialog::getSaveFileName(this, tr("Export"), suggested,
-                                                    stl + QStringLiteral(";;") + step, &filter);
+        QString path = QFileDialog::getSaveFileName(
+            this, tr("Export"), suggested,
+            stl + QStringLiteral(";;") + threeMf + QStringLiteral(";;") + step, &filter);
         if (!path.isEmpty() && QFileInfo(path).suffix().isEmpty()) {
-            path += filter == step ? QStringLiteral(".step") : QStringLiteral(".stl");
+            path += filter == step      ? QStringLiteral(".step")
+                    : filter == threeMf ? QStringLiteral(".3mf")
+                                        : QStringLiteral(".stl");
         }
         return path;
     };
@@ -878,14 +883,15 @@ Diagnostics Shell::exportDesign(const std::filesystem::path& path) {
     std::transform(ending.begin(), ending.end(), ending.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     kernel::ExportFormat format{};
+    const bool threeMf = ending == ".3mf";
     if (ending == ".stl") {
         format = kernel::ExportFormat::Stl;
     } else if (ending == ".step" || ending == ".stp") {
         format = kernel::ExportFormat::Step;
-    } else {
+    } else if (!threeMf) {
         return fail("export.format",
-                    tr("SketchBillet can export .stl files (for 3D printing) and .step files (for "
-                       "other CAD programs). End the file name with .stl or .step."));
+                    tr("SketchBillet can export .stl and .3mf files (for 3D printing) and .step files (for "
+                       "other CAD programs). End the file name with .stl, .3mf or .step."));
     }
 
     // The picked step, if exactly one built step is picked; otherwise the one
@@ -907,6 +913,18 @@ Diagnostics Shell::exportDesign(const std::filesystem::path& path) {
     }
     const auto* shape = report->shapeOf(which);
     if (!shape) return fail("export.nothing", tr("That step didn't build, so there's nothing to export."));
+    if (threeMf) {
+        // 3MF carries the step's name and material too, so it's written from the design.
+        if (auto problems = io::export3mf(*doc, *report, *kernel, which, path); !problems.empty()) {
+            showProblems(problems);
+            return problems;
+        }
+        const auto* feature = doc->find(which);
+        showMessage(tr("Exported %1 to %2")
+                        .arg(feature ? qs(feature->name()) : tr("the part"),
+                             QString::fromStdWString(path.filename().wstring())));
+        return {};
+    }
     auto problems = kernel->exportFile(*shape, format, path);
     if (!problems.empty()) {
         // The kernel's words are short; say how to fix it, keeping its code and details.
