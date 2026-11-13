@@ -143,9 +143,11 @@ class PluginContext;
 /// model::RebuildReport::reused().
 /// Version 48 added linked copies: model::MoveFeature::copy() and setCopy(), and
 /// feature.add_move's copy= setting.
-/// Version 49 added measuring: kernel::IKernel::distance() (with kernel::ElementOf
+/// Version 49 added unlinking a linked copy: model::UnlinkCopyCommand and the
+/// feature.unlink command.
+/// Version 50 added measuring: kernel::IKernel::distance() (with kernel::ElementOf
 /// and kernel::Closest), which a kernel must now provide, and sb/model/Measure.h.
-inline constexpr int kPluginApiVersion = 49;
+inline constexpr int kPluginApiVersion = 50;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

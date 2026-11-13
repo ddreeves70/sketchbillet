@@ -151,6 +151,46 @@ Things to know:
 - To join the two into one body, [combine](combining.md) them with a union.
 - For a row or a ring of copies, use a [pattern](patterns.md).
 
+### Unlinking a copy
+
+Want the copy to be different after all, like a shorter left foot? **Unlink**
+it. It stays where it is and looks the same, but it stops following the original.
+It gets its own copies of the steps that make the original, to change on their
+own: like [Duplicate](../cli/commands.md#featureduplicate), they're named with the
+next free number. Holes and sketches already on the copy stay where they are.
+
+Unlink the copy from above. It gets its own `Plate1`, `Hole1` and `Tag1`. Then
+make the copy's plate 50 mm long: the original stays 70 mm long.
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open tag.sb --save tag.sb feature.unlink feature=Copy1
+Demo tag: 7 steps
+  Plate        ok  volume 8400.00 mm^3
+  Hole         ok  volume 117.81 mm^3
+  Tag          ok  volume 8321.46 mm^3  mass 10.32 g (PLA)
+  Plate1       ok  volume 8400.00 mm^3
+  Hole1        ok  volume 117.81 mm^3
+  Tag1         ok  volume 8321.46 mm^3
+  Copy1        ok  volume 8321.46 mm^3  mass 10.32 g (PLA)
+wrote tag.sb
+$ sketchbillet_cli run --open tag.sb feature.set_value feature=Plate1 setting=size_x value=50
+Demo tag: 7 steps
+  Plate        ok  volume 8400.00 mm^3
+  Hole         ok  volume 117.81 mm^3
+  Tag          ok  volume 8321.46 mm^3  mass 10.32 g (PLA)
+  Plate1       ok  volume 6000.00 mm^3
+  Hole1        ok  volume 117.81 mm^3
+  Tag1         ok  volume 5921.46 mm^3
+  Copy1        ok  volume 5921.46 mm^3  mass 7.34 g (PLA)
+```
+
+In the desktop app, pick the linked copy in the feature tree, then **Modify >
+Unlink Copy**. **Edit > Undo** links it again.
+
+Unlinking isn't the same as unticking **Keep the original (linked copy)**: that
+moves the original itself, so there's only one body left. Unlinking keeps both.
+
 ## Tips
 
 - A Move of a step that's turned off is `blocked`, like any step that uses it.

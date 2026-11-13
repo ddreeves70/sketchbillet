@@ -496,7 +496,11 @@ CommandRegistry makeBuiltin() {
            "true to keep the body and add a moved copy that follows it (a linked copy). Default false.",
            false,
            {}},
-          {"name", ArgType::Text, "Step name. Default Move1, Move2, ..., or Copy1, Copy2, ... for a copy", false, {}}}},
+          {"name",
+           ArgType::Text,
+           "Step name. Default Move1, Move2, ..., or Copy1, Copy2, ... for a copy",
+           false,
+           {}}}},
         [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
             kernel::Motion m;
             m.offset = argVec3(a, "by");
@@ -504,8 +508,8 @@ CommandRegistry makeBuiltin() {
             m.axis = argVec3(a, "axis", {0, 0, 1});
             m.center = argVec3(a, "about");
             const bool copy = argBool(a, "copy", false);
-            auto step = std::make_unique<MoveFeature>(argText(a, "name", doc.uniqueName(copy ? "Copy" : "Move")),
-                                                      argFeature(a, "body"), m);
+            auto step = std::make_unique<MoveFeature>(
+                argText(a, "name", doc.uniqueName(copy ? "Copy" : "Move")), argFeature(a, "body"), m);
             step->setCopy(copy);
             return std::make_unique<AddFeatureCommand>(std::move(step));
         });
@@ -1050,6 +1054,15 @@ CommandRegistry makeBuiltin() {
               return std::make_unique<AddFeaturesCommand>(
                   copySteps(doc, {id}), std::vector<Material>{},
                   "Duplicate " + (f ? f->name() : std::string("step")));
+          });
+
+    r.add({"feature.unlink",
+           "Unlink copy",
+           "Turns a linked copy into a copy of its own, so it stops changing when the original does. It "
+           "gets copies of the original's steps, to change on their own.",
+           {{"feature", ArgType::FeatureRef, "The linked copy, like Copy1.", true, {}}}},
+          [](const Document&, const Args& a) -> std::unique_ptr<Command> {
+              return std::make_unique<UnlinkCopyCommand>(argFeature(a, "feature"));
           });
 
     r.add({"feature.suppress",

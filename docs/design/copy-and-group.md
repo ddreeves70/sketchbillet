@@ -153,6 +153,22 @@ when it changes: a Move whose input isn't used up.
   feature tree calls it a Linked copy; Properties has **Keep the original
   (linked copy)**.
 
+**Unlinking (built Nov 13, 2026).** `feature.unlink` (`UnlinkCopyCommand`, **Modify
+> Unlink Copy**) turns a linked copy into an independent copy, as one undo step:
+
+- It copies every step the original's body uses (as `feature.duplicate` does), puts
+  the copies just before the linked copy, and makes the linked copy a plain Move
+  of the copied body. The copy keeps its id and name, so steps that use it still
+  do, and it looks the same.
+- Face and edge names hold the ids of the steps that made them, so the copy's
+  faces get new names. Later steps that build only on the copy (not also on the
+  original's steps) get their references renamed with `remapRef()`, so they find
+  their faces by name. A step that uses both, like the two joined, finds them by
+  how they look (`resolve()`), as after any other change.
+- Nothing new is saved: the result is ordinary steps.
+- A copy only ever gets linked by `feature.add_move copy=true` (or ticking the
+  box in Properties); there's no "link again" besides undo.
+
 ## 5. Groups that move together (Phase 4)
 
 Moving several bodies as one is really a *part* placed in an *assembly*
