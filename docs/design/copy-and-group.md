@@ -1,9 +1,9 @@
 # Copying and grouping steps
 
 > **Draft.** Parts 1 to 3 and the Move step are built (Oct 27 to 28, 2026). They
-> were pulled forward from later phases after Phase 0; linked copies wait for
-> Phase 2's patterns, and groups that move together for Phase 4's assemblies (see
-> the [roadmap](roadmap.md)).
+> were pulled forward from later phases after Phase 0; linked copies followed in
+> Phase 2 (Nov 12, 2026), and groups that move together wait for Phase 4's
+> assemblies (see the [roadmap](roadmap.md)).
 
 Students want to reuse what they've made (another hole like this one, the same
 bracket in a new design) and to keep big feature trees tidy. This page covers
@@ -14,7 +14,7 @@ six asks, built in this order:
 | 1. Duplicate, Copy and Paste | New steps with the same numbers, in this design or another one | Built |
 | 2. Turn steps off together | Turn off (suppress) several picked steps at once, and back on | Built |
 | 3. Folders in the feature tree | Put steps in a named folder that opens and closes | Built |
-| 4. Move, then linked copies | A Move step (built), then copies that follow their original | Move built; linked copies in Phase 2 |
+| 4. Move, then linked copies | A Move step, then copies that follow their original | Built |
 | 5. Groups that move together | Bodies grouped into a part you can place as one | Phase 4 (assemblies) |
 
 Copy between designs is part 1: the clipboard works across designs.
@@ -133,10 +133,25 @@ Boolean's inputs.
 - App: **Modify > Move** (Ctrl+M) adds a Move of the picked step; Properties
   shows Move (mm), Turn (degrees), Axis and Center (mm).
 
-**Linked copies (Phase 2).** A linked copy is a step whose shape is "that step's
-body, moved", which keeps the original as a body too and follows it when it
-changes. It's the same idea as Phase 2's linear and circular patterns, so it'll be
-built with them: a Move whose input isn't used up, and patterns as many of them.
+**Linked copies (built Nov 12, 2026).** A linked copy is a step whose shape is
+"that step's body, moved", which keeps the original as a body too and follows it
+when it changes: a Move whose input isn't used up.
+
+- `sb_model`: `MoveFeature::copy()` and `setCopy()`. A copy lists its body in
+  `referenceInputs()`, like a sketch on a face, so the body stays a finished body;
+  the rebuild needs no other change. `feature.add_move copy=true` names it
+  `Copy1`, `Copy2`, ... A copy is made of what its original is made of.
+- Sliding (dragging) the original: a box, cylinder or Move is changed in place,
+  so its copy follows. Any other body would need a new Move step, which would
+  leave the copy behind, so it's refused with `slide.linked`, which says to drag
+  the copy instead.
+- Copy and paste brings the original along with the copy, like any step's inputs.
+- File: `params.copy: true` on a `"Move"` step, written only for a copy, so a
+  plain Move's file is unchanged. An older SketchBillet ignores the key and
+  moves the original instead, the same trade as Extrude's join and cut.
+- App: **Modify > Linked Copy** (Ctrl+Shift+M) adds a copy 20 mm along x; the
+  feature tree calls it a Linked copy; Properties has **Keep the original
+  (linked copy)**.
 
 ## 5. Groups that move together (Phase 4)
 

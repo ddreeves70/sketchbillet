@@ -141,7 +141,9 @@ class PluginContext;
 /// Version 47 added incremental rebuilds: model::Document::regenerate() takes the
 /// previous rebuild, model::Document::revision(), and
 /// model::RebuildReport::reused().
-inline constexpr int kPluginApiVersion = 47;
+/// Version 48 added linked copies: model::MoveFeature::copy() and setCopy(), and
+/// feature.add_move's copy= setting.
+inline constexpr int kPluginApiVersion = 48;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

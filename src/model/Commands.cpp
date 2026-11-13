@@ -1429,6 +1429,17 @@ Diagnostics SlideBodyCommand::check(const Document& doc, const FeatureId& step) 
     }
     if (type == FeatureType::Box || type == FeatureType::Cylinder || type == FeatureType::Move) return {};
     if (const auto users = doc.dependents(step); !users.empty()) {
+        // A linked copy is placed from where its original is now: a new Move of
+        // the original would move it away from its copy.
+        for (const auto& u : users) {
+            const auto* copy = dynamic_cast<const MoveFeature*>(doc.find(u));
+            if (copy && copy->copy() && copy->body() == step)
+                return {error("slide.linked", copy->name() + " is a linked copy of " + f->name() +
+                                                  ", placed from where " + f->name() +
+                                                  " is now, so moving " + f->name() +
+                                                  " would leave the copy behind. To move the copy, drag " +
+                                                  copy->name() + ".")};
+        }
         const std::string user = doc.find(users.front()) ? doc.find(users.front())->name() : "a later step";
         return {error("slide.used", f->name() + " is used by " + user + ", so moving it alone would leave " +
                                         user + " behind. Move " + user + " instead.")};

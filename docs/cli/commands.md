@@ -177,7 +177,8 @@ the step it moves is used up, like the bodies a Boolean combines. See
 | `turn` | number (degrees) | no | How far to turn it first, counterclockwise looking down the axis. Default `0` |
 | `axis` | x,y,z | no | The direction of the line it turns about. Default `0,0,1` (up) |
 | `about` | x,y,z (mm) | no | A point on that line. Default `0,0,0` |
-| `name` | text | no | Step name. Default `Move1`, `Move2`, ... |
+| `copy` | `true` or `false` | no | `true` keeps the body where it is and adds a moved copy that follows it when it changes: a [linked copy](../user-guide/moving.md#linked-copies). Default `false` |
+| `name` | text | no | Step name. Default `Move1`, `Move2`, ..., or `Copy1`, `Copy2`, ... for a copy |
 
 <!-- cli-example -->
 ```console
@@ -190,6 +191,21 @@ Demo tag: 4 steps
   Tag          ok  volume 7121.46 mm^3
   Move1        ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
 wrote demo.sb
+```
+
+With `copy=true`, the body stays where it is and a copy is moved. Here, Move1
+stays, and Copy1 is a copy of it 40 mm along y. Both are finished bodies, so both
+show a mass:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open demo.sb feature.add_move body=Move1 by=0,40,0 copy=true
+Demo tag: 5 steps
+  Plate        ok  volume 7200.00 mm^3
+  Hole         ok  volume 117.81 mm^3
+  Tag          ok  volume 7121.46 mm^3
+  Move1        ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
+  Copy1        ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
 ```
 
 Turning about an axis of `0,0,0` fails, with a message saying how to fix it:

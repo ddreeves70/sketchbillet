@@ -752,6 +752,32 @@ TEST_CASE("a Move step survives saving and opening, with its turn in radians", "
     CHECK(copy.motion().angle == 0.5);
 }
 
+TEST_CASE("a linked copy survives saving and opening, and a plain move saves no copy key",
+          "[io][move][linked]") {
+    auto doc = makeDesign();
+    const auto tag = doc->featureAt(2).id();
+    auto copy = std::make_unique<model::MoveFeature>("Copy1", tag, kernel::Motion{{0, 40, 0}, {}, {0, 0, 1}, 0});
+    copy->setCopy(true);
+    const auto id = copy->id();
+    REQUIRE(doc->execute(std::make_unique<model::AddFeatureCommand>(std::move(copy))).empty());
+
+    io::Bytes bytes;
+    REQUIRE(io::writeBytes(*doc, bytes).empty());
+    auto opened = io::readBytes(bytes, "tag.sb");
+    REQUIRE(opened.ok());
+    const auto* back = dynamic_cast<const model::MoveFeature*>(opened.document->find(id));
+    REQUIRE(back);
+    CHECK(back->copy());
+    CHECK(back->body() == tag);
+
+    // A plain move's file is just as it was before linked copies.
+    auto plain = opened.document->find(id)->clone();
+    static_cast<model::MoveFeature&>(*plain).setCopy(false);
+    REQUIRE(opened.document->execute(std::make_unique<model::EditFeatureCommand>(std::move(plain))).empty());
+    const auto text = io::stepsToText(*opened.document, {id});
+    CHECK(text.find("\"copy\"") == std::string::npos);
+}
+
 // ---------------------------------------------------------------------------
 // Sketch steps
 // ---------------------------------------------------------------------------

@@ -574,6 +574,34 @@ TEST_CASE("Modify > Move adds a Move step, and Properties changes how far", "[ap
     CHECK(app.tree()->topLevelItem(1)->text(2) == QStringLiteral("ok"));
 }
 
+TEST_CASE("Modify > Linked Copy keeps the body, and Properties can make it a plain move", "[app][move][linked]") {
+    App app;
+    CHECK_FALSE(app.shell->action("sb.modeling.linked_copy")->isEnabled());  // nothing picked
+    app.click("sb.modeling.box");                                            // Box1 is picked
+    app.click("sb.modeling.linked_copy");
+    REQUIRE(app.doc().featureCount() == 2);
+    const auto box = app.doc().featureAt(0).id();
+    auto copy = [&] { return dynamic_cast<const model::MoveFeature&>(app.doc().featureAt(1)); };
+    CHECK(copy().name() == "Copy1");
+    CHECK(copy().copy());
+    CHECK(copy().motion().offset.x == 20.0);  // beside the original, not on top of it
+    CHECK(app.tree()->topLevelItem(1)->text(1) == QStringLiteral("Linked copy"));
+    const auto* rebuilt = app.host.documents().lastRebuild(app.shell->activeDesign());
+    REQUIRE(rebuilt);
+    CHECK(rebuilt->bodies() == std::vector{box, copy().id()});
+
+    auto* keep = app.field<QCheckBox>("copy");
+    REQUIRE(keep);
+    CHECK(keep->isChecked());
+    keep->click();
+    settle();
+    CHECK_FALSE(copy().copy());
+    CHECK(app.doc().undoLabel() == "Edit Copy1");
+    CHECK(app.tree()->topLevelItem(1)->text(1) == QStringLiteral("Move"));
+    rebuilt = app.host.documents().lastRebuild(app.shell->activeDesign());
+    CHECK(rebuilt->bodies() == std::vector{copy().id()});  // a plain move uses Box1 up
+}
+
 TEST_CASE("a sketch shows in the tree, and Properties shows how free it still is", "[app][sketch]") {
     App app;
     auto& docs = app.host.documents();

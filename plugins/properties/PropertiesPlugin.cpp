@@ -667,6 +667,20 @@ private:
                     [setMotion](model::Feature& g, kernel::Vec3 v) {
                         setMotion(g, [v](kernel::Motion& m) { m.center = v; });
                     });
+                // A linked copy keeps the body where it is and adds a moved copy.
+                auto* copy = new QCheckBox(tr("Keep the original (linked copy)"), form_);
+                copy->setObjectName(QStringLiteral("copy"));
+                copy->setToolTip(
+                    tr("Keep the body where it is, and make a moved copy of it. Change the original, and "
+                       "the copy changes too."));
+                form->addRow(tr("Copy"), copy);
+                connect(copy, &QCheckBox::clicked, this, [this](bool on) {
+                    edit(QStringLiteral("copy"),
+                         [on](model::Feature& g) { static_cast<model::MoveFeature&>(g).setCopy(on); });
+                });
+                updaters_.push_back([copy](const model::Feature& g) {
+                    copy->setChecked(static_cast<const model::MoveFeature&>(g).copy());
+                });
                 break;
             }
         }

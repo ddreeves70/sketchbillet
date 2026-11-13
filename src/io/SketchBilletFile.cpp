@@ -597,6 +597,8 @@ json featureToJson(const Feature& f) {
                            {"center", vec3(m.motion().center)},
                            {"axis", vec3(m.motion().axis)},
                            {"angle", m.motion().angle}};
+            // A linked copy keeps its body (an older SketchBillet moves the body instead).
+            if (m.copy()) j["params"]["copy"] = true;
             break;
         }
         case FeatureType::Extrude: {
@@ -886,8 +888,13 @@ std::unique_ptr<Feature> stepFromJson(const json& j, const FeatureId& id, std::s
         if (!center) return bad("center");
         if (!axis) return bad("axis");
         if (!angle) return bad("angle");
-        return std::make_unique<model::MoveFeature>(id, name, *body,
-                                                    kernel::Motion{*offset, *center, *axis, *angle});
+        auto move = std::make_unique<model::MoveFeature>(id, name, *body,
+                                                         kernel::Motion{*offset, *center, *axis, *angle});
+        if (params.contains("copy")) {
+            if (!params["copy"].is_boolean()) return bad("copy");
+            move->setCopy(params["copy"].get<bool>());
+        }
+        return move;
     }
     if (type == "Extrude") {
         const auto sketch = inputs.contains("sketch") && inputs["sketch"].is_string()

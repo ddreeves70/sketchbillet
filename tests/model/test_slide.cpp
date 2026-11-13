@@ -153,6 +153,31 @@ TEST_CASE("sliding is refused for a sketch, and for a body a later step uses", "
     CHECK(d.doc.featureCount() == 5);
 }
 
+TEST_CASE("sliding a linked copy's original moves both, or says why it can't", "[model][slide][linked]") {
+    Design d;
+    const auto box = d.add("feature.add_box", {{"size", kernel::Vec3{10, 10, 10}}});
+    const auto copy = d.add("feature.add_move", {{"body", box}, {"by", kernel::Vec3{20, 0, 0}}, {"copy", true}});
+    // A box moves its corner, and its linked copy follows.
+    REQUIRE(d.slide(box, {0, 5, 0}).empty());
+    CHECK(d.bounds(copy).min.y == Approx(5));
+    CHECK(d.bounds(copy).min.x == Approx(20));
+    // Sliding the copy moves only the copy.
+    REQUIRE(d.slide(copy, {3, 0, 0}).empty());
+    CHECK(d.bounds(copy).min.x == Approx(23));
+    CHECK(d.bounds(box).min.x == Approx(0));
+
+    // A body that would need a new Move step can't leave its copy behind.
+    const auto pin = d.add("feature.add_cylinder", {{"radius", 2.0}, {"height", 20.0}});
+    const auto cut = d.add("feature.add_boolean", {{"operation", std::string("cut")}, {"a", copy}, {"b", pin}});
+    d.add("feature.add_move", {{"body", cut}, {"by", kernel::Vec3{0, 30, 0}}, {"copy", true}});
+    const auto issues = d.slide(cut, {1, 0, 0});
+    REQUIRE_FALSE(issues.empty());
+    CHECK(issues.front().code == "slide.linked");
+    CHECK(issues.front().message ==
+          "Copy2 is a linked copy of Cut1, placed from where Cut1 is now, so moving Cut1 would leave the copy "
+          "behind. To move the copy, drag Copy2.");
+}
+
 TEST_CASE("a slid number stops coming from its formula; the others keep theirs", "[model][slide]") {
     Design d;
     REQUIRE(d.doc.execute(std::make_unique<SetParameterCommand>("gap", "5 mm")).empty());

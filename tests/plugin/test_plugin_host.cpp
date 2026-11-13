@@ -334,6 +334,7 @@ TEST_CASE("sb.modeling adds menu items that run its commands", "[plugin][host]")
     CHECK(ids == std::vector<std::string>{
                      "sb.modeling.box",        "sb.modeling.cylinder",       "sb.modeling.union",
                      "sb.modeling.cut",        "sb.modeling.intersect",      "sb.modeling.move",
+                     "sb.modeling.linked_copy",
                      "sb.modeling.extrude",    "sb.modeling.revolve",        "sb.modeling.hole",
                      "sb.modeling.hole_edges", "sb.modeling.pattern_linear", "sb.modeling.pattern_circular",
                      "sb.modeling.mirror",     "sb.modeling.shell",          "sb.modeling.fillet",

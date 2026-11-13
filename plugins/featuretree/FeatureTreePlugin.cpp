@@ -53,7 +53,7 @@ const char* kindName(const model::Feature& f) {
             break;
         }
         case model::FeatureType::Move:
-            return "Move";
+            return static_cast<const model::MoveFeature&>(f).copy() ? "Linked copy" : "Move";
         case model::FeatureType::Sketch:
             return "Sketch";
         case model::FeatureType::Extrude:

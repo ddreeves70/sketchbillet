@@ -1015,6 +1015,25 @@
       ]
     },
     {
+      "out": "docs/user-guide/images/linked-copy.png",
+      "size": "640x400",
+      "commands": [
+        "demo lc.sb",
+        "run --open lc.sb --save lc.sb feature.add_move body=Tag by=0,40,0 copy=true"
+      ],
+      "show": [
+        {
+          "file": "lc.sb",
+          "step": "Tag"
+        },
+        {
+          "file": "lc.sb",
+          "step": "Copy1",
+          "color": "green"
+        }
+      ]
+    },
+    {
       "out": "docs/user-guide/images/app-drag-handles.png",
       "size": "1280x800",
       "commands": [

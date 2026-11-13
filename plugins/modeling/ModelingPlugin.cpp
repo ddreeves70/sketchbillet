@@ -178,6 +178,16 @@ void registerModeling(plugin::PluginContext& ctx) {
                              .toolbar = true,
                              .icon = std::string(icons::modeling::move_svg),
                              .tip = "Move or turn the picked body. Then type how far in Properties."});
+    // A linked copy: a Move that keeps the original, slid 20 mm along x to start.
+    ctx.addAction(ActionSpec{.id = "sb.modeling.linked_copy",
+                             .text = "Linked Copy",
+                             .menu = "Modify",
+                             .command = "feature.add_move",
+                             .args = {{"copy", true}, {"by", kernel::Vec3{20, 0, 0}}},
+                             .fromSelection = {"body"},
+                             .shortcut = "Ctrl+Shift+M",
+                             .tip = "Make a copy of the picked body that changes when the original does. "
+                                    "Then type where it goes in Properties."});
     // Extrude: the one sketch picked, swept 10 mm out of its plane.
     ctx.addAction(ActionSpec{
         .id = "sb.modeling.extrude",

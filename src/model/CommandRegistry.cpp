@@ -479,7 +479,9 @@ CommandRegistry makeBuiltin() {
     r.add(
         {"feature.add_move",
          "Move body",
-         "Turns a body about a line, then slides it. The body keeps its size and shape.",
+         "Turns a body about a line, then slides it. The body keeps its size and shape. With copy=true it "
+         "makes a linked copy instead: the body stays where it is, and the moved copy follows it when it "
+         "changes.",
          {{"body", ArgType::FeatureRef, "The step whose body is moved.", true, {}},
           {"by", ArgType::Vec3, "How far to slide it along x, y and z, in mm. Default 0, 0, 0.", false, {}},
           {"turn", ArgType::Number, "How far to turn it first, in degrees. Default 0.", false, {}},
@@ -489,15 +491,23 @@ CommandRegistry makeBuiltin() {
            false,
            {}},
           {"about", ArgType::Vec3, "A point on the line it turns about, in mm. Default 0, 0, 0.", false, {}},
-          {"name", ArgType::Text, "Step name. Default Move1, Move2, ...", false, {}}}},
+          {"copy",
+           ArgType::Bool,
+           "true to keep the body and add a moved copy that follows it (a linked copy). Default false.",
+           false,
+           {}},
+          {"name", ArgType::Text, "Step name. Default Move1, Move2, ..., or Copy1, Copy2, ... for a copy", false, {}}}},
         [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
             kernel::Motion m;
             m.offset = argVec3(a, "by");
             m.angle = argNumber(a, "turn") * std::numbers::pi / 180.0;  // degrees in, radians inside
             m.axis = argVec3(a, "axis", {0, 0, 1});
             m.center = argVec3(a, "about");
-            return std::make_unique<AddFeatureCommand>(std::make_unique<MoveFeature>(
-                argText(a, "name", doc.uniqueName("Move")), argFeature(a, "body"), m));
+            const bool copy = argBool(a, "copy", false);
+            auto step = std::make_unique<MoveFeature>(argText(a, "name", doc.uniqueName(copy ? "Copy" : "Move")),
+                                                      argFeature(a, "body"), m);
+            step->setCopy(copy);
+            return std::make_unique<AddFeatureCommand>(std::move(step));
         });
 
     r.add({"feature.add_extrude",
