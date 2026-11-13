@@ -493,6 +493,8 @@ private:
 
 /// Moves and turns the body made by an earlier step. The body keeps its size and
 /// shape; the earlier step's body is used up, like the bodies a Boolean combines.
+/// A linked copy (setCopy()) keeps the earlier body instead, and adds the moved
+/// one: change the original, and the copy follows.
 ///
 /// The turn comes first (about the line through `center` along `axis`), then the
 /// slide by `offset`.
@@ -523,6 +525,15 @@ public:
     /// @param m The new motion (angle in radians, lengths in mm).
     void setMotion(const kernel::Motion& m) { motion_ = m; }
 
+    /// Says whether this is a linked copy: the body stays where it is, and this
+    /// step makes a moved copy of it that follows it when it changes.
+    /// @return True for a linked copy, false for a plain move (the body is used up).
+    bool copy() const { return copy_; }
+
+    /// Makes this step a linked copy, or a plain move.
+    /// @param on True to keep the body and add a moved copy of it.
+    void setCopy(bool on) { copy_ = on; }
+
     FeatureType type() const override { return FeatureType::Move; }
     std::unique_ptr<Feature> clone() const override { return std::make_unique<MoveFeature>(*this); }
     /// offset_x, offset_y, offset_z and center_x, center_y, center_z (mm), and angle (radians).
@@ -531,6 +542,11 @@ public:
     std::optional<double> number(std::string_view key) const override;
     bool setNumber(std::string_view key, double value) override;
     std::vector<FeatureId> dependencies() const override { return {body_}; }
+    /// A linked copy only looks at its body, so the body stays in the design.
+    /// @return The body for a linked copy; nothing for a plain move.
+    std::vector<FeatureId> referenceInputs() const override {
+        return copy_ ? std::vector<FeatureId>{body_} : std::vector<FeatureId>{};
+    }
     void remap(const std::map<FeatureId, FeatureId>& map, bool /*renameRefs*/) override {
         if (auto it = map.find(body_); it != map.end()) body_ = it->second;
     }
@@ -539,6 +555,7 @@ public:
 private:
     FeatureId body_;
     kernel::Motion motion_;
+    bool copy_ = false;
 };
 
 /// Gives where a sketch plane sits: XY has sketch x, y along x, y; XZ along x, z;

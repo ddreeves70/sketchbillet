@@ -74,6 +74,65 @@ TEST_CASE("copying a Move step copies the body it moves too", "[model][move][cop
     CHECK(copy.motion().offset.y == 2.0);
 }
 
+TEST_CASE("a linked copy keeps the body it copies, and follows it", "[model][move][linked]") {
+    Document doc;
+    const auto box = add(doc, std::make_unique<BoxFeature>("Box1", kernel::Vec3{}, kernel::Vec3{10, 10, 10}));
+    auto step = std::make_unique<MoveFeature>("Copy1", box, slide(20, 0, 0));
+    step->setCopy(true);
+    const auto copy = add(doc, std::move(step));
+    CHECK(doc.find(copy)->dependencies() == std::vector<FeatureId>{box});
+    CHECK(doc.find(copy)->referenceInputs() == std::vector<FeatureId>{box});
+
+    test::FakeKernel k;
+    auto report = doc.regenerate(k);
+    REQUIRE(report.ok());
+    CHECK(report.bodies() == std::vector<FeatureId>{box, copy});  // both are finished bodies
+    CHECK(test::FakeKernel::volumeOf(*report.shapeOf(copy)) == 1000.0);
+    REQUIRE(doc.execute(std::make_unique<SetMaterialCommand>(box, "Brass (C360)")).empty());
+    CHECK(doc.materialOf(copy).name == "Brass (C360)");  // made of what the original is made of
+
+    // The original changes; the copy follows.
+    REQUIRE(doc.execute(std::make_unique<SetNumberCommand>(box, "size_z", 25.0)).empty());
+    report = doc.regenerate(k, nullptr, &report);
+    CHECK(test::FakeKernel::volumeOf(*report.shapeOf(copy)) == 2500.0);
+    CHECK(report.reused().empty());
+
+    SECTION("a Boolean of the original and its copy uses up both") {
+        const auto both = add(doc, std::make_unique<BooleanFeature>("Both", kernel::BoolOp::Union, box, copy));
+        report = doc.regenerate(k);
+        REQUIRE(report.ok());
+        CHECK(report.bodies() == std::vector<FeatureId>{both});
+    }
+    SECTION("turning it into a plain move uses the original up") {
+        auto plain = doc.find(copy)->clone();
+        static_cast<MoveFeature&>(*plain).setCopy(false);
+        REQUIRE(doc.execute(std::make_unique<EditFeatureCommand>(std::move(plain))).empty());
+        CHECK(doc.regenerate(k).bodies() == std::vector<FeatureId>{copy});
+        doc.undo();
+        CHECK(doc.regenerate(k).bodies() == std::vector<FeatureId>{box, copy});
+    }
+    SECTION("copying a linked copy copies its original too, like any step's inputs") {
+        const auto steps = copySteps(doc, {copy});
+        REQUIRE(steps.size() == 2);
+        const auto& again = dynamic_cast<const MoveFeature&>(*steps[1]);
+        CHECK(again.copy());
+        CHECK(again.body() == steps[0]->id());
+    }
+}
+
+TEST_CASE("feature.add_move with copy=true adds a linked copy named Copy1", "[model][move][linked][registry]") {
+    Document doc;
+    const auto box = add(doc, std::make_unique<BoxFeature>("Box1", kernel::Vec3{}, kernel::Vec3{10, 10, 10}));
+    auto made = CommandRegistry::builtin().create(
+        "feature.add_move", {{"body", box}, {"by", kernel::Vec3{0, 15, 0}}, {"copy", true}}, doc);
+    REQUIRE(made.ok());
+    REQUIRE(doc.execute(std::move(made.command)).empty());
+    const auto& m = dynamic_cast<const MoveFeature&>(doc.featureAt(1));
+    CHECK(m.name() == "Copy1");
+    CHECK(m.copy());
+    CHECK(doc.undoLabel() == "Add Copy1");
+}
+
 TEST_CASE("feature.add_move takes degrees and stores radians", "[model][move][registry]") {
     Document doc;
     const auto box = add(doc, std::make_unique<BoxFeature>("Box1", kernel::Vec3{}, kernel::Vec3{10, 10, 10}));
@@ -89,6 +148,7 @@ TEST_CASE("feature.add_move takes degrees and stores radians", "[model][move][re
     CHECK(m.motion().axis.z == 1.0);  // up, unless told otherwise
     CHECK(m.motion().offset.x == 5.0);
     CHECK(m.motion().center.x == 0.0);
+    CHECK_FALSE(m.copy());  // a plain move, unless told otherwise
 
     made = CommandRegistry::builtin().create("feature.add_move", {{"by", kernel::Vec3{5, 0, 0}}}, doc);
     REQUIRE_FALSE(made.ok());
