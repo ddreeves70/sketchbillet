@@ -182,6 +182,25 @@ enum class GeomKind {
     Other,     ///< Any other surface or curve, like a swept one.
 };
 
+/// One face, edge or vertex of a shape, by its number in IKernel::elements().
+struct ElementOf {
+    ShapeHandle shape{};             ///< The shape it's on.
+    TopoKind kind = TopoKind::Face;  ///< Face, edge or vertex.
+    int index = 0;                   ///< Its number in elements() of @ref shape, from 0.
+};
+
+/// The shortest distance between two elements, from IKernel::distance().
+struct Closest {
+    double distance = -1;  ///< The shortest distance (mm), or -1 if it couldn't be found.
+    Point3 onA{};          ///< The nearest point on the first element (mm).
+    Point3 onB{};          ///< The nearest point on the second element (mm).
+    Diagnostics issues;    ///< Why it couldn't be found.
+
+    /// Checks whether the distance was found.
+    /// @return True if @ref distance is 0 or more.
+    bool ok() const { return distance >= 0; }
+};
+
 /// What one face, edge or vertex looks like: enough to tell it apart from the
 /// others, and to find it again after the shape changes a little.
 struct ElementInfo {

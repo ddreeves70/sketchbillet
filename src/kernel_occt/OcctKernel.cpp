@@ -1133,6 +1133,47 @@ public:
         return {error("export.format", "That file type is not supported.")};
     }
 
+    Closest distance(const ElementOf& a, const ElementOf& b) const override {
+        Closest out;
+        auto part = [&](const ElementOf& e, TopoDS_Shape& into) {
+            const TopoDS_Shape* s = unwrap(e.shape);
+            if (!s) {
+                out.issues.push_back(error("shape.missing", "There is no body to measure."));
+                return false;
+            }
+            const auto type = e.kind == TopoKind::Face   ? TopAbs_FACE
+                              : e.kind == TopoKind::Edge ? TopAbs_EDGE
+                                                         : TopAbs_VERTEX;
+            TopTools_IndexedMapOfShape map;
+            TopExp::MapShapes(*s, type, map);
+            if (e.index < 0 || e.index >= map.Extent()) {
+                out.issues.push_back(
+                    error("measure.no_element", "That face, edge or point isn't on the body."));
+                return false;
+            }
+            into = map(e.index + 1);
+            return true;
+        };
+        try {
+            TopoDS_Shape sa, sb;
+            if (!part(a, sa) || !part(b, sb)) return out;
+            BRepExtrema_DistShapeShape gap(sa, sb);
+            if (!gap.IsDone() || gap.NbSolution() < 1) {
+                out.issues.push_back(error("measure.failed", "The distance couldn't be worked out."));
+                return out;
+            }
+            // Of several nearest pairs, the first in OCCT's order: the same every time.
+            out.distance = gap.Value();
+            out.onA = point(gap.PointOnShape1(1));
+            out.onB = point(gap.PointOnShape2(1));
+        } catch (const Standard_Failure& e) {
+            out = Closest{};
+            out.issues.push_back(
+                error("measure.failed", "The distance couldn't be worked out (" + describe(e) + ")."));
+        }
+        return out;
+    }
+
     Elements elements(const ShapeHandle& h) const override {
         Elements out;
         const TopoDS_Shape* s = unwrap(h);

@@ -82,6 +82,11 @@ public:
 
     // No faces or edges: naming tests use the real kernel.
     kernel::Elements elements(const kernel::ShapeHandle&) const override { return {}; }
+    kernel::Closest distance(const kernel::ElementOf&, const kernel::ElementOf&) const override {
+        kernel::Closest out;
+        out.issues.push_back({"fake.distance", Severity::Error, "The fake kernel doesn't measure.", {}});
+        return out;
+    }
     // Rounding or beveling takes a little off: 1 mm^3 per edge.
     kernel::OpResult fillet(const kernel::ShapeHandle& s, const std::vector<int>& edges, double r) override {
         ++calls;

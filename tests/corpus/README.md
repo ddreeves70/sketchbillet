@@ -57,6 +57,11 @@ deterministic).
   points: each the middle of one edge (within 1e-6 mm), so a case doesn't depend on
   the kernel's edge order. Lengths are in mm.
 - **`result`:** which step to measure; defaults to the last step.
+- **`measure`:** optional distances to check on the result: a list of
+  `{"a": ..., "b": ...}`, each element `{"face": [x, y, z]}`, `{"edge": ...}` or
+  `{"point": ...}`, found by where its middle is (within 1e-6 mm), like fillet
+  edges. They're recorded as `distances` in `expect`, in the same order, and
+  checked with the `length` tolerance.
 - **`expect`:** only the keys present are checked. Use `"error": "<code>"` for cases that
   must fail with a specific diagnostic.
 - **`tolerance`:** optional. `relative` applies to volume and area, `length` (mm) to bounds.

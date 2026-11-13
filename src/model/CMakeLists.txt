@@ -13,6 +13,7 @@ sb_add_library(sb_model
     ParameterCommands.cpp
     Formulas.cpp
     PrintCheck.cpp
+    Measure.cpp
   DEPS
     sb::core
     sb::kernel
