@@ -188,6 +188,22 @@ void registerModeling(plugin::PluginContext& ctx) {
                              .shortcut = "Ctrl+Shift+M",
                              .tip = "Make a copy of the picked body that changes when the original does. "
                                     "Then type where it goes in Properties."});
+    // Unlink: the one linked copy picked gets steps of its own.
+    ctx.addAction(ActionSpec{
+        .id = "sb.modeling.unlink",
+        .text = "Unlink Copy",
+        .menu = "Modify",
+        .command = "feature.unlink",
+        .fromSelection = {"feature"},
+        .tip = "Make the picked linked copy a copy of its own: it stops changing when the original does, "
+               "and gets its own steps to change.",
+        .enabled = [&ctx] {
+            const auto& sel = ctx.selection();
+            const auto* doc = ctx.documents().find(sel.doc());
+            const auto* f = doc && sel.features().size() == 1 ? doc->find(sel.features()[0]) : nullptr;
+            return f && f->type() == model::FeatureType::Move &&
+                   static_cast<const model::MoveFeature*>(f)->copy();
+        }});
     // Extrude: the one sketch picked, swept 10 mm out of its plane.
     ctx.addAction(ActionSpec{
         .id = "sb.modeling.extrude",

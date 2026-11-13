@@ -574,7 +574,8 @@ TEST_CASE("Modify > Move adds a Move step, and Properties changes how far", "[ap
     CHECK(app.tree()->topLevelItem(1)->text(2) == QStringLiteral("ok"));
 }
 
-TEST_CASE("Modify > Linked Copy keeps the body, and Properties can make it a plain move", "[app][move][linked]") {
+TEST_CASE("Modify > Linked Copy keeps the body, and Properties can make it a plain move",
+          "[app][move][linked]") {
     App app;
     CHECK_FALSE(app.shell->action("sb.modeling.linked_copy")->isEnabled());  // nothing picked
     app.click("sb.modeling.box");                                            // Box1 is picked
@@ -600,6 +601,26 @@ TEST_CASE("Modify > Linked Copy keeps the body, and Properties can make it a pla
     CHECK(app.tree()->topLevelItem(1)->text(1) == QStringLiteral("Move"));
     rebuilt = app.host.documents().lastRebuild(app.shell->activeDesign());
     CHECK(rebuilt->bodies() == std::vector{copy().id()});  // a plain move uses Box1 up
+}
+
+TEST_CASE("Modify > Unlink Copy gives a linked copy steps of its own", "[app][move][linked]") {
+    App app;
+    app.click("sb.modeling.box");                                       // Box1 is picked
+    CHECK_FALSE(app.shell->action("sb.modeling.unlink")->isEnabled());  // not a linked copy
+    app.click("sb.modeling.linked_copy");                               // Copy1 is picked
+    REQUIRE(app.shell->action("sb.modeling.unlink")->isEnabled());
+    app.click("sb.modeling.unlink");
+    REQUIRE(app.doc().featureCount() == 3);
+    CHECK(app.doc().featureAt(1).name() == "Box2");
+    CHECK(app.doc().undoLabel() == "Unlink Copy1");
+    const auto& copy = dynamic_cast<const model::MoveFeature&>(app.doc().featureAt(2));
+    CHECK_FALSE(copy.copy());
+    settle();
+    CHECK(app.tree()->topLevelItem(2)->text(1) == QStringLiteral("Move"));
+    const auto* rebuilt = app.host.documents().lastRebuild(app.shell->activeDesign());
+    REQUIRE(rebuilt);
+    CHECK(rebuilt->bodies() == std::vector{app.doc().featureAt(0).id(), copy.id()});
+    CHECK_FALSE(app.shell->action("sb.modeling.unlink")->isEnabled());  // a plain move now
 }
 
 TEST_CASE("a sketch shows in the tree, and Properties shows how free it still is", "[app][sketch]") {

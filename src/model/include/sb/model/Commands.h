@@ -746,4 +746,40 @@ private:
     std::string label_;
 };
 
+/// Unlinks a linked copy (a Move step with MoveFeature::copy() set), so it no
+/// longer follows its original.
+///
+/// The copy gets steps of its own: a copy of every step that makes the
+/// original's body, put just before the linked copy, named like a duplicate
+/// (Sketch2, Plate1, ...). The linked copy becomes a plain Move of those steps'
+/// body, so it stays where it is and looks the same; but now a change to the
+/// original leaves it alone, and a change to its own steps leaves the original
+/// alone. Later steps that only use the copy (like a hole drilled in it) keep
+/// finding their faces and edges.
+/// @code
+/// doc.execute(std::make_unique<UnlinkCopyCommand>(copyId));
+/// @endcode
+class UnlinkCopyCommand final : public Command {
+public:
+    /// Prepares the command.
+    /// @param copy The linked copy: a Move step with copy() set.
+    explicit UnlinkCopyCommand(FeatureId copy);
+
+    std::string label() const override { return "Unlink " + name_; }
+    Diagnostics apply(DocumentEditor& editor) override;
+    void revert(DocumentEditor& editor) override;
+
+    /// Gives the ids of the steps it adds for the copy.
+    /// @return Their ids, in design order; empty before apply().
+    const std::vector<FeatureId>& ids() const { return ids_; }
+
+private:
+    FeatureId copy_;
+    std::string name_;                               // the copy's name, for the label
+    std::vector<FeatureId> ids_;                     // the steps it added
+    std::vector<std::unique_ptr<Feature>> pending_;  // those steps, while they're not in the design
+    std::vector<std::unique_ptr<Feature>> swaps_;    // the other versions of the steps it changes
+    bool prepared_ = false;                          // pending_ and swaps_ are worked out
+};
+
 }  // namespace sb::model

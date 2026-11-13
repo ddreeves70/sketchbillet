@@ -35,6 +35,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command feature.set_value
            command feature.slide
            command feature.suppress
+           command feature.unlink
            command folder.add
            command folder.delete
            command folder.rename
@@ -69,6 +70,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            action  Combine > Intersect  (feature.add_boolean)
            action  Modify > Move  (feature.add_move)
            action  Modify > Linked Copy  (feature.add_move)
+           action  Modify > Unlink Copy  (feature.unlink)
            action  Create > Extrude  (feature.add_extrude)
            action  Create > Revolve  (feature.add_revolve)
            action  Create > Hole  (feature.add_hole)

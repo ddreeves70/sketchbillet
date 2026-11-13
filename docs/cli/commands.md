@@ -18,6 +18,7 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`feature.rename`](#featurerename) | Renames a step |
 | [`feature.delete`](#featuredelete) | Deletes a step |
 | [`feature.duplicate`](#featureduplicate) | Copies a step, and the steps it uses |
+| [`feature.unlink`](#featureunlink) | Makes a linked copy a copy of its own, so it stops following the original |
 | [`feature.set_material`](#featureset_material) | Picks what a body is made of |
 | [`feature.slide`](#featureslide) | Slides a body by a distance, as dragging its arrows does |
 | [`feature.set_value`](#featureset_value) | Changes a step's number, like an extrude's distance, to a number or a formula |
@@ -311,6 +312,68 @@ Demo tag: 6 steps
   Hole1        ok  volume 117.81 mm^3
   Tag1         ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
 wrote demo.sb
+```
+
+## feature.unlink
+
+Turns a [linked copy](../user-guide/moving.md#linked-copies) into a copy of its
+own. It gets copies of the steps that make the original, put just before it and
+named like [duplicates](#featureduplicate), and it becomes a plain move of those.
+It stays where it is and looks the same, but now changing the original leaves it
+alone, and changing its own steps leaves the original alone. Steps built on the
+copy, like a hole drilled in it, keep working.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `feature` | step name | yes | The linked copy |
+
+In the [demo tag](demo.md), Copy1 is a linked copy of the tag, 40 mm along y.
+Unlinking it gives it its own `Plate1`, `Hole1` and `Tag1`:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli demo demo.sb
+wrote demo.sb
+$ sketchbillet_cli run --open demo.sb --save demo.sb feature.add_move body=Tag by=0,40,0 copy=true
+Demo tag: 4 steps
+  Plate        ok  volume 7200.00 mm^3
+  Hole         ok  volume 117.81 mm^3
+  Tag          ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
+  Copy1        ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
+wrote demo.sb
+$ sketchbillet_cli run --open demo.sb --save demo.sb feature.unlink feature=Copy1
+Demo tag: 7 steps
+  Plate        ok  volume 7200.00 mm^3
+  Hole         ok  volume 117.81 mm^3
+  Tag          ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
+  Plate1       ok  volume 7200.00 mm^3
+  Hole1        ok  volume 117.81 mm^3
+  Tag1         ok  volume 7121.46 mm^3
+  Copy1        ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
+wrote demo.sb
+```
+
+Now making the original plate 80 mm long changes only the original tag:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open demo.sb feature.set_value feature=Plate setting=size_x value=80
+Demo tag: 7 steps
+  Plate        ok  volume 9600.00 mm^3
+  Hole         ok  volume 117.81 mm^3
+  Tag          ok  volume 9521.46 mm^3  mass 11.81 g (PLA)
+  Plate1       ok  volume 7200.00 mm^3
+  Hole1        ok  volume 117.81 mm^3
+  Tag1         ok  volume 7121.46 mm^3
+  Copy1        ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
+```
+
+Only a linked copy can be unlinked:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open demo.sb feature.unlink feature=Tag
+error [unlink.not_linked]: Tag isn't a linked copy, so there's nothing to unlink. Pick a linked copy (a step made with Modify > Linked Copy).
 ```
 
 ## feature.set_material

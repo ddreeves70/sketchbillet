@@ -505,8 +505,10 @@ std::vector<std::unique_ptr<Feature>> freshIds(std::vector<std::unique_ptr<Featu
     return out;
 }
 
-std::vector<std::unique_ptr<Feature>> copySteps(const Document& doc, const std::vector<FeatureId>& ids) {
-    // The steps and everything they use, found by following inputs.
+namespace {
+
+// The steps and everything they use, found by following inputs, in design order.
+std::vector<FeatureId> stepsUsed(const Document& doc, const std::vector<FeatureId>& ids) {
     std::set<FeatureId> wanted;
     std::vector<FeatureId> todo(ids.begin(), ids.end());
     while (!todo.empty()) {
@@ -516,11 +518,18 @@ std::vector<std::unique_ptr<Feature>> copySteps(const Document& doc, const std::
         if (!f || !wanted.insert(id).second) continue;
         for (const auto& dep : f->dependencies()) todo.push_back(dep);
     }
-    std::vector<std::unique_ptr<Feature>> steps;
-    for (std::size_t i = 0; i < doc.featureCount(); ++i) {  // in design order
-        const auto& f = doc.featureAt(i);
-        if (wanted.count(f.id())) steps.push_back(f.clone());
+    std::vector<FeatureId> out;
+    for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+        if (wanted.count(doc.featureAt(i).id())) out.push_back(doc.featureAt(i).id());
     }
+    return out;
+}
+
+}  // namespace
+
+std::vector<std::unique_ptr<Feature>> copySteps(const Document& doc, const std::vector<FeatureId>& ids) {
+    std::vector<std::unique_ptr<Feature>> steps;
+    for (const auto& id : stepsUsed(doc, ids)) steps.push_back(doc.find(id)->clone());
     return freshIds(std::move(steps));
 }
 
@@ -591,6 +600,92 @@ void AddFeaturesCommand::revertMaterials(DocumentEditor& editor) {
                    list.end());
     }
     addedMaterials_.clear();
+}
+
+// ---------------------------------------------------------------------------
+// UnlinkCopyCommand
+// ---------------------------------------------------------------------------
+
+UnlinkCopyCommand::UnlinkCopyCommand(FeatureId copy) : copy_(copy) {}
+
+Diagnostics UnlinkCopyCommand::apply(DocumentEditor& editor) {
+    const auto& doc = editor.document();
+    if (!prepared_) {
+        const auto* f = doc.find(copy_);
+        if (!f) return {error("unlink.missing", "That step isn't in the design.")};
+        name_ = f->name();
+        const auto* move = f->type() == FeatureType::Move ? static_cast<const MoveFeature*>(f) : nullptr;
+        if (!move || !move->copy()) {
+            return {error("unlink.not_linked",
+                          name_ + " isn't a linked copy, so there's nothing to unlink. "
+                                  "Pick a linked copy (a step made with Modify > Linked Copy).")};
+        }
+        if (!doc.find(move->body()))
+            return {error("feature.input_missing", name_ + " copies a step that doesn't exist.")};
+
+        // Copies of the steps that make the original's body. They keep using each
+        // other, and their faces' names change with their ids (see remapRef()).
+        std::map<FeatureId, FeatureId> map;
+        for (const auto& id : stepsUsed(doc, {move->body()})) {
+            const FeatureId fresh = FeatureId::generate();
+            map[id] = fresh;
+            ids_.push_back(fresh);
+        }
+        for (const auto& id : stepsUsed(doc, {move->body()})) {
+            auto step = doc.find(id)->copyWithId(map.at(id));
+            step->remapInputs(map);
+            pending_.push_back(std::move(step));
+        }
+
+        // The copy moves its own body now, and uses it up like any Move.
+        auto unlinked = move->clone();
+        unlinked->replaceInputs({{move->body(), map.at(move->body())}});
+        static_cast<MoveFeature&>(*unlinked).setCopy(false);
+        swaps_.push_back(std::move(unlinked));
+
+        // Later steps that only build on the copy, not on the original's steps,
+        // refer to its faces by names that came from the original's steps: rename
+        // them to the copies' names. (A step that uses both, like the two joined,
+        // finds them again by how they look; see resolve().)
+        const std::size_t at = *doc.indexOf(copy_);
+        for (std::size_t i = at + 1; i < doc.featureCount(); ++i) {
+            const auto& later = doc.featureAt(i);
+            bool onCopy = false, onOriginal = false;
+            std::set<FeatureId> seen;
+            std::vector<FeatureId> todo = later.dependencies();
+            while (!todo.empty()) {
+                const FeatureId id = todo.back();
+                todo.pop_back();
+                if (!seen.insert(id).second) continue;
+                if (id == copy_) {
+                    onCopy = true;  // not past it: the copy's own body is what's renamed
+                } else if (map.count(id)) {
+                    onOriginal = true;
+                } else if (const auto* dep = doc.find(id)) {
+                    for (const auto& d : dep->dependencies()) todo.push_back(d);
+                }
+            }
+            if (!onCopy || onOriginal) continue;
+            auto renamed = later.clone();
+            renamed->remapInputs(map);  // its inputs aren't in map: only its names change
+            swaps_.push_back(std::move(renamed));
+        }
+        prepared_ = true;
+    }
+
+    // The new steps go just before the copy, renamed like duplicates if their names are taken.
+    for (std::size_t i = 0; i < pending_.size(); ++i) {
+        auto& f = pending_[i];
+        if (nameTaken(doc, f->name(), f->id())) f->setName(doc.uniqueName(nameBase(f->name())));
+        editor.insert(*doc.indexOf(copy_), std::move(f));
+    }
+    for (auto& f : swaps_) f = editor.replace(std::move(f));
+    return {};
+}
+
+void UnlinkCopyCommand::revert(DocumentEditor& editor) {
+    for (std::size_t i = swaps_.size(); i-- > 0;) swaps_[i] = editor.replace(std::move(swaps_[i]));
+    for (std::size_t i = ids_.size(); i-- > 0;) pending_[i] = editor.remove(ids_[i]);
 }
 
 }  // namespace sb::model
@@ -1435,8 +1530,8 @@ Diagnostics SlideBodyCommand::check(const Document& doc, const FeatureId& step) 
             const auto* copy = dynamic_cast<const MoveFeature*>(doc.find(u));
             if (copy && copy->copy() && copy->body() == step)
                 return {error("slide.linked", copy->name() + " is a linked copy of " + f->name() +
-                                                  ", placed from where " + f->name() +
-                                                  " is now, so moving " + f->name() +
+                                                  ", placed from where " + f->name() + " is now, so moving " +
+                                                  f->name() +
                                                   " would leave the copy behind. To move the copy, drag " +
                                                   copy->name() + ".")};
         }
