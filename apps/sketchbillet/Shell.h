@@ -79,8 +79,8 @@ public:
 
     // Picks edges (or faces) of one body, by their numbers (from 1) in the order
     // `sketchbillet_cli open --edges` (or --faces) lists them, as clicking them
-    // would (for screenshots). Returns false, with nothing picked, if the body or
-    // a number isn't there.
+    // would (for screenshots). While measuring (Tools > Measure), they're what's
+    // measured. Returns false, with nothing picked, if the body or a number isn't there.
     bool selectElements(const QString& body, kernel::TopoKind kind, const QList<int>& numbers);
 
     // True if edges (not faces) are picked.

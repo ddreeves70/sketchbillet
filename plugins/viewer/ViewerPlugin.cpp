@@ -626,6 +626,7 @@ private:
         };
         connect(pane, &view::ViewWidget::edgesPicked, this, picked);
         connect(pane, &view::ViewWidget::facesPicked, this, picked);
+        connect(pane, &view::ViewWidget::measurePicked, this, picked);
         connect(pane, &view::ViewWidget::activated, this, [this, pane] {
             const auto it = std::find(panes_.begin(), panes_.end(), pane);
             if (it == panes_.end()) return;
@@ -863,6 +864,7 @@ view::SceneContent viewerScene(const plugin::DocumentList& docs, const plugin::S
     // Picking edges: the picked ones, found by name in this rebuild.
     out.pickEdges = selection.pickMode() == plugin::PickMode::Edges;
     out.pickFaces = selection.pickMode() == plugin::PickMode::Faces;
+    out.pickMeasure = selection.pickMode() == plugin::PickMode::Measure;
     if (selection.doc() == id) {
         for (const auto& e : selection.elements()) {
             const auto* r = report->result(e.body);
@@ -922,6 +924,7 @@ std::vector<view::ViewOverlay> viewOverlays(const std::vector<plugin::Overlay>& 
         v.alpha = o.color.a;
         v.size = o.size;
         v.onViewCube = o.onViewCube;
+        v.overBodies = o.overBodies;
         out.push_back(std::move(v));
     }
     return out;

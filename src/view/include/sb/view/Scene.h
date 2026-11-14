@@ -32,12 +32,12 @@ struct SceneBody {
     Rgb color{};                  ///< Its color: its material's. The default is a light steel blue.
 };
 
-/// One edge or face drawn picked in a view: which body it's on, and its number
-/// in that body's elements (kernel::IKernel::elements()), for this rebuild only.
+/// One edge, face or point drawn picked in a view: which body it's on, and its
+/// number in that body's elements (kernel::IKernel::elements()), for this rebuild only.
 struct ScenePick {
-    FeatureId body{};  ///< The step whose body it's on.
-    int index = -1;    ///< The edge's or face's number in the body's elements, from 0.
-    kernel::TopoKind kind = kernel::TopoKind::Edge;  ///< An edge or a face.
+    FeatureId body{};                                ///< The step whose body it's on.
+    int index = -1;                                  ///< Its number in the body's elements, from 0.
+    kernel::TopoKind kind = kernel::TopoKind::Edge;  ///< An edge, a face or a point (vertex).
 
     /// Checks whether two picks are the same edge.
     /// @param other The other pick.
@@ -53,7 +53,10 @@ struct SceneContent {
     bool pickEdges = false;
     /// True while clicking picks faces (to sketch on) instead of bodies.
     bool pickFaces = false;
-    std::vector<ScenePick> picked{};  ///< Picked edges and faces, drawn highlighted.
+    /// True while clicking picks a face, edge or point to measure (up to two at a
+    /// time) instead of bodies.
+    bool pickMeasure = false;
+    std::vector<ScenePick> picked{};  ///< Picked edges, faces and points, drawn highlighted.
 };
 
 /// What an overlay draws.
@@ -82,6 +85,7 @@ struct ViewOverlay {
     /// True to draw it on the view cube: `points` are in screen pixels from the
     /// cube's middle, turning with the view like the cube (see kViewCubeHalfSize).
     bool onViewCube = false;
+    bool overBodies = false;  ///< True to draw it over the design, never hidden behind a body.
 };
 
 /// How far each side of the view cube is from its middle, in screen pixels.

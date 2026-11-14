@@ -36,8 +36,8 @@
 #include "ViewOverlay.h"
 #include "sb/core/Version.h"
 #include "sb/io/SketchBilletFile.h"
-#include "sb/io/ThreeMf.h"
 #include "sb/io/Steps.h"
+#include "sb/io/ThreeMf.h"
 #include "sb/model/Commands.h"
 #include "sb/plugin/Events.h"
 
@@ -123,8 +123,8 @@ Shell::Shell(plugin::PluginHost& host, AppUi& ui, QSettings& settings, QWidget* 
         const QString step = tr("STEP, for other CAD programs (*.step *.stp)");
         QString filter = stl;
         QString path = QFileDialog::getSaveFileName(
-            this, tr("Export"), suggested,
-            stl + QStringLiteral(";;") + threeMf + QStringLiteral(";;") + step, &filter);
+            this, tr("Export"), suggested, stl + QStringLiteral(";;") + threeMf + QStringLiteral(";;") + step,
+            &filter);
         if (!path.isEmpty() && QFileInfo(path).suffix().isEmpty()) {
             path += filter == step      ? QStringLiteral(".step")
                     : filter == threeMf ? QStringLiteral(".3mf")
@@ -240,7 +240,8 @@ void Shell::buildMenus() {
     });
     export_->setObjectName(QStringLiteral("sb.shell.export"));
     export_->setShortcut(QKeySequence(QStringLiteral("Ctrl+E")));
-    export_->setStatusTip(tr("Write the part as STL or 3MF (for 3D printing) or STEP (for other CAD programs)."));
+    export_->setStatusTip(
+        tr("Write the part as STL or 3MF (for 3D printing) or STEP (for other CAD programs)."));
     auto* check = file->addAction(tr("Check for &Printing..."), this, [this] { checkForPrinting(); });
     check->setObjectName(QStringLiteral("sb.shell.check_print"));
     check->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+P")));
@@ -880,8 +881,9 @@ Diagnostics Shell::saveDesign(const std::filesystem::path& path) {
 
 // The picked step, if exactly one built step is picked; otherwise the one
 // finished body. Otherwise, the problem's code and message.
-std::optional<std::pair<std::string, QString>> Shell::bodyToUse(const model::RebuildReport& report, FeatureId& which,
-                                                                const std::string& code, const QString& verb,
+std::optional<std::pair<std::string, QString>> Shell::bodyToUse(const model::RebuildReport& report,
+                                                                FeatureId& which, const std::string& code,
+                                                                const QString& verb,
                                                                 const QString& onlyOne) const {
     const auto& picked = host_.selection().features();
     if (host_.selection().doc() == activeDesign() && picked.size() == 1 && report.shapeOf(picked.front())) {
@@ -909,11 +911,13 @@ model::PrintCheckResult Shell::checkForPrinting() {
     const auto* kernel = docs.kernel();
     FeatureId which{};
     if (!doc || !report || !kernel) {
-        result.issues.push_back({"print.nothing", Severity::Error,
-                                 tr("There's nothing to check yet. Make a shape first, like Create > Box.")
-                                     .toStdString(),
-                                 {}});
-    } else if (auto problem = bodyToUse(*report, which, "print", tr("check"), tr("Check for Printing looks at one"))) {
+        result.issues.push_back(
+            {"print.nothing",
+             Severity::Error,
+             tr("There's nothing to check yet. Make a shape first, like Create > Box.").toStdString(),
+             {}});
+    } else if (auto problem =
+                   bodyToUse(*report, which, "print", tr("check"), tr("Check for Printing looks at one"))) {
         result.issues.push_back({problem->first, Severity::Error, problem->second.toStdString(), {}});
     } else {
         result = model::checkPrint(*doc, *report, *kernel, which, {});
@@ -1100,8 +1104,10 @@ bool Shell::selectElements(const QString& body, kernel::TopoKind kind, const QLi
             picked.push_back(
                 {f.id(), model::referTo(*r->names, kind, order[static_cast<std::size_t>(n - 1)])});
         }
-        host_.selection().setPickMode(kind == kernel::TopoKind::Face ? plugin::PickMode::Faces
-                                                                     : plugin::PickMode::Edges);
+        // While measuring, these are what's measured; otherwise they're picked for a step.
+        if (host_.selection().pickMode() != plugin::PickMode::Measure)
+            host_.selection().setPickMode(kind == kernel::TopoKind::Face ? plugin::PickMode::Faces
+                                                                         : plugin::PickMode::Edges);
         host_.selection().setElements(activeDesign(), std::move(picked));
         return true;
     }

@@ -147,7 +147,9 @@ class PluginContext;
 /// feature.unlink command.
 /// Version 50 added measuring: kernel::IKernel::distance() (with kernel::ElementOf
 /// and kernel::Closest), which a kernel must now provide, and sb/model/Measure.h.
-inline constexpr int kPluginApiVersion = 50;
+/// Version 51 added the Measure tool's picking: plugin::PickMode::Measure (faces,
+/// edges and points, two at a time), and plugin::Overlay::overBodies.
+inline constexpr int kPluginApiVersion = 51;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

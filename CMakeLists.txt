@@ -90,6 +90,7 @@ if(TARGET sb_view)
   add_subdirectory(plugins/movehandles)  # sb.movehandles
   add_subdirectory(plugins/parameters)   # sb.parameters (Qt)
   add_subdirectory(plugins/timeline)     # sb.timeline (Qt)
+  add_subdirectory(plugins/measure)      # sb.measure (Qt)
 endif()
 if(SB_BUILD_EXAMPLE_PLUGINS)
   add_subdirectory(docs/plugin-guide/hello)

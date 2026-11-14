@@ -30,6 +30,7 @@
 #include <Graphic3d_TransformPers.hxx>
 #include <Prs3d_Drawer.hxx>
 #include <Prs3d_LineAspect.hxx>
+#include <Prs3d_PointAspect.hxx>
 #include <Prs3d_ShadingAspect.hxx>
 #include <Quantity_Color.hxx>
 #include <Standard_Failure.hxx>
@@ -272,6 +273,7 @@ struct ViewWidget::Impl {
         // them (kernel::IKernel::elements()), so a picked one's number is the design's.
         TopTools_IndexedMapOfShape edges;
         TopTools_IndexedMapOfShape faces;
+        TopTools_IndexedMapOfShape vertices;
     };
 
     ViewController controller;
@@ -281,8 +283,9 @@ struct ViewWidget::Impl {
     Handle(AIS_ViewCube) cube;
     std::map<FeatureId, Shown> shown;
     SceneContent content;
-    Handle(AIS_Shape) pickedEdges;  // the picked edges, drawn thick on top of their bodies
-    Handle(AIS_Shape) pickedFaces;  // the picked faces, drawn in the picked color
+    Handle(AIS_Shape) pickedEdges;   // the picked edges, drawn thick on top of their bodies
+    Handle(AIS_Shape) pickedFaces;   // the picked faces, drawn in the picked color
+    Handle(AIS_Shape) pickedPoints;  // the picked points, drawn as big dots in the picked color
     std::vector<Handle(OverlayObject)> overlays;
     std::vector<ViewHandle> handles;       // as given (lengths may be in pixels)
     std::vector<ViewHandle> shownHandles;  // the same, lengths in mm, as last drawn
@@ -435,6 +438,46 @@ struct ViewWidget::Impl {
 void ViewController::OnSelectionChanged(const Handle(AIS_InteractiveContext) & ctx,
                                         const Handle(V3d_View) &) {
     auto& d = *widget_.impl_;
+    if (d.content.pickMeasure) {
+        // The face, edge or point clicked: whichever is under the mouse.
+        std::vector<ScenePick> clicked;
+        for (ctx->InitSelected(); ctx->MoreSelected(); ctx->NextSelected()) {
+            const auto owner = Handle(StdSelect_BRepOwner)::DownCast(ctx->SelectedOwner());
+            if (owner.IsNull() || !owner->HasShape()) continue;
+            const auto type = owner->Shape().ShapeType();
+            const auto kind = type == TopAbs_FACE   ? kernel::TopoKind::Face
+                              : type == TopAbs_EDGE ? kernel::TopoKind::Edge
+                                                    : kernel::TopoKind::Vertex;
+            for (const auto& [id, s] : d.shown) {
+                if (s.object != ctx->SelectedInteractive()) continue;
+                const auto& map = kind == kernel::TopoKind::Face   ? s.faces
+                                  : kind == kernel::TopoKind::Edge ? s.edges
+                                                                   : s.vertices;
+                const int at = map.FindIndex(owner->Shape());
+                if (at > 0) clicked.push_back({id, at - 1, kind});
+            }
+        }
+        if (clicked.size() > 1) clicked.resize(1);
+        std::vector<ScenePick> now;
+        if (!clicked.empty()) {
+            now = d.content.picked;
+            if (auto it = std::find(now.begin(), now.end(), clicked.front()); it != now.end()) {
+                now.erase(it);  // clicked again: not picked any more
+            } else {
+                if (now.size() >= 2) now.clear();  // a third: start again
+                now.push_back(clicked.front());
+            }
+        }
+        if (now == d.content.picked) return;
+        QPointer<ViewWidget> w(&widget_);
+        QMetaObject::invokeMethod(
+            &widget_,
+            [w, now] {
+                if (w) emit w->measurePicked(now);
+            },
+            Qt::QueuedConnection);
+        return;
+    }
     if (d.content.pickEdges || d.content.pickFaces) {
         // The edge or face clicked: which body's, and its number there.
         const bool faces = d.content.pickFaces;
@@ -578,8 +621,9 @@ void ViewWidget::setContent(const SceneContent& content) {
             // must not change (exports mesh it too, and must not depend on the view).
             BRepBuilderAPI_Copy copier(*shape, false, false);
             Handle(AIS_Shape) obj = new AIS_Shape(copier.Shape());
-            TopTools_IndexedMapOfShape edges, faces;
-            for (auto [type, into] : {std::pair{TopAbs_EDGE, &edges}, std::pair{TopAbs_FACE, &faces}}) {
+            TopTools_IndexedMapOfShape edges, faces, vertices;
+            for (auto [type, into] : {std::pair{TopAbs_EDGE, &edges}, std::pair{TopAbs_FACE, &faces},
+                                      std::pair{TopAbs_VERTEX, &vertices}}) {
                 TopTools_IndexedMapOfShape original;
                 TopExp::MapShapes(*shape, type, original);
                 for (int i = 1; i <= original.Extent(); ++i) into->Add(copier.ModifiedShape(original(i)));
@@ -603,21 +647,28 @@ void ViewWidget::setContent(const SceneContent& content) {
             }
             const bool wire = !body.ghost && d.style == DisplayStyle::Wireframe;
             d.context->Display(obj, wire ? AIS_WireFrame : AIS_Shaded, 0, false);
-            next[body.feature] = {body.shape.id(),  body.ghost,      body.color, obj,
-                                  std::move(edges), std::move(faces)};
+            next[body.feature] = {body.shape.id(),  body.ghost,       body.color,         obj,
+                                  std::move(edges), std::move(faces), std::move(vertices)};
         }
         for (auto& [id, s] : d.shown) d.context->Remove(s.object, false);
         d.shown = std::move(next);
 
-        // Clicking picks whole bodies, or edges or faces of the bodies (not of ghosts).
-        const bool picking = content.pickEdges || content.pickFaces;
-        const int partMode = AIS_Shape::SelectionMode(content.pickFaces ? TopAbs_FACE : TopAbs_EDGE);
+        // Clicking picks whole bodies, or edges or faces of the bodies (not of ghosts),
+        // or, to measure, any face, edge or point.
+        const bool picking = content.pickEdges || content.pickFaces || content.pickMeasure;
+        std::vector<int> partModes;
+        if (content.pickMeasure) {
+            partModes = {AIS_Shape::SelectionMode(TopAbs_VERTEX), AIS_Shape::SelectionMode(TopAbs_EDGE),
+                         AIS_Shape::SelectionMode(TopAbs_FACE)};
+        } else {
+            partModes = {AIS_Shape::SelectionMode(content.pickFaces ? TopAbs_FACE : TopAbs_EDGE)};
+        }
         for (const auto& [id, s] : d.shown) {
             d.context->Deactivate(s.object);
             if (!picking) {
                 d.context->Activate(s.object, 0);
             } else if (!s.ghost) {
-                d.context->Activate(s.object, partMode);
+                for (const int mode : partModes) d.context->Activate(s.object, mode);
             }
         }
 
@@ -629,25 +680,35 @@ void ViewWidget::setContent(const SceneContent& content) {
             }
         }
 
-        // Picked edges, drawn thick in the picked color; picked faces, filled with it.
-        for (auto* old : {&d.pickedEdges, &d.pickedFaces}) {
+        // Picked edges, drawn thick in the picked color; picked faces, filled with it;
+        // picked points, big dots of it.
+        for (auto* old : {&d.pickedEdges, &d.pickedFaces, &d.pickedPoints}) {
             if (old->IsNull()) continue;
             d.context->Remove(*old, false);
             old->Nullify();
         }
-        TopoDS_Compound picked, pickedFaces;
+        TopoDS_Compound picked, pickedFaces, pickedPoints;
         BRep_Builder builder;
         builder.MakeCompound(picked);
         builder.MakeCompound(pickedFaces);
-        bool anyPicked = false, anyFace = false;
+        builder.MakeCompound(pickedPoints);
+        bool anyPicked = false, anyFace = false, anyPoint = false;
         for (const auto& p : content.picked) {
             auto it = d.shown.find(p.body);
             if (it == d.shown.end() || p.index < 0) continue;
             const bool face = p.kind == kernel::TopoKind::Face;
-            const auto& map = face ? it->second.faces : it->second.edges;
+            const bool point = p.kind == kernel::TopoKind::Vertex;
+            const auto& map = face ? it->second.faces : point ? it->second.vertices : it->second.edges;
             if (p.index >= map.Extent()) continue;
-            builder.Add(face ? pickedFaces : picked, map(p.index + 1));
-            (face ? anyFace : anyPicked) = true;
+            builder.Add(face ? pickedFaces : point ? pickedPoints : picked, map(p.index + 1));
+            (face ? anyFace : point ? anyPoint : anyPicked) = true;
+        }
+        if (anyPoint) {
+            d.pickedPoints = new AIS_Shape(pickedPoints);
+            d.pickedPoints->Attributes()->SetPointAspect(
+                new Prs3d_PointAspect(Aspect_TOM_POINT, kSelected, 9.0));
+            d.pickedPoints->SetZLayer(Graphic3d_ZLayerId_Topmost);  // over the body, so it always shows
+            d.context->Display(d.pickedPoints, AIS_WireFrame, -1, false);  // -1: never picked itself
         }
         if (anyFace) {
             d.pickedFaces = new AIS_Shape(pickedFaces);
@@ -699,6 +760,7 @@ void ViewWidget::setOverlays(const std::vector<ViewOverlay>& overlays) {
             // they win instead of flickering with it. Among them, later ones win.
             obj->SetZLayer(o.shape == OverlayShape::Lattice ? Graphic3d_ZLayerId_Default
                                                             : Graphic3d_ZLayerId_Top);
+            if (o.overBodies) obj->SetZLayer(Graphic3d_ZLayerId_Topmost);  // drawn last, over everything
             if (o.onViewCube) {
                 // Turned and placed like the cube, and in its layer (drawn over the
                 // design), so the cube hides the parts behind it.

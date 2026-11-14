@@ -294,9 +294,12 @@ with `set()` un-picks the design.
 Edges or faces can be picked instead of steps. While `pickMode()` is
 `PickMode::Edges` (**Edit > Pick edges**), clicking a body in the viewer picks
 the edge under the mouse; while it's `PickMode::Faces` (**Sketch > New sketch on a
-face**), the face, one at a time. Each picked edge or face is a `PickedElement`:
-its body's step, and a lasting `model::GeometryRef` to it (`ref.kind` says which;
-see `sb/model/Naming.h`, and "Naming faces and edges" in the design notes).
+face**), the face, one at a time; while it's `PickMode::Measure` (**Tools >
+Measure**), the face, edge or point (vertex) under the mouse, up to two at a time:
+a third click starts again with just the one clicked. Each picked edge, face or
+point is a `PickedElement`: its body's step, and a lasting `model::GeometryRef` to
+it (`ref.kind` says which; see `sb/model/Naming.h`, and "Naming faces and edges"
+in the design notes).
 
 ```cpp
 sel.setPickMode(plugin::PickMode::Edges);  // clicks pick edges
@@ -563,6 +566,9 @@ ctx.overlays().set("guides", guide);  // its id is "sam.notes.guides"
 - `color` has an `a` part for see-through overlays (0 to 255); `size` is the line
   width or dot size in screen pixels.
 - Overlays are never picked with the mouse and don't count for **Fit all**.
+- Bodies hide what's behind them, overlays too. Set `overBodies = true` to draw
+  an overlay over the design instead, never hidden, like the Measure tool's line
+  and its distance.
 - Set `onViewCube = true` to draw it on the view cube instead of in the design.
   Then `points` are in screen pixels from the cube's middle, along x, y and z: it
   turns with the cube but doesn't pan or zoom, and the cube hides what's behind
@@ -602,7 +608,7 @@ ctx.listen<plugin::RebuildFinished>([&ctx](const plugin::RebuildFinished& e) {
 | `DocumentChanged` | A command runs, or a step is undone or redone | `doc`, `kind` (`Executed`, `Undone`, `Redone`), `label` |
 | `RebuildFinished` | A design was rebuilt after a change | `doc`, `ok` (did every step build?) |
 | `SelectionChanged` | The selection changes | `doc`, `features` (in picking order), `design` (the design itself is picked: Document settings), `elements` (picked edges) |
-| `PickModeChanged` | Clicking a body switches between picking bodies, edges and faces | `mode` |
+| `PickModeChanged` | Clicking a body switches between picking bodies, edges, faces and things to measure | `mode` |
 | `sb::viewoptions::ViewOptionChanged` | A view option changes (sent by `sb.viewoptions`, desktop app) | `option` (its id) |
 | `sb::grid::GridChanged` | The grid settings change (sent by `sb.grid`, desktop app) | `grid`: visible, spacing in mm, snap, style |
 | `OverlaysChanged` | An overlay is added, changed or removed | `id` |

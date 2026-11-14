@@ -4,10 +4,28 @@
 a hole is, how far apart two holes are, or whether two faces meet square. Pick
 one face, edge or point to get its size, or two to get the distance between them.
 
-For now you measure with [`sketchbillet_cli measure`](../cli/measure.md);
-measuring in the desktop app is on the way.
+In the desktop app, pick **Tools > Measure** (Ctrl+Shift+I), or **Measure** on
+the toolbar, then click what to measure in the view. With `sketchbillet_cli`, use
+[`sketchbillet_cli measure`](../cli/measure.md).
 
-## An example
+## In the desktop app
+
+1. Pick **Tools > Measure**. The Measure panel opens, and clicks in the view now
+   pick a face, edge or point instead of a whole body.
+2. Click a face, an edge or a point (a corner). It turns orange, and the Measure
+   panel shows its size.
+3. Click a second one. The panel shows the distance between them, and a blue
+   line in the view joins the nearest points, with the distance written on it.
+4. Click a third one to start again with just that one. Click a picked one again
+   to un-pick it, or click empty space to un-pick both.
+5. Click **Done**, or **Measure** again, to go back to picking bodies.
+
+![Measuring between the two holes' top rims: 37 mm between the rims, 42 mm between their centers](images/measure-app.png)
+
+What's measured stays picked while you change the design, so you can change a
+number in Properties and watch the distance change.
+
+## An example with sketchbillet_cli
 
 This tag has a 5 mm hole at each end, 42 mm apart, for a strap:
 
