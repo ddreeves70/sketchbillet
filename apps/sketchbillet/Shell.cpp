@@ -21,6 +21,7 @@
 #include <QJsonObject>
 #include <QKeySequence>
 #include <QLabel>
+#include <QLocale>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
@@ -39,6 +40,7 @@
 
 #include "AppIcons.h"
 #include "AppUi.h"
+#include "CrashReport.h"
 #include "Icons.h"
 #include "ImportIcon.h"
 #include "Updates.h"
@@ -125,6 +127,33 @@ Shell::Shell(plugin::PluginHost& host, AppUi& ui, QSettings& settings, QWidget* 
             QMessageBox::information(this, tr("Check for Printing"), lines.join(QStringLiteral("\n\n")));
         else
             QMessageBox::warning(this, tr("Check for Printing"), lines.join(QStringLiteral("\n\n")));
+    };
+    openLink = [](const QUrl& url) { QDesktopServices::openUrl(url); };
+    askCrashReport = [this](const QString& when, const QString& body, int count) {
+        QMessageBox box(QMessageBox::Warning, tr("SketchBillet closed unexpectedly"),
+                        count > 1
+                            ? tr("SketchBillet closed unexpectedly %1 times, last on %2. Would you like to "
+                                 "tell SketchBillet's makers, so they can fix it?")
+                                  .arg(count)
+                                  .arg(when)
+                            : tr("SketchBillet closed unexpectedly on %1. Would you like to tell "
+                                 "SketchBillet's makers, so they can fix it?")
+                                  .arg(when),
+                        QMessageBox::NoButton, this);
+        box.setInformativeText(tr(
+            "Report It opens a new GitHub issue in your web browser, filled in with a report SketchBillet "
+            "wrote: its version, your computer's system, what went wrong and the last thing you clicked. It "
+            "has no designs or file names in it. Read it, add what you were doing, then click Create. That "
+            "needs a free GitHub account; without one, click Copy Report and send it to your teacher."));
+        box.setDetailedText(body);
+        auto* report = box.addButton(tr("Report It"), QMessageBox::AcceptRole);
+        auto* copy = box.addButton(tr("Copy Report"), QMessageBox::ActionRole);
+        box.addButton(tr("Don't Report"), QMessageBox::RejectRole);
+        box.setDefaultButton(report);
+        box.exec();
+        return box.clickedButton() == report ? CrashChoice::Report
+               : box.clickedButton() == copy ? CrashChoice::Copy
+                                             : CrashChoice::Skip;
     };
     showUpdateBox = [this](const UpdateResult& result) {
         if (result.kind != UpdateResult::Kind::Newer) {
@@ -721,6 +750,7 @@ void Shell::wrapToolbar() {
 }
 
 void Shell::runAction(const plugin::ActionSpec& spec) {
+    crash::note(spec.id);  // for a crash report, if this leads to one
     if (spec.run) {
         // The plugin's own code (a setting, a dialog), not a change to a design.
         try {
@@ -963,6 +993,22 @@ void Shell::showUpdate(const UpdateResult& result, bool byHand) {
             .arg(result.url.toString().toHtmlEscaped(), (what + tr(": get it")).toHtmlEscaped()));
     updateLabel_->setToolTip(result.message);
     updateLabel_->show();
+}
+
+std::optional<Shell::CrashChoice> Shell::offerCrashReport(const QString& folder) {
+    const auto reports = crash::pending(folder);
+    if (reports.empty()) return std::nullopt;
+    const auto& newest = reports.front();
+    const auto body = crash::issueBody(newest);
+    const auto choice = askCrashReport(QLocale().toString(newest.when.toLocalTime(), QLocale::ShortFormat),
+                                       body, static_cast<int>(reports.size()));
+    if (choice == CrashChoice::Report) openLink(crash::issueUrl(newest));
+    if (choice == CrashChoice::Copy) {
+        QGuiApplication::clipboard()->setText(body);
+        showMessage(tr("The crash report is copied. Paste it into an email or a message to your teacher."));
+    }
+    crash::forget(folder);
+    return choice;
 }
 
 void Shell::setSamplesFolder(const std::filesystem::path& folder) {

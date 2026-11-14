@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QString>
 #include <QStringList>
+#include <QUrl>
 
 #include <filesystem>
 #include <functional>
@@ -82,6 +83,20 @@ public:
     void showUpdate(const UpdateResult& result, bool byHand);
     // Shows a check's result in a box. Tests replace it so no dialog opens.
     std::function<void(const UpdateResult& result)> showUpdateBox;
+
+    // What the student chose to do with a crash report.
+    enum class CrashChoice { Report, Copy, Skip };
+    // Offers the newest crash report in `folder` (CrashReport.h), if there is one:
+    // Report It opens a GitHub issue with it filled in, Copy Report puts it on the
+    // clipboard. Either way, and for Don't Report, the reports are then removed,
+    // so it's asked once. Returns what the student chose, or nothing if there was
+    // no report.
+    std::optional<CrashChoice> offerCrashReport(const QString& folder);
+    // Asks what to do with a report (`body` is the issue's text; `count` how many
+    // crashes there were). Tests replace it so no dialog opens.
+    std::function<CrashChoice(const QString& when, const QString& body, int count)> askCrashReport;
+    // Opens a link in the web browser. Tests replace it.
+    std::function<void(const QUrl& url)> openLink;
     Diagnostics saveDesign(const std::filesystem::path& path);
     // Adds a part from a STEP, STL or 3MF file to the active design (File > Import), as an
     // Import step, and picks it. Returns what went wrong, if anything.

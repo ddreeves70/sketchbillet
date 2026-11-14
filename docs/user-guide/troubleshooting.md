@@ -144,6 +144,33 @@ The [Parameters](parameters.md) page has what a formula can have.
 Run [`sketchbillet_cli plugins`](../cli/plugins.md): it lists each plugin with the reason.
 The plugin guide lists [every reason and its fix](../plugin-guide/manifest.md#when-sketchbillet-refuses-a-plugin).
 
+## SketchBillet closed by itself
+
+That's a crash: a bug in SketchBillet, not something you did wrong. Your design
+is as it was when you last saved it, so open it again and carry on.
+
+When SketchBillet crashes, it writes a short report on your computer. The next
+time it starts, it asks whether you'd like to tell SketchBillet's makers:
+
+- **Report It** opens a new issue on GitHub in your web browser, filled in with
+  the report. Write what you were doing at the top (which buttons you clicked,
+  what part you were making), then click **Create**. You need a free GitHub
+  account. Crashes that are reported get fixed first.
+- **Copy Report** copies the report, to paste into an email to your teacher or a
+  message, if you don't have a GitHub account.
+- **Don't Report** forgets it. Nothing is sent.
+
+Click **Show Details** to read the whole report first. It has SketchBillet's
+version, your computer's system (like Windows 11), when it crashed, what went
+wrong, the last menu item or button you clicked, and where in SketchBillet's code
+it happened. It never has your designs, file names, or anything you typed, and
+nothing is sent unless you click Report It and then Create.
+
+If it crashes again and again doing the same thing, try it a different way for
+now (another tool, or smaller steps), and report it so it gets fixed. If it
+crashes as soon as it starts, or the 3D view is blank, update your computer's
+graphics driver ([Installing](install.md#tips)).
+
 ## Still stuck?
 
 Ask in [GitHub Discussions](https://github.com/ddreeves70/khan/discussions).

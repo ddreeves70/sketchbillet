@@ -5,6 +5,8 @@ qt_add_library(sb_app_core STATIC
   AppSettings.h
   AppUi.cpp
   AppUi.h
+  CrashReport.cpp
+  CrashReport.h
   Icons.cpp
   Icons.h
   Shell.cpp
@@ -127,4 +129,18 @@ if(SB_BUILD_TESTS)
                        "QT_QPA_PLATFORM=offscreen")
   set_tests_properties(app.trigger_greyed_out PROPERTIES PASS_REGULAR_EXPRESSION
                        "sb.modeling.cut is greyed out")
+  # A crash writes a report the next start finds (tests/app/crash_report_test.cmake).
+  foreach(how segfault abort exception)
+    if(how STREQUAL "segfault")
+      set(expect "What went wrong:** SketchBillet used memory it shouldn't have")
+    elseif(how STREQUAL "abort")
+      set(expect "What went wrong:** SketchBillet stopped itself")
+    else()
+      set(expect "What went wrong:** An error nobody caught: a test crash, from --crash-for-test")
+    endif()
+    add_test(NAME app.crash_report.${how}
+             COMMAND ${CMAKE_COMMAND} -DAPP=$<TARGET_FILE:sketchbillet> -DDIR=${CMAKE_CURRENT_BINARY_DIR}/crash-${how}
+                     -DHOW=${how} "-DEXPECT=${expect}" -P ${PROJECT_SOURCE_DIR}/tests/app/crash_report_test.cmake)
+    set_tests_properties(app.crash_report.${how} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+  endforeach()
 endif()

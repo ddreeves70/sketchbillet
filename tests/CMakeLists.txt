@@ -156,7 +156,7 @@ endif()
 if(TARGET sb_app_core)
   add_executable(sb_app_tests app/main.cpp app/test_shell.cpp app/test_grid_plugin.cpp app/test_axes.cpp
   app/test_view_options.cpp app/test_constrain.cpp app/test_movehandles.cpp app/test_parameters_panel.cpp
-  app/test_timeline_bar.cpp app/test_measure_tool.cpp app/test_samples.cpp app/test_updates.cpp)
+  app/test_timeline_bar.cpp app/test_measure_tool.cpp app/test_samples.cpp app/test_updates.cpp app/test_crash_report.cpp)
   # The sketcher's constraint rules (Constrain.h) are tested on their own too.
   target_include_directories(sb_app_tests PRIVATE "${PROJECT_SOURCE_DIR}/plugins/sketcher")
   target_link_libraries(sb_app_tests PRIVATE Catch2::Catch2 sb_app_core sb::kernel_occt sb::view
