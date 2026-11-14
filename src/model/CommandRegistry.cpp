@@ -446,6 +446,10 @@ void renumberPoles(sketch::Sketch& s, const EntityId& spline, int index, int by)
 
 CommandRegistry makeBuiltin() {
     CommandRegistry r;
+    std::vector<std::string> unitChoices;
+    for (auto u : {LengthUnit::Millimeter, LengthUnit::Centimeter, LengthUnit::Meter, LengthUnit::Inch,
+                   LengthUnit::Foot})
+        unitChoices.emplace_back(unitSymbol(u));
 
     r.add({"feature.add_box",
            "Add box",
@@ -1070,26 +1074,40 @@ CommandRegistry makeBuiltin() {
                   "Duplicate " + (f ? f->name() : std::string("step")));
           });
 
-    r.add({"feature.import",
-           "Import a part",
-           "Adds a part made in another CAD program, from a STEP file (.step or .stp), as a new body. A "
-           "copy of the file is kept in the design, so it opens anywhere; feature.reload_import reads the "
-           "file again after it changes.",
-           {{"file", ArgType::Text, "The STEP file, like bracket.step.", true, {}},
-            {"name", ArgType::Text, "Its name. Default the file's name, like bracket.", false, {}}}},
-          [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
-              auto read = readImportFile(argText(a, "file"));
-              if (!read.issues.empty()) return std::make_unique<ReportCommand>(std::move(read.issues));
-              std::string name = argText(a, "name");
-              if (name.empty()) {
-                  // The file's name, like "bracket"; "bracket1", "bracket2", ... if that's taken.
-                  name = read.stem.empty() ? "Import" : read.stem;
-                  for (std::size_t i = 0; i < doc.featureCount(); ++i)
-                      if (doc.featureAt(i).name() == name) name = doc.uniqueName(name);
-              }
-              return std::make_unique<AddFeatureCommand>(std::make_unique<ImportFeature>(
-                  std::move(name), read.format, std::move(read.content), std::move(read.source)));
-          });
+    r.add(
+        {"feature.import",
+         "Import a part",
+         "Adds a part made in another program, from a STEP (.step or .stp), STL or 3MF file, as a new body. "
+         "A copy of the file is kept in the design, so it opens anywhere; feature.reload_import reads the "
+         "file again after it changes.",
+         {{"file", ArgType::Text, "The file, like bracket.step, knob.stl or case.3mf.", true, {}},
+          {"unit", ArgType::Choice,
+           "For STL files, which don't say: the unit their numbers are in. Default mm.", false, unitChoices},
+          {"name", ArgType::Text, "Its name. Default the file's name, like bracket.", false, {}}}},
+        [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+            auto read = readImportFile(argText(a, "file"));
+            if (!read.issues.empty()) return std::make_unique<ReportCommand>(std::move(read.issues));
+            const bool hasUnit = a.count("unit") > 0;
+            if (hasUnit && read.format != ImportFormat::Stl) {
+                return std::make_unique<ReportCommand>(
+                    Diagnostics{{"import.unit",
+                                 Severity::Error,
+                                 "STEP and 3MF files say what unit they're in, so unit= is only for STL "
+                                 "files. Leave it out.",
+                                 {}}});
+            }
+            std::string name = argText(a, "name");
+            if (name.empty()) {
+                // The file's name, like "bracket"; "bracket1", "bracket2", ... if that's taken.
+                name = read.stem.empty() ? "Import" : read.stem;
+                for (std::size_t i = 0; i < doc.featureCount(); ++i)
+                    if (doc.featureAt(i).name() == name) name = doc.uniqueName(name);
+            }
+            auto step = std::make_unique<ImportFeature>(std::move(name), read.format, std::move(read.content),
+                                                        std::move(read.source));
+            if (hasUnit) step->setUnit(parseLengthUnit(argText(a, "unit")).value_or(LengthUnit::Millimeter));
+            return std::make_unique<AddFeatureCommand>(std::move(step));
+        });
 
     r.add(
         {"feature.reload_import",
@@ -1626,10 +1644,6 @@ CommandRegistry makeBuiltin() {
                                argBool(a, "construction", false), argText(a, "name"), "Spline");
           });
 
-    std::vector<std::string> unitChoices;
-    for (auto u : {LengthUnit::Millimeter, LengthUnit::Centimeter, LengthUnit::Meter, LengthUnit::Inch,
-                   LengthUnit::Foot})
-        unitChoices.emplace_back(unitSymbol(u));
     r.add({"sketch.import_spline",
            "Import spline",
            "Adds a spline made from a file of points: one point per line, x then y (a spreadsheet's CSV "

@@ -28,8 +28,9 @@ tag.sb
 An `Import` step's file is saved in `imports/`, exactly as it was read, named
 after the step's id. That's how a design with an imported part opens on any
 computer, even one without the file. On the clipboard (copied steps), the file
-is in the step's `params` as `content` instead, since the clipboard is one piece
-of text.
+is in the step's `params` instead, since the clipboard is one piece of text: as
+`content` for a STEP file (text), and as `content_base64` for STL and 3MF files,
+which can be binary.
 
 ### manifest.json
 
@@ -109,7 +110,7 @@ Every step has `id`, `type` and `name`. Steps that use other steps list them und
 | `Hole` | `body`: step id; `sketch`: a Sketch step's id, for holes at its points | `placement`: `"points"` (at every point of `sketch` that isn't a helper point) or `"edges"` (one hole, `distance_a` mm in from `edge_a` and `distance_b` mm in from `edge_b`, two [edge references](#edge-references)); `kind`: `"simple"`, `"counterbore"` or `"countersink"`; `diameter` mm; `through` true or false, and `depth` mm (used when not through); `counterbore_diameter` and `counterbore_depth` mm; `countersink_diameter` mm and `countersink_angle` radians; `flip` true or false. `size` (like `"M3"`) and `fit` (`"clearance"` or `"tap"`), if there, only say which screw the numbers came from: the numbers are what it drills |
 | `Plane` | `body`: step id, for a plane from a face; `plane`: a Plane step's id, for a plane from another plane | A construction plane, not a body. `from`: `"xy"`, `"xz"` or `"yz"` (a base plane), `"face"` (with `face`, a [face reference](#edge-references) on `body`) or `"plane"`; `angle` radians, turned the right-hand way about `hinge`: `"x"` or `"y"` (the starting plane's directions through its origin) or `{"edge": <edge reference>}` (a straight edge of the face); then `offset` mm along the way it faces |
 | `Shell` | `body`: step id | `thickness` mm; `faces`: a list of [face references](#edge-references) on `body`, the faces left open |
-| `Import` | (none) | `format`: `"step"`; `source`: where the file was imported from (the whole path, as the computer that imported it wrote it), for reading it again; `data`: where in the `.sb` the file is, `imports/<id>.step` |
+| `Import` | (none) | `format`: `"step"`, `"stl"` or `"3mf"`; `unit` (only for an STL file whose numbers aren't mm): `"cm"`, `"m"`, `"in"` or `"ft"`; `source`: where the file was imported from (the whole path, as the computer that imported it wrote it), for reading it again; `data`: where in the `.sb` the file is, `imports/<id>.step` (`.stl`, `.3mf`) |
 | `Mirror` | `body`: step id; `steps`: a list of step ids, empty to mirror `body` itself | `plane`: `"yz"`, `"xz"` or `"xy"` (through 0, facing x, y or z) with `offset` mm along the way it faces, or `"face"` with `face`, a [face reference](#edge-references) on `body`. With `steps`, it mirrors their holes, joins and cuts on `body`; without, it joins `body` and its mirror image |
 | `Pattern` | `body`: step id; `steps`: a list of step ids, empty for copies of `body` | `kind`: `"linear"` or `"circular"`; `count` (a whole number, the first one included); linear: `direction` [x, y, z], `spacing` mm, `count2`, `direction2` [x, y, z], `spacing2` mm; circular: `center` [x, y, z] mm, `axis` [x, y, z] direction, `angle` radians (2 pi spreads them evenly all the way round). With `steps`, it repeats their holes, joins and cuts on `body`; without, it copies `body` |
 | `Fillet` | `body`: step id | `radius` mm, `edges`: the edges it rounds, as [edge references](#edge-references) |

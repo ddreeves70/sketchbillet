@@ -605,6 +605,26 @@ private:
                     file->setText(QString::fromStdString(im.fileName()));
                     file->setToolTip(QString::fromStdString(im.source()));
                 });
+                if (static_cast<const model::ImportFeature&>(f).format() == model::ImportFormat::Stl) {
+                    // STL files don't say their unit: a part made in inches comes in 25.4 times too small.
+                    auto* unit = new QComboBox(form_);
+                    unit->setObjectName(QStringLiteral("unit"));
+                    unit->setToolTip(
+                        tr("The unit the STL file's numbers are in. STL files don't say, so pick "
+                           "inches if the part came in 25.4 times too small."));
+                    for (const auto u : allLengthUnits())
+                        unit->addItem(QString::fromStdString(std::string(unitName(u))), static_cast<int>(u));
+                    form->addRow(tr("File unit"), unit);
+                    connect(unit, &QComboBox::activated, this, [this, unit](int index) {
+                        const auto u = static_cast<LengthUnit>(unit->itemData(index).toInt());
+                        edit(QStringLiteral("unit"),
+                             [u](model::Feature& g) { static_cast<model::ImportFeature&>(g).setUnit(u); });
+                    });
+                    updaters_.push_back([unit](const model::Feature& g) {
+                        const auto u = static_cast<const model::ImportFeature&>(g).unit();
+                        unit->setCurrentIndex(unit->findData(static_cast<int>(u)));
+                    });
+                }
                 break;
             }
             case model::FeatureType::Shell: {

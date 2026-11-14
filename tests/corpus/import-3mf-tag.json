@@ -1,0 +1,36 @@
+{
+  "name": "import-3mf-tag",
+  "description": "The keychain tag from a 3MF file (SketchBillet's own export: deflated, unpacked by SketchBillet's own unzip), made into a solid. The mesh's own volume, worked out in Python from the file's vertices and triangles: 7121.858309 mm^3.",
+  "steps": [
+    {
+      "id": "tag",
+      "op": "3mf",
+      "file": "files/keychain-tag.3mf"
+    }
+  ],
+  "expect": {
+    "valid": true,
+    "volume": 7121.858317,
+    "area": 4343.681294,
+    "bounds": [
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        60.0,
+        30.0,
+        4.0
+      ]
+    ],
+    "solids": 1,
+    "faces": 42,
+    "edges": 120,
+    "vertices": 80,
+    "tolerance": {
+      "relative": 1e-06,
+      "length": 0.0001
+    }
+  }
+}

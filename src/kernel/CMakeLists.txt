@@ -2,7 +2,9 @@
 # Pure interface: it must never include or link OCCT.
 sb_add_library(sb_kernel
   SOURCES
+    MeshFiles.cpp
     MeshTools.cpp
+    Unzip.cpp
     ShapeHandle.cpp
   DEPS
     sb::core

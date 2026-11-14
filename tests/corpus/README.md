@@ -51,7 +51,8 @@ deterministic).
   earlier step id; `by`, the direction and distance), `shell` (`body`; `faces`, the face numbers to leave open, from 0 in
   elements() order; `thickness` mm), `mirror` (`body`, an earlier step id; `about`, a point on the plane, default 0, 0, 0;
   `normal`, the direction square to the plane), `step` (`file`: a STEP file to read,
-  from the case's folder, like `files/keychain-tag.step`), `revolve` (`face`; `about`, a
+  from the case's folder, like `files/keychain-tag.step`), `stl` and `3mf` (`file`: a
+  mesh file to make a solid of; for `stl`, `unit`: mm per number, default 1), `revolve` (`face`; `about`, a
   point on the line, default 0, 0, 0; `axis`, its direction; `angle` in degrees,
   default 360), and `fillet` (`radius`) and
   `chamfer` (`distance`) with `body`, an earlier step id, and `edges`, a list of

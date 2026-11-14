@@ -1,4 +1,5 @@
 #include "sb/kernel_occt/OcctKernel.h"
+#include "sb/kernel/MeshTools.h"
 #include "sb/kernel_occt/OcctShape.h"
 
 #include <BRepAdaptor_Curve.hxx>
@@ -20,6 +21,7 @@
 #include <BRepFilletAPI_MakeFillet.hxx>
 #include <BRepGProp.hxx>
 #include <BRepGProp_Face.hxx>
+#include <BRepLib.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepOffsetAPI_MakeThickSolid.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
@@ -44,6 +46,7 @@
 #include <STEPControl_Writer.hxx>
 #include <ShapeFix_Shape.hxx>
 #include <ShapeFix_Solid.hxx>
+#include <ShapeUpgrade_UnifySameDomain.hxx>
 #include <Standard_Failure.hxx>
 #include <StlAPI_Writer.hxx>
 #include <TColStd_Array1OfInteger.hxx>
@@ -57,9 +60,12 @@
 #include <TopTools_ListOfShape.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Compound.hxx>
+#include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
+#include <TopoDS_Iterator.hxx>
 #include <TopoDS_Shape.hxx>
 #include <TopoDS_Shell.hxx>
+#include <TopoDS_Solid.hxx>
 #include <TopoDS_Vertex.hxx>
 #include <TopoDS_Wire.hxx>
 #include <gp_Ax1.hxx>
@@ -78,6 +84,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <set>
@@ -130,6 +138,21 @@ std::string describe(const Standard_Failure& e) {
 std::string utf8(const std::filesystem::path& p) {
     auto s = p.u8string();
     return std::string(s.begin(), s.end());
+}
+
+// A face whose area and volume OCCT's quick integration gets exactly: flat or
+// round, bounded by straight lines and circles. (A flat face bounded by a spline
+// is measured off by 1e-4 that way.)
+bool plainFace(const TopoDS_Face& face) {
+    const auto type = BRepAdaptor_Surface(face, Standard_False).GetType();
+    if (!(type == GeomAbs_Plane || type == GeomAbs_Cylinder || type == GeomAbs_Cone ||
+          type == GeomAbs_Sphere || type == GeomAbs_Torus))
+        return false;
+    for (TopExp_Explorer ex(face, TopAbs_EDGE); ex.More(); ex.Next()) {
+        const auto curve = BRepAdaptor_Curve(TopoDS::Edge(ex.Current())).GetType();
+        if (curve != GeomAbs_Line && curve != GeomAbs_Circle) return false;
+    }
+    return true;
 }
 
 // OCCT prints progress and statistics (for example from the STEP writer) to the
@@ -1008,7 +1031,15 @@ public:
         // is exact for flat and round faces, but off by up to 1e-3 on free-form
         // (spline) ones, like a solid with a closed spline hole.
         GProp_GProps vol;
-        BRepGProp::VolumePropertiesGK(*s, vol, 1e-9);
+        // The quick way when every face is flat or round (exact, and much faster on
+        // parts with thousands of faces, like imported meshes).
+        bool freeForm = false;
+        for (TopExp_Explorer ex(*s, TopAbs_FACE); ex.More() && !freeForm; ex.Next())
+            freeForm = !plainFace(TopoDS::Face(ex.Current()));
+        if (freeForm)
+            BRepGProp::VolumePropertiesGK(*s, vol, 1e-9);
+        else
+            BRepGProp::VolumeProperties(*s, vol);
         // Areas face by face. OCCT's surface integration is exact for flat and
         // round faces, but on free-form ones it uses a fixed number of points per
         // knot span (or all of a swept surface at once), which misses kinks and
@@ -1025,7 +1056,10 @@ public:
             const bool exact = type == GeomAbs_Plane || type == GeomAbs_Cylinder || type == GeomAbs_Cone ||
                                type == GeomAbs_Sphere || type == GeomAbs_Torus;
             GProp_GProps surf;
-            BRepGProp::SurfaceProperties(exact ? TopoDS_Shape(face) : finelySplit(face), surf, 1e-9);
+            if (type == GeomAbs_Plane && plainFace(face))
+                BRepGProp::SurfaceProperties(face, surf);  // exact, and quick for parts with many flat faces
+            else
+                BRepGProp::SurfaceProperties(exact ? TopoDS_Shape(face) : finelySplit(face), surf, 1e-9);
             area += surf.Mass();
         }
         gp_Pnt c = vol.CentreOfMass();
@@ -1235,6 +1269,108 @@ public:
             return {wrap(solids), {}, {}};
         } catch (const Standard_Failure& e) {
             return unreadable(describe(e));
+        }
+    }
+
+    OpResult solidFromMesh(const Mesh& mesh) override {
+        const auto edges = checkEdges(mesh);
+        if (!edges.closed()) {
+            const int gaps = edges.open + edges.crowded;
+            return failed("import.mesh.open",
+                          "This mesh has " + std::to_string(gaps) + (gaps == 1 ? " edge" : " edges") +
+                              " with a gap or an overlap, so it has no clear inside. Repair it first (most "
+                              "slicers have a Repair button), and export it again.");
+        }
+        try {
+            // One vertex for each point, one edge for each pair of points a triangle
+            // joins (shared by the two triangles beside it), one flat face for each
+            // triangle: a closed shell with no sewing needed.
+            std::vector<TopoDS_Vertex> points;
+            points.reserve(mesh.vertices.size());
+            for (const auto& v : mesh.vertices)
+                points.push_back(BRepBuilderAPI_MakeVertex(gp_Pnt(v[0], v[1], v[2])).Vertex());
+            std::map<std::pair<std::uint32_t, std::uint32_t>, TopoDS_Edge> lines;
+            auto lineFor = [&](std::uint32_t a, std::uint32_t b) {
+                const auto key = std::minmax(a, b);
+                auto it = lines.find(key);
+                if (it == lines.end())
+                    it = lines
+                             .emplace(key,
+                                      BRepBuilderAPI_MakeEdge(points[key.first], points[key.second]).Edge())
+                             .first;
+                // The edge runs from the smaller number: reversed when the triangle goes the other way.
+                return a < b ? it->second : TopoDS::Edge(it->second.Reversed());
+            };
+            // Pieces that don't touch (two parts in one file) are solids of their own:
+            // triangles sharing an edge are in the same piece.
+            std::vector<std::uint32_t> piece(mesh.vertices.size());
+            for (std::uint32_t i = 0; i < piece.size(); ++i) piece[i] = i;
+            std::function<std::uint32_t(std::uint32_t)> root = [&](std::uint32_t i) {
+                while (piece[i] != i) i = piece[i] = piece[piece[i]];
+                return i;
+            };
+            for (const auto& t : mesh.triangles) {
+                piece[root(t[1])] = root(t[0]);
+                piece[root(t[2])] = root(t[0]);
+            }
+            BRep_Builder builder;
+            std::map<std::uint32_t, TopoDS_Shell> shells;  // by piece, in order: the same every time
+            for (const auto& t : mesh.triangles) {
+                const auto& a = mesh.vertices[t[0]];
+                const auto& b = mesh.vertices[t[1]];
+                const auto& c = mesh.vertices[t[2]];
+                const gp_Vec ab(b[0] - a[0], b[1] - a[1], b[2] - a[2]),
+                    ac(c[0] - a[0], c[1] - a[1], c[2] - a[2]);
+                const gp_Vec n = ab.Crossed(ac);
+                if (n.Magnitude() < 1e-12) {
+                    return failed(
+                        "import.mesh.failed",
+                        "This mesh has a triangle with no area (its corners are in a line). Repair it "
+                        "first (most slicers have a Repair button), and export it again.");
+                }
+                BRepBuilderAPI_MakeWire wire;
+                wire.Add(lineFor(t[0], t[1]));
+                wire.Add(lineFor(t[1], t[2]));
+                wire.Add(lineFor(t[2], t[0]));
+                const gp_Pln plane(gp_Pnt(a[0], a[1], a[2]), gp_Dir(n));
+                BRepBuilderAPI_MakeFace face(plane, wire.Wire(), Standard_True);
+                if (!face.IsDone())
+                    return failed("import.mesh.failed",
+                                  "A triangle of this mesh couldn't be made into a face.");
+                // Store each edge's place on the face's plane now, instead of every later
+                // step working it out again (what makes big meshes slow).
+                TopTools_ListOfShape faceEdges;
+                for (TopExp_Explorer ex(face.Face(), TopAbs_EDGE); ex.More(); ex.Next())
+                    faceEdges.Append(ex.Current());
+                BRepLib::BuildPCurveForEdgesOnPlane(faceEdges, face.Face());
+                auto [it, made] = shells.try_emplace(root(t[0]));
+                if (made) builder.MakeShell(it->second);
+                builder.Add(it->second, face.Face());
+            }
+            TopoDS_Compound all;
+            builder.MakeCompound(all);
+            for (auto& [key, shell] : shells) {
+                shell.Closed(Standard_True);
+                TopoDS_Solid solid;
+                builder.MakeSolid(solid);
+                builder.Add(solid, shell);
+                BRepLib::OrientClosedSolid(solid);
+                builder.Add(all, solid);
+            }
+            const TopoDS_Shape solid =
+                shells.size() == 1 ? TopoDS_Shape(TopoDS_Iterator(all).Value()) : TopoDS_Shape(all);
+            // Triangles flat against each other become one face (a box's sides, say).
+            ShapeUpgrade_UnifySameDomain unify(solid, Standard_True, Standard_True, Standard_False);
+            unify.Build();
+            // Built edge by shared edge from a closed mesh, so it's closed: no need to
+            // check it face by face (slow on big meshes).
+            return {wrap(unify.Shape()), {}, {}};
+        } catch (const Standard_Failure& e) {
+            return failed(
+                "import.mesh.failed",
+                "This mesh couldn't be made into a solid. Repair it first (most slicers have a Repair "
+                "button), and export it again.",
+                describe(e));
         }
     }
 

@@ -19,7 +19,7 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`feature.delete`](#featuredelete) | Deletes a step |
 | [`feature.duplicate`](#featureduplicate) | Copies a step, and the steps it uses |
 | [`feature.unlink`](#featureunlink) | Makes a linked copy a copy of its own, so it stops following the original |
-| [`feature.import`](#featureimport) | Adds a part made in another CAD program, from a STEP file |
+| [`feature.import`](#featureimport) | Adds a part made in another program, from a STEP, STL or 3MF file |
 | [`feature.reload_import`](#featurereload_import) | Reads an imported part's file again, after it changes |
 | [`feature.set_material`](#featureset_material) | Picks what a body is made of |
 | [`feature.slide`](#featureslide) | Slides a body by a distance, as dragging its arrows does |
@@ -380,18 +380,23 @@ error [unlink.not_linked]: Tag isn't a linked copy, so there's nothing to unlink
 
 ## feature.import
 
-Adds a part made in another CAD program, from a STEP file (`.step` or `.stp`), as
-a new body: an **Import** step. Steps after it can build on it like any body:
-cut holes in it, sketch on its faces, join things to it. See
+Adds a part made in another program, from a STEP (`.step` or `.stp`), STL or 3MF
+file, as a new body: an **Import** step. Steps after it can build on it like any
+body: cut holes in it, sketch on its faces, join things to it. See
 [Importing parts](../user-guide/importing.md).
 
 A copy of the file goes into the design, so the design opens anywhere, even
-where the file isn't. Whatever unit the file uses, the part comes in at its real
-size, in mm.
+where the file isn't. A STEP part is exact. An STL or 3MF file is triangles: it's
+made into a solid whose flat areas are one face each, so a box has six faces to
+sketch on, and a round hole is many narrow flat strips.
+
+STEP and 3MF files say their unit, so the part comes in at its real size. STL
+files don't: give `unit=in` for one made in inches.
 
 | Setting | Kind | Needed | Meaning |
 | --- | --- | --- | --- |
-| `file` | text | yes | The STEP file, like `bracket.step` |
+| `file` | text | yes | The file, like `bracket.step`, `knob.stl` or `case.3mf` |
+| `unit` | `mm`, `cm`, `m`, `in` or `ft` | no | For STL files only: the unit their numbers are in. Default `mm` |
 | `name` | text | no | Its name. Default the file's name without its ending, like `bracket` |
 
 `sketchbillet_cli demo` can write the demo tag as a STEP file, as another
@@ -419,12 +424,40 @@ strap: 3 steps
 wrote strap.sb
 ```
 
-Only STEP files can be imported so far:
+The same tag as an STL file, made by `demo` as a slicer would get it. Its hole is
+36 narrow flat faces, so it has a little more plastic than the exact one:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli demo tag.stl
+volume: 7121.46 mm^3
+wrote tag.stl
+$ sketchbillet_cli run --open strap.sb feature.import file=tag.stl name=Mesh
+strap: 4 steps
+  tag          ok  volume 7121.46 mm^3
+  Cylinder1    ok  volume 117.81 mm^3
+  Strap        ok  volume 7042.92 mm^3  mass 8.73 g (PLA)
+  Mesh         ok  volume 7121.86 mm^3  mass 8.83 g (PLA)
+```
+
+An STL file made in inches comes in 25.4 times too small, unless you say so:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open strap.sb feature.import file=tag.stl unit=in name=Big
+strap: 4 steps
+  tag          ok  volume 7121.46 mm^3
+  Cylinder1    ok  volume 117.81 mm^3
+  Strap        ok  volume 7042.92 mm^3  mass 8.73 g (PLA)
+  Big          ok  volume 116706346.42 mm^3  mass 144715.87 g (PLA)
+```
+
+Other kinds of file can't be imported:
 
 <!-- cli-example exit=1 -->
 ```console
-$ sketchbillet_cli run --open strap.sb feature.import file=tag.stl
-error [import.format]: SketchBillet can import STEP files (.step or .stp), so it can't import tag.stl. Export the part from the other program as STEP.
+$ sketchbillet_cli run --open strap.sb feature.import file=tag.obj
+error [import.format]: SketchBillet can import STEP (.step or .stp), STL and 3MF files, so it can't import tag.obj. Export the part from the other program as one of those.
 ```
 
 ## feature.reload_import

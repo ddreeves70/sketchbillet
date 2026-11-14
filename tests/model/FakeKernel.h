@@ -83,6 +83,7 @@ public:
     // No faces or edges: naming tests use the real kernel.
     kernel::Elements elements(const kernel::ShapeHandle&) const override { return {}; }
     kernel::OpResult importStep(std::string_view) override { return fail(); }
+    kernel::OpResult solidFromMesh(const kernel::Mesh&) override { return fail(); }
     kernel::Closest distance(const kernel::ElementOf&, const kernel::ElementOf&) const override {
         kernel::Closest out;
         out.issues.push_back({"fake.distance", Severity::Error, "The fake kernel doesn't measure.", {}});

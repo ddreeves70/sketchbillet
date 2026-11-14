@@ -2006,7 +2006,8 @@ TEST_CASE("File > Export writes the part as STL, 3MF or STEP", "[app][export]") 
     CHECK(app.shell->statusBar()->currentMessage() == QStringLiteral("Exported Box1 to part.3mf"));
 }
 
-TEST_CASE("File > Import adds a part from a STEP file, picked, with Reload from file", "[app][import]") {
+TEST_CASE("File > Import adds a part from a STEP or STL file, picked, with Reload from file",
+          "[app][import]") {
     App app;
     // A STEP file of a 30 x 20 x 5 mm plate, as another program would make.
     const QString file = app.dir.filePath(QStringLiteral("plate.step"));
@@ -2037,19 +2038,39 @@ TEST_CASE("File > Import adds a part from a STEP file, picked, with Reload from 
     REQUIRE(report);
     CHECK(app.kernel->massProps(*report->shapeOf(app.doc().featureAt(0).id())).volume == Approx(30 * 20 * 8));
 
+    CHECK_FALSE(app.field<QComboBox>("unit"));  // STEP files say their own unit
+
+    // An STL file: Properties says its unit, and changing it rescales the part.
+    const QString stl = app.dir.filePath(QStringLiteral("small.stl"));
+    REQUIRE(app.kernel->exportFile(plate.shape, kernel::ExportFormat::Stl, stl.toStdWString()).empty());
+    app.shell->askImportPath = [&] { return stl; };
+    import->trigger();
+    settle();
+    REQUIRE(app.doc().featureCount() == 2);
+    auto* unit = app.field<QComboBox>("unit");
+    REQUIRE(unit);
+    CHECK(unit->currentData().toInt() == static_cast<int>(LengthUnit::Millimeter));
+    const auto small = app.doc().featureAt(1).id();
+    unit->setCurrentIndex(unit->findData(static_cast<int>(LengthUnit::Inch)));
+    emit unit->activated(unit->currentIndex());
+    settle();
+    report = app.host.documents().lastRebuild(app.shell->activeDesign());
+    CHECK(app.kernel->massProps(*report->shapeOf(small)).volume == Approx(30 * 20 * 5 * 25.4 * 25.4 * 25.4));
+    CHECK(app.doc().undoLabel() == "Edit small");
+
     // A file SketchBillet can't import says so, and adds nothing.
     const QString other = app.dir.filePath(QStringLiteral("part.dwg"));
     app.shell->askImportPath = [&] { return other; };
     import->trigger();
     settle();
-    CHECK(app.doc().featureCount() == 1);
+    CHECK(app.doc().featureCount() == 2);
     REQUIRE(app.shell->lastProblems().size() == 1);
     CHECK(app.shell->lastProblems()[0].code == "import.format");
     // Cancelled: nothing happens.
     app.shell->askImportPath = [] { return QString(); };
     import->trigger();
     settle();
-    CHECK(app.doc().featureCount() == 1);
+    CHECK(app.doc().featureCount() == 2);
 }
 
 TEST_CASE("File > Check for Printing says whether the part is ready, and why not", "[app][export][print]") {
