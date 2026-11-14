@@ -14,12 +14,20 @@ You need [Node.js](https://nodejs.org) 22 or newer.
 cd website
 npm install
 npm run dev      # a live preview at http://localhost:5173 (home page only)
-npm run build    # the whole site, every guide page, into dist/site
+npm run build    # the whole site, every guide page and the guides' PDF, into dist/site
 npm run preview  # look at what npm run build made, at http://localhost:4173
 ```
 
 `npm run build` also checks every link and picture on every page, and fails
 with a list if one is broken. Fix the page in `docs/`, not the checker.
+
+It also makes **`sketchbillet-guides.pdf`**: the user's guide, tutorials,
+command-line reference and plugin guide in one file, with a contents page and
+bookmarks, linked from every guide page. It's printed by Chromium through
+Playwright, so the first time, get Chromium with `npx playwright install
+chromium`. CI makes it again whenever `docs/` changes, so the PDF on the site is
+always as current as the guides, and keeps it with each run of the website
+build for pull requests. `npm run pdf` makes just the PDF, after a build.
 
 ## Where things are
 
@@ -31,6 +39,7 @@ with a list if one is broken. Fix the page in `docs/`, not the checker.
 | Colors, type and layout | `src/styles.css` |
 | How `docs/` becomes the Guide, Tutorials, Command line, Plugins and Design pages | `scripts/docs.mjs` |
 | Building each page, the sitemap and robots.txt | `scripts/prerender.mjs` |
+| The guides' PDF | `scripts/pdf.mjs` |
 | The link checker | `scripts/check-links.mjs` |
 | Finding the installers for the Download page | `scripts/releases.mjs` |
 

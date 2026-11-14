@@ -67,6 +67,7 @@ Built from `website/` by `.github/workflows/website.yml`; see `website/README.md
 | **Vite**, **@vitejs/plugin-react** | Builds the site | MIT | npm | Stays |
 | **TypeScript** | Type-checks the site's code | Apache-2.0 | npm | Stays |
 | **markdown-it** | Turns the guides in `docs/` into web pages | MIT | npm | Stays |
+| **Playwright** (with Chromium) | Prints the guides into one PDF, `sketchbillet-guides.pdf`, at every website build (`website/scripts/pdf.mjs`) | Apache-2.0 (Playwright); BSD-3-Clause and others (Chromium) | npm; Chromium from `npx playwright install` | Stays: only used to build the site, never part of the app |
 | **github-slugger** | Gives headings the same `#links` GitHub does, so links between guides work on both | ISC | npm | Stays |
 | **Barlow**, **Barlow Condensed**, **IBM Plex Mono** (`@fontsource/*`) | The site's fonts, served from the site itself, so no font service sees visitors | SIL Open Font License 1.1 | npm | Stays |
 | **Node.js** | Runs the build | MIT | nodejs.org, `actions/setup-node` | Stays; needs 22+ |

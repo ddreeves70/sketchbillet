@@ -34,6 +34,9 @@ export function Doc({
             </li>
           ))}
         </ul>
+        <a className="doc-nav-pdf" href="/sketchbillet-guides.pdf" download>
+          All the guides as one PDF
+        </a>
       </nav>
       <article className="doc">
         <h1>{doc.title}</h1>

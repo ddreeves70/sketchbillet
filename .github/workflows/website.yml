@@ -35,10 +35,17 @@ jobs:
           cache: npm
           cache-dependency-path: website/package-lock.json
       - run: npm ci
-      - name: Build every page and check every link
+      - name: Get Chromium, to make the guides' PDF
+        run: npx playwright install --with-deps chromium
+      - name: Build every page and the guides' PDF, and check every link
         run: npm run build
         env:
           GH_TOKEN: ${{ github.token }}  # to look up the installers (scripts/releases.mjs)
+      - name: Keep the guides' PDF with the run, to look at in pull requests
+        uses: actions/upload-artifact@v4
+        with:
+          name: sketchbillet-guides
+          path: website/dist/site/sketchbillet-guides.pdf
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request'
         with:
