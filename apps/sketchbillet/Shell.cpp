@@ -9,10 +9,14 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QCloseEvent>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QInputDialog>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QKeySequence>
 #include <QLabel>
 #include <QMenuBar>
@@ -224,6 +228,9 @@ void Shell::buildMenus() {
         if (!path.isEmpty()) openDesign(path.toStdWString());
     });
     openAct->setShortcut(QKeySequence::Open);
+    samplesMenu_ = file->addMenu(tr("Open Sa&mple"));
+    samplesMenu_->setObjectName(QStringLiteral("sb.shell.samples"));
+    setSamplesFolder({});
     save_ = file->addAction(tr("&Save"), this, [this] { save(); });
     save_->setShortcut(QKeySequence::Save);
     auto* saveAs = file->addAction(tr("Save &as..."), this, [this] {
@@ -860,6 +867,67 @@ Diagnostics Shell::openDesign(const std::filesystem::path& path) {
     }
     replaceActive(std::move(opened.document), path);
     showMessage(tr("Opened %1").arg(QString::fromStdWString(path.filename().wstring())));
+    return {};
+}
+
+void Shell::setSamplesFolder(const std::filesystem::path& folder) {
+    samplesFolder_ = folder;
+    samples_.clear();
+    QFile index(QString::fromStdWString((folder / "index.json").wstring()));
+    if (!folder.empty() && index.open(QIODevice::ReadOnly)) {
+        for (const auto& item : QJsonDocument::fromJson(index.readAll()).array()) {
+            const auto o = item.toObject();
+            samples_.push_back(
+                {o.value(QStringLiteral("key")).toString(), o.value(QStringLiteral("title")).toString(),
+                 o.value(QStringLiteral("group")).toString(), o.value(QStringLiteral("about")).toString(),
+                 o.value(QStringLiteral("file")).toString(), o.value(QStringLiteral("order")).toInt()});
+        }
+    }
+    // By group, then in each group's own order, as on the reference parts page.
+    std::sort(samples_.begin(), samples_.end(), [](const Sample& a, const Sample& b) {
+        return a.group != b.group ? a.group < b.group : a.order < b.order;
+    });
+    samplesMenu_->clear();
+    if (samples_.empty()) {
+        samplesMenu_->addAction(tr("No samples found"))->setEnabled(false);
+        return;
+    }
+    QMenu* group = nullptr;
+    for (const auto& sample : samples_) {
+        if (!group || group->title() != sample.group) group = samplesMenu_->addMenu(sample.group);
+        auto* a = group->addAction(sample.title, this, [this, key = sample.key] {
+            if (confirmLoseChanges()) openSample(key);
+        });
+        a->setObjectName(QStringLiteral("sb.shell.sample.") + sample.key);
+        a->setToolTip(sample.about);
+        a->setStatusTip(sample.about);
+    }
+    for (auto* m : samplesMenu_->findChildren<QMenu*>()) m->setToolTipsVisible(true);
+}
+
+Diagnostics Shell::openSample(const QString& key) {
+    const auto it =
+        std::find_if(samples_.begin(), samples_.end(), [&](const Sample& s) { return s.key == key; });
+    if (it == samples_.end()) {
+        Diagnostics problems{{"sample.missing",
+                              Severity::Error,
+                              tr("There's no sample called %1.").arg(key).toStdString(),
+                              {}}};
+        showProblems(problems);
+        return problems;
+    }
+    auto opened = io::openFile(samplesFolder_ / it->file.toStdWString());
+    if (!opened.ok()) {
+        showProblems(opened.issues);
+        return opened.issues;
+    }
+    if (host_.documents().find(opened.document->id())) {
+        // Already open (opened before, or saved from it): just show it.
+        host_.documents().setActive(opened.document->id());
+        return {};
+    }
+    replaceActive(std::move(opened.document), {});  // no file yet: Save asks where
+    showMessage(tr("Opened the sample %1. Save it to keep your changes.").arg(it->title));
     return {};
 }
 

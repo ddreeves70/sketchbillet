@@ -36,6 +36,13 @@ target_link_libraries(sketchbillet PRIVATE
   sb_app_core sb::kernel_occt sb::view sb::sketch_planegcs
   sb::plugin_modeling sb::plugin_featuretree sb::plugin_properties sb::plugin_viewoptions sb::plugin_axes sb::plugin_grid sb::plugin_viewer sb::plugin_sketcher sb::plugin_movehandles sb::plugin_parameters sb::plugin_timeline sb::plugin_measure)
 sb_set_warnings(sketchbillet)
+
+# File > Open Sample's designs, made from the reference parts (cmake/SbSamples.cmake).
+if(TARGET sketchbillet_cli)
+  include(SbSamples)
+  add_dependencies(sketchbillet sb_samples)
+  target_compile_definitions(sketchbillet PRIVATE SB_BUILD_SAMPLES="${SB_SAMPLES_DIR}")
+endif()
 sb_embed_files(sketchbillet HEADER AppLogo.h NAMESPACE sb::icons::app
   FILES ../../packaging/icons/sketchbillet.svg)
 

@@ -13,9 +13,9 @@
 #include <utility>
 #include <vector>
 
-#include "sb/model/PrintCheck.h"
 #include "sb/core/Diagnostic.h"
 #include "sb/core/Id.h"
+#include "sb/model/PrintCheck.h"
 #include "sb/plugin/PluginHost.h"
 
 class QAction;
@@ -62,6 +62,13 @@ public:
     // Designs. Each returns what went wrong, if anything (also shown in the status bar).
     bool newDesign();  // false if the student cancelled
     Diagnostics openDesign(const std::filesystem::path& path);
+    // Opens a sample design (File > Open Sample) by its key, like "l-bracket": a
+    // new design that isn't saved anywhere yet, so Save asks where to keep it.
+    Diagnostics openSample(const QString& key);
+    // Where the sample designs are: a folder with index.json and the .sb files
+    // (cmake/SbSamples.cmake). Fills File > Open Sample from it; with no folder, or
+    // one that has no samples, the menu says so.
+    void setSamplesFolder(const std::filesystem::path& folder);
     Diagnostics saveDesign(const std::filesystem::path& path);
     bool save();  // to its file, or asks where; false if cancelled or failed
     // Writes one body of the active design as STL or STEP, chosen by the file's
@@ -128,8 +135,9 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
 
 private:
-    std::optional<std::pair<std::string, QString>> bodyToUse(const model::RebuildReport& report, FeatureId& which,
-                                                             const std::string& code, const QString& verb,
+    std::optional<std::pair<std::string, QString>> bodyToUse(const model::RebuildReport& report,
+                                                             FeatureId& which, const std::string& code,
+                                                             const QString& verb,
                                                              const QString& onlyOne) const;
     void buildMenus();
     void buildPanels();
@@ -184,6 +192,14 @@ private:
     };
     std::vector<PluginItem> actions_;
     std::map<DocId, std::filesystem::path> paths_;
+    // File > Open Sample, and the samples it lists.
+    struct Sample {
+        QString key, title, group, about, file;
+        int order = 0;
+    };
+    QMenu* samplesMenu_ = nullptr;
+    std::filesystem::path samplesFolder_;
+    std::vector<Sample> samples_;
     QByteArray defaultLayout_;
     Diagnostics lastProblems_;
     std::vector<plugin::Subscription> subs_;

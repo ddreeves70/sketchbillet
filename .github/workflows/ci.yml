@@ -191,6 +191,7 @@ jobs:
               "$dir/sketchbillet_cli.exe" --version
               "$dir/sketchbillet_cli.exe" demo "$out/demo.step" && test -s "$out/demo.step"
               "$dir/sketchbillet.exe" --smoke-test --settings "$out/settings.ini"
+              test -f "$dir/samples/index.json" && test -f "$dir/samples/L bracket.sb"  # File > Open Sample
               test -f "/c/ProgramData/Microsoft/Windows/Start Menu/Programs/SketchBillet.lnk"
               powershell -Command "\$p = Start-Process msiexec -ArgumentList '/x','\"$pkg\"','/qn' -Wait -PassThru; exit \$p.ExitCode"
               test ! -e "$dir/sketchbillet.exe"
@@ -203,6 +204,8 @@ jobs:
               "$app/Contents/MacOS/sketchbillet_cli" --version
               "$app/Contents/MacOS/sketchbillet_cli" demo "$out/demo.step" && test -s "$out/demo.step"
               "$app/Contents/MacOS/sketchbillet" --smoke-test --settings "$out/settings.ini"
+              test -f "$app/Contents/Resources/samples/index.json"  # File > Open Sample
+              test -f "$app/Contents/Resources/samples/L bracket.sb"
               # The disk can stay busy for a moment after the app quits (Spotlight
               # looks inside it): try a few times, then force it.
               for try in 1 2 3 4 5; do

@@ -1050,6 +1050,14 @@
       ]
     },
     {
+      "out": "docs/user-guide/images/app-sample.png",
+      "size": "1280x800",
+      "commands": [],
+      "app": {
+        "trigger": ["sb.shell.sample.l-bracket"]
+      }
+    },
+    {
       "out": "docs/user-guide/images/measure-app.png",
       "size": "1280x800",
       "commands": [

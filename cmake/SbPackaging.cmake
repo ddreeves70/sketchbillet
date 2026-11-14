@@ -30,6 +30,20 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/LICENSE.txt" "${sb_pkg}/THIRD-PARTY-N
   DESTINATION "${sb_docdir}" COMPONENT app)
 install(DIRECTORY "${sb_pkg}/licenses" DESTINATION "${sb_docdir}" COMPONENT app)
 
+# The sample designs for File > Open Sample (cmake/SbSamples.cmake), where the app
+# looks for them: next to it on Windows, in the app on macOS, in share/ on Linux.
+if(TARGET sb_samples)
+  if(APPLE)
+    set(sb_samplesdir "SketchBillet.app/Contents/Resources/samples")
+  elseif(WIN32)
+    set(sb_samplesdir "bin/samples")
+  else()
+    set(sb_samplesdir "${CMAKE_INSTALL_DATADIR}/sketchbillet/samples")
+  endif()
+  install(DIRECTORY "${SB_SAMPLES_DIR}/" DESTINATION "${sb_samplesdir}" COMPONENT app
+    FILES_MATCHING PATTERN "*.sb" PATTERN "index.json" PATTERN ".making-*" EXCLUDE)
+endif()
+
 if(APPLE)
   # ---------------------------------------------------------------- macOS
   # The build makes sketchbillet.app; people get SketchBillet.app, with the command-line

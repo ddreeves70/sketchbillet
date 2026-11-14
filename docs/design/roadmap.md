@@ -103,7 +103,7 @@ Phase 2 started Oct 31, 2026, with the parameter table.
 - Measure tool, materials/appearances, mass properties. (Materials with density, color, strength numbers and price, per body, and mass, weight and cost: built Oct 24, 2026. Measuring: `kernel::IKernel::distance()`, `model::measure()` and `sketchbillet_cli measure` built Nov 13, 2026; the desktop app's **Tools > Measure**, the `sb.measure` plugin, built Nov 13, 2026.)
 - Export STL and 3MF for 3D printing, STEP for interop; print-ready checks (watertight, minimum wall). (STL and STEP built in Phase 0; 3MF built Nov 13, 2026, with the part's name, material and color; print checks built Nov 13, 2026: `sketchbillet_cli check` and **File > Check for Printing**.)
 - Installers for all three OSes, auto-update check, crash reporter (opt-in).
-- STEP, STL and 3MF import; sample parts; the user's guide, CLI reference and tutorials cover every feature so far.
+- STEP, STL and 3MF import; sample parts (built Nov 13, 2026: **File > Open Sample** opens any of the twenty reference parts, made into `.sb` files by the build); the user's guide, CLI reference and tutorials cover every feature so far.
 - **Gate:** the 20 reference parts are modeled end to end in the desktop app on all three systems, and someone outside the project models a part of their own using only the user's guide.
 
 ### Phase 4: v0.2 Assemblies and drawings
