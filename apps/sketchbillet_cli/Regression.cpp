@@ -13,6 +13,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "sb/kernel/MeshFiles.h"
+
 namespace sb::cli {
 
 namespace {
@@ -131,6 +133,25 @@ Outcome build(IKernel& k, const json& c, const std::filesystem::path& dir) {
             std::stringstream text;
             text << in.rdbuf();
             r = k.importStep(text.str());
+        } else if (op == "stl" || op == "3mf") {
+            // A part made from a mesh file next to the case; an STL's numbers are in
+            // `unit` mm each (default 1).
+            std::ifstream in(dir / step.at("file").get<std::string>(), std::ios::binary);
+            if (!in) {
+                out.errorStep = id;
+                out.errorCode = "regress.file";
+                out.errorMessage = "Can't open " + step.at("file").get<std::string>() + ".";
+                return out;
+            }
+            std::stringstream bytes;
+            bytes << in.rdbuf();
+            const auto read = op == "stl" ? kernel::readStl(bytes.str(), step.value("unit", 1.0))
+                                          : kernel::read3mf(bytes.str());
+            if (!read.ok()) {
+                r.issues = read.issues;
+            } else {
+                r = k.solidFromMesh(read.mesh);
+            }
         } else if (op == "extrude") {
             r = k.extrude(shapes.at(step.at("face").get<std::string>()), vec3(step.at("by")));
         } else if (op == "shell") {

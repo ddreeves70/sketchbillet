@@ -7,12 +7,14 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <deque>
 #include <fstream>
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -522,6 +524,49 @@ std::optional<model::GeometryRef> refFromJson(const json& j) {
     return r;
 }
 
+// Bytes as base64 text (RFC 4648), and back: for binary files on the clipboard.
+std::string toBase64(std::string_view bytes) {
+    static constexpr char kDigits[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve((bytes.size() + 2) / 3 * 4);
+    for (std::size_t i = 0; i < bytes.size(); i += 3) {
+        const std::size_t n = std::min<std::size_t>(3, bytes.size() - i);
+        std::uint32_t v = 0;
+        for (std::size_t k = 0; k < 3; ++k)
+            v = v << 8 | (k < n ? static_cast<unsigned char>(bytes[i + k]) : 0u);
+        for (std::size_t k = 0; k < 4; ++k) out += k <= n ? kDigits[(v >> (18 - 6 * k)) & 63] : '=';
+    }
+    return out;
+}
+std::optional<std::string> fromBase64(std::string_view text) {
+    if (text.size() % 4 != 0) return std::nullopt;
+    auto digit = [](char c) -> int {
+        if (c >= 'A' && c <= 'Z') return c - 'A';
+        if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+        if (c >= '0' && c <= '9') return c - '0' + 52;
+        return c == '+' ? 62 : c == '/' ? 63 : -1;
+    };
+    std::string out;
+    out.reserve(text.size() / 4 * 3);
+    for (std::size_t i = 0; i < text.size(); i += 4) {
+        std::uint32_t v = 0;
+        int pad = 0;
+        for (std::size_t k = 0; k < 4; ++k) {
+            const char c = text[i + k];
+            if (c == '=' && i + 4 == text.size() && k >= 2) {
+                ++pad;
+                v <<= 6;
+                continue;
+            }
+            const int d = digit(c);
+            if (d < 0 || pad) return std::nullopt;
+            v = v << 6 | static_cast<std::uint32_t>(d);
+        }
+        for (int k = 0; k < 3 - pad; ++k) out += static_cast<char>((v >> (16 - 8 * k)) & 0xff);
+    }
+    return out;
+}
+
 // Where an Import step's file is saved in the design: imports/<step id>.step.
 std::string importPath(const model::ImportFeature& f) {
     return "imports/" + f.id().toString() + "." + std::string(model::formatName(f.format()));
@@ -624,6 +669,9 @@ json featureToJson(const Feature& f) {
             j["params"] = {{"format", std::string(model::formatName(im.format()))},
                            {"source", im.source()},
                            {"data", importPath(im)}};
+            // An STL file's unit, when it isn't mm (STL files don't say).
+            if (im.format() == model::ImportFormat::Stl && im.unit() != LengthUnit::Millimeter)
+                j["params"]["unit"] = std::string(unitSymbol(im.unit()));
             break;
         }
         case FeatureType::Shell: {
@@ -932,18 +980,36 @@ std::unique_ptr<Feature> stepFromJson(const json& j, const FeatureId& id, std::s
         return step;
     }
     if (type == "Import") {
-        if (params.value("format", "") != "step") return bad("format");
+        const std::string format = params.value("format", "");
+        const auto kind = format == "step"  ? std::optional(model::ImportFormat::Step)
+                          : format == "stl" ? std::optional(model::ImportFormat::Stl)
+                          : format == "3mf" ? std::optional(model::ImportFormat::ThreeMf)
+                                            : std::nullopt;
+        if (!kind) return bad("format");
         const json source = params.value("source", json(""));
         if (!source.is_string()) return bad("source");
         // The contents come from the file named in "data" (read by readBytes()),
-        // or, on the clipboard, from "content".
+        // or, on the clipboard, from "content" (text) or "content_base64" (STL and 3MF files).
         std::shared_ptr<const std::string> content;
         if (params.contains("content")) {
             if (!params["content"].is_string()) return bad("content");
             content = std::make_shared<const std::string>(params["content"].get<std::string>());
+        } else if (params.contains("content_base64")) {
+            const auto bytes = params["content_base64"].is_string()
+                                   ? fromBase64(params["content_base64"].get<std::string>())
+                                   : std::nullopt;
+            if (!bytes) return bad("content_base64");
+            content = std::make_shared<const std::string>(*bytes);
         }
-        return std::make_unique<model::ImportFeature>(id, name, model::ImportFormat::Step, std::move(content),
-                                                      source.get<std::string>());
+        auto step = std::make_unique<model::ImportFeature>(id, name, *kind, std::move(content),
+                                                           source.get<std::string>());
+        if (params.contains("unit")) {
+            const auto unit = params["unit"].is_string() ? parseLengthUnit(params["unit"].get<std::string>())
+                                                         : std::nullopt;
+            if (!unit) return bad("unit");
+            step->setUnit(*unit);
+        }
+        return step;
     }
     if (type == "Shell") {
         const auto body = inputs.contains("body") && inputs["body"].is_string()
@@ -1555,8 +1621,12 @@ std::string stepsToText(const Document& doc, const std::vector<FeatureId>& ids) 
         if (f->suppressed()) j["suppressed"] = true;
         if (f->type() == FeatureType::Import) {
             // The clipboard is one piece of text: the imported file goes in it.
+            const auto& im = static_cast<const model::ImportFeature&>(*f);
             j["params"].erase("data");
-            j["params"]["content"] = static_cast<const model::ImportFeature&>(*f).content();
+            if (im.format() == model::ImportFormat::Step)
+                j["params"]["content"] = im.content();  // text
+            else
+                j["params"]["content_base64"] = toBase64(im.content());  // STL and 3MF files can be binary
         }
         list.push_back(j);
         if (!f->material().empty()) used.push_back(f->material());

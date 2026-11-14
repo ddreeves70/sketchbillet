@@ -152,7 +152,11 @@ class PluginContext;
 /// Version 52 added importing: kernel::IKernel::importStep(), which a kernel must
 /// now provide; sb/model/Import.h (model::ImportFeature, model::readImportFile());
 /// FeatureType::Import; and the feature.import and feature.reload_import commands.
-inline constexpr int kPluginApiVersion = 52;
+/// Version 53 added STL and 3MF import: kernel::IKernel::solidFromMesh(), which a
+/// kernel must now provide; sb/kernel/MeshFiles.h (kernel::readStl(), kernel::read3mf());
+/// ImportFormat::Stl and ThreeMf; ImportFeature::unit() and setUnit(); and
+/// feature.import's unit= setting.
+inline constexpr int kPluginApiVersion = 53;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

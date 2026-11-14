@@ -5,6 +5,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -14,10 +15,13 @@
 
 #include "sb/io/SketchBilletFile.h"
 #include "sb/io/Steps.h"
+#include "sb/io/ThreeMf.h"
 #include "sb/kernel_occt/OcctKernel.h"
 #include "sb/model/CommandRegistry.h"
+#include "sb/model/Commands.h"
 #include "sb/model/Document.h"
 #include "sb/model/Import.h"
+#include "sb/model/Material.h"
 #include "sb/model/Naming.h"
 #include "sb/sketch_planegcs/PlaneGcsSolver.h"
 
@@ -196,8 +200,9 @@ TEST_CASE("Importing tells the student what went wrong", "[model][import][occt]"
     REQUIRE(problems.size() == 1);
     CHECK(problems.front().code == "import.format");
     CHECK(problems.front().message ==
-          "SketchBillet can import STEP files (.step or .stp), so it can't import part.dwg. Export the part "
-          "from the other program as STEP.");
+          "SketchBillet can import STEP (.step or .stp), STL and 3MF files, so it can't import part.dwg. "
+          "Export "
+          "the part from the other program as one of those.");
     std::ofstream(d.dir / "empty.step").close();
     problems = d.run("feature.import", {{"file", utf8(d.dir / "empty.step")}});
     REQUIRE(problems.size() == 1);
@@ -235,4 +240,69 @@ TEST_CASE("A design with an imported part saved in Nov 2026 still opens and buil
     // The tag: 60 x 30 x 4 mm, less a 5 mm hole 4 mm deep.
     CHECK(kernel->massProps(*report.shapeOf(doc.featureAt(0).id())).volume ==
           Approx(60 * 30 * 4 - std::numbers::pi * 2.5 * 2.5 * 4));
+}
+
+TEST_CASE("Parts come in from STL and 3MF files too, saved in the design", "[model][import][occt][mesh]") {
+    Design d;
+    // A 30 x 20 x 10 mm block, as STL (binary, from SketchBillet's own export) and as 3MF.
+    const auto block = d.kernel->makeBox({0, 0, 0}, 30, 20, 10).shape;
+    const auto stl = d.dir / "block.stl";
+    REQUIRE(d.kernel->exportFile(block, kernel::ExportFormat::Stl, stl).empty());
+    io::Bytes bytes;
+    REQUIRE(
+        io::write3mfBytes({{"Block", d.kernel->tessellate(block, kernel::MeshQuality{}), defaultMaterial()}},
+                          "Block", bytes)
+            .empty());
+    std::ofstream(d.dir / "block.3mf", std::ios::binary)
+        .write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+
+    REQUIRE(d.run("feature.import", {{"file", utf8(stl)}}).empty());
+    REQUIRE(d.run("feature.import", {{"file", utf8(d.dir / "block.3mf")}, {"name", std::string("Printed")}})
+                .empty());
+    // The same STL, in inches.
+    REQUIRE(d.run("feature.import",
+                  {{"file", utf8(stl)}, {"unit", std::string("in")}, {"name", std::string("Big")}})
+                .empty());
+    auto report = d.rebuild();
+    REQUIRE(report.ok());
+    for (const char* name : {"block", "Printed"}) {
+        INFO(name);
+        CHECK(d.volume(report, name) == Approx(6000));
+        CHECK(d.kernel->topology(*report.shapeOf(d.id(name))).faces == 6);  // one face a side, not triangles
+    }
+    CHECK(d.volume(report, "Big") == Approx(6000 * 25.4 * 25.4 * 25.4));
+
+    // The unit can be changed afterwards, like Properties does.
+    auto inMm = d.doc.find(d.id("Big"))->clone();
+    static_cast<ImportFeature&>(*inMm).setUnit(LengthUnit::Millimeter);
+    REQUIRE(d.doc.execute(std::make_unique<EditFeatureCommand>(std::move(inMm))).empty());
+    report = d.rebuild();
+    CHECK(d.volume(report, "Big") == Approx(6000));
+    REQUIRE(d.doc.undo());
+
+    // Saved in the design byte for byte, with the unit; and on the clipboard.
+    io::Bytes saved;
+    REQUIRE(io::writeBytes(d.doc, saved).empty());
+    auto opened = io::readBytes(saved, "blocks.sb");
+    REQUIRE(opened.ok());
+    for (std::size_t i = 0; i < 3; ++i) {
+        const auto& a = static_cast<const ImportFeature&>(d.doc.featureAt(i));
+        const auto& b = static_cast<const ImportFeature&>(opened.document->featureAt(i));
+        CHECK(b.format() == a.format());
+        CHECK(b.content() == a.content());
+        CHECK(b.unit() == a.unit());
+    }
+    CHECK(static_cast<const ImportFeature&>(opened.document->featureAt(2)).unit() == LengthUnit::Inch);
+    auto pasted = io::stepsFromText(io::stepsToText(d.doc, {d.id("Printed"), d.id("Big")}));
+    REQUIRE(pasted.issues.empty());
+    REQUIRE(pasted.steps.size() == 2);
+    CHECK(static_cast<const ImportFeature&>(*pasted.steps[0]).content() ==
+          static_cast<const ImportFeature&>(*d.doc.find(d.id("Printed"))).content());
+    CHECK(static_cast<const ImportFeature&>(*pasted.steps[1]).unit() == LengthUnit::Inch);
+
+    // unit= is only for STL.
+    const auto problems =
+        d.run("feature.import", {{"file", utf8(d.dir / "block.3mf")}, {"unit", std::string("in")}});
+    REQUIRE(problems.size() == 1);
+    CHECK(problems.front().code == "import.unit");
 }

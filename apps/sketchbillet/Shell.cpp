@@ -123,8 +123,12 @@ Shell::Shell(plugin::PluginHost& host, AppUi& ui, QSettings& settings, QWidget* 
             QMessageBox::warning(this, tr("Check for Printing"), lines.join(QStringLiteral("\n\n")));
     };
     askImportPath = [this] {
-        return QFileDialog::getOpenFileName(this, tr("Import a part"), QString(),
-                                            tr("STEP, from other CAD programs (*.step *.stp *.STEP *.STP)"));
+        return QFileDialog::getOpenFileName(
+            this, tr("Import a part"), QString(),
+            tr("Parts from other programs (*.step *.stp *.stl *.3mf *.STEP *.STP *.STL *.3MF);;"
+               "STEP, from CAD programs (*.step *.stp *.STEP *.STP);;"
+               "STL, from 3D modeling programs and slicers (*.stl *.STL);;"
+               "3MF, from slicers and 3D modeling programs (*.3mf *.3MF)"));
     };
     askExportPath = [this](const QString& suggested) {
         const QString stl = tr("STL, for 3D printing (*.stl)");
@@ -252,7 +256,8 @@ void Shell::buildMenus() {
     importAct->setObjectName(QStringLiteral("sb.shell.import"));
     importAct->setShortcut(QKeySequence(QStringLiteral("Ctrl+I")));
     importAct->setIcon(svgIcon(icons::modeling::import_svg));
-    importAct->setStatusTip(tr("Add a part from another CAD program, from a STEP file, as a new body."));
+    importAct->setStatusTip(
+        tr("Add a part from another program, from a STEP, STL or 3MF file, as a new body."));
     export_ = file->addAction(tr("&Export..."), this, [this] {
         const auto* doc = host_.documents().find(activeDesign());
         const auto path = askExportPath(qs(doc ? doc->name() : "Untitled") + QStringLiteral(".stl"));

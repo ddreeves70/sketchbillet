@@ -236,9 +236,10 @@ a small blue ***fx*** in front. See
 
 ## Importing
 
-**File > Import...** (Ctrl+I) adds a part made in another CAD program, from a
-STEP file, as an **Import** step. Properties shows the file it came from, and
-**Reload from file** reads it again after it changes. See
+**File > Import...** (Ctrl+I) adds a part made in another program, from a STEP,
+STL or 3MF file, as an **Import** step. Properties shows the file it came from,
+**Reload from file** reads it again after it changes, and for an STL file,
+**File unit** says what unit its numbers are in. See
 [Importing parts](importing.md).
 
 ## Measuring

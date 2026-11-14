@@ -1,0 +1,57 @@
+{
+  "name": "import-stl-tag",
+  "description": "The keychain tag from a binary STL file (SketchBillet's own export, 160 triangles), made into a solid. Its volume is the mesh's own, worked out in Python from the file's triangles (sum of a.(b x c)/6): 7121.858317 mm^3, a little more than the exact tag's 7121.46 because the hole is faceted. The flat sides merge into one face each: 4 sides, top and bottom, and the faceted hole's 36 strips = 42 faces.",
+  "steps": [
+    {
+      "id": "tag",
+      "op": "stl",
+      "file": "files/keychain-tag.stl"
+    }
+  ],
+  "measure": [
+    {
+      "a": {
+        "face": [
+          0,
+          15,
+          2
+        ]
+      },
+      "b": {
+        "face": [
+          60,
+          15,
+          2
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "valid": true,
+    "volume": 7121.858317,
+    "area": 4343.681294,
+    "bounds": [
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        60.0,
+        30.0,
+        4.0
+      ]
+    ],
+    "solids": 1,
+    "faces": 42,
+    "edges": 120,
+    "vertices": 80,
+    "distances": [
+      60.0
+    ],
+    "tolerance": {
+      "relative": 1e-06,
+      "length": 0.0001
+    }
+  }
+}

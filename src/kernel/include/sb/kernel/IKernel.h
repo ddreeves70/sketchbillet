@@ -229,6 +229,17 @@ public:
     ///     (import.step.unreadable), or has no closed solid in it
     ///     (import.step.no_solid). The same text always gives the same shape.
     virtual OpResult importStep(std::string_view text) = 0;
+
+    /// Makes a solid from a closed triangle mesh, like an STL or 3MF file's
+    /// (see readStl() and read3mf() in sb/kernel/MeshFiles.h). Triangles that
+    /// lie flat against each other become one face, so a box from an STL file
+    /// has six faces, to sketch on like any other.
+    /// @param mesh The mesh (mm): closed all round, triangles counter-clockwise
+    ///     seen from outside, each point listed once (see weld()).
+    /// @return The solid, or import.mesh.open if the mesh has gaps or overlaps
+    ///     (so it has no clear inside), or import.mesh.failed. The same mesh
+    ///     always gives the same solid.
+    virtual OpResult solidFromMesh(const Mesh& mesh) = 0;
 };
 
 }  // namespace sb::kernel

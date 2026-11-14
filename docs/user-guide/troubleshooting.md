@@ -72,11 +72,16 @@ when it builds:
 
 | Code | Meaning | Fix |
 | --- | --- | --- |
-| `import.format` | The file isn't a STEP file (`.step` or `.stp`) | Export the part from the other program as STEP. STL and 3MF import come later |
+| `import.format` | The file isn't a STEP (`.step` or `.stp`), STL or 3MF file | Export the part from the other program as one of those |
 | `import.no_file` | The file isn't where SketchBillet looked (it says where) | Check the file's name and folder. For Reload from file, put the file back where it was imported from |
 | `import.empty`, `import.too_big` | The file is empty, or over 64 MB | Export the part again; for a big one, export just the piece you need |
 | `import.step.unreadable` | The file ends in `.step` but isn't a STEP file SketchBillet can read | Export it again from the other program, as STEP AP203, AP214 or AP242 |
 | `import.step.no_solid` | The file has only surfaces (skin), no solid with an inside | Export the part as a solid body |
+| `import.stl.unreadable`, `import.3mf.unreadable` | The file ends in `.stl` or `.3mf` but isn't one SketchBillet can read | Export it again from the other program |
+| `import.mesh.open` | The mesh has gaps or overlaps (it says how many edges), so it has no clear inside | Repair it first: most slicers have a Repair button, or use a mesh program like Meshmixer. Then export it again |
+| `import.mesh.too_big` | The mesh has more than 100,000 triangles | Export it with fewer triangles (a coarser resolution), or simplify it in a mesh program |
+| `import.mesh.failed`, `import.mesh.empty` | The mesh couldn't be made into a solid, or has no triangles | Repair it, or export it again |
+| `import.unit` | `unit=` was given for a STEP or 3MF file, which say their own unit | Leave `unit=` out: it's only for STL files |
 
 ## The print check found a problem
 

@@ -82,7 +82,7 @@ when a library is added to or removed from what ships.
 | Dependency | What it's for | When | License | Plan and open questions |
 | --- | --- | --- | --- | --- |
 | **pybind11** + embedded **CPython** | Python scripting, console, Python plugins; bindings generated from the command registry | Phase 5 | BSD-3-Clause; PSF | vcpkg (`pybind11`, `python3`). Ship Python with the installer |
-| **lib3mf** | 3MF import and export for 3D printing | Not used for export | BSD-2-Clause | 3MF export is written by SketchBillet itself with libzip (it's a zip with XML in it; Nov 13, 2026), so no new library was needed. Import (Phase 3) may still use lib3mf, to read files from every slicer |
+| **lib3mf** | 3MF import and export for 3D printing | Not used | BSD-2-Clause | 3MF export is written by SketchBillet itself with libzip (it's a zip with XML in it; Nov 13, 2026), and 3MF import is read by SketchBillet itself too, in `sb_kernel` with its own unzip (stored and deflated files, RFC 1951; Nov 13, 2026), so the kernel library needs nothing but the standard library. lib3mf stays an option if slicers' files need more of 3MF than meshes, parts and placements |
 | **Our own DXF reader** | Importing splines, lines and arcs from DXF (Inkscape, other CAD) | Phase 1 or 2 | Apache-2.0 (ours) | The common DXF libraries (libdxfrw, dxflib) are GPL, and OCCT's DXF importer is commercial, so we write a small reader for the entities we need |
 | **Crash reporter** (opt-in) | Crash reports users choose to send | Phase 3 | To decide: Crashpad (BSD-3) or sentry-native (MIT) | Off by default; works offline; never sends designs |
 | **Manifold** | Fast, robust mesh Booleans for the mesh workspace | Phase 6 | Apache-2.0 | vcpkg (`manifold`) |

@@ -6,6 +6,7 @@
 #include <string>
 #include <system_error>
 
+#include "sb/kernel/MeshFiles.h"
 #include "sb/model/Naming.h"
 
 namespace sb::model {
@@ -62,7 +63,22 @@ Built ImportFeature::build(kernel::IKernel& kernel, const ResultLookup&) const {
                                         fileName() + " again with feature.reload_import."));
         return out;
     }
-    out.op = kernel.importStep(content());
+    switch (format_) {
+        case ImportFormat::Step:
+            out.op = kernel.importStep(content());
+            break;
+        case ImportFormat::Stl:
+        case ImportFormat::ThreeMf: {
+            auto read = format_ == ImportFormat::Stl ? kernel::readStl(content(), mmPerUnit(unit_))
+                                                     : kernel::read3mf(content());
+            if (!read.ok()) {
+                out.op.issues = std::move(read.issues);
+                return out;
+            }
+            out.op = kernel.solidFromMesh(read.mesh);
+            break;
+        }
+    }
     if (!out.op.ok()) return out;
     // Every face is "<step>/import"; nameFromFaces() tells them apart by where they are.
     auto elements = kernel.elements(out.op.shape);
@@ -75,6 +91,10 @@ std::string_view formatName(ImportFormat format) {
     switch (format) {
         case ImportFormat::Step:
             return "step";
+        case ImportFormat::Stl:
+            return "stl";
+        case ImportFormat::ThreeMf:
+            return "3mf";
     }
     return "step";
 }
@@ -91,10 +111,16 @@ ImportFile readImportFile(const std::string& file) {
     for (auto& c : ending) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     if (ending == ".step" || ending == ".stp") {
         out.format = ImportFormat::Step;
+    } else if (ending == ".stl") {
+        out.format = ImportFormat::Stl;
+    } else if (ending == ".3mf") {
+        out.format = ImportFormat::ThreeMf;
     } else {
-        out.issues.push_back(problem(
-            "import.format", "SketchBillet can import STEP files (.step or .stp), so it can't import " +
-                                 name + ". Export the part from the other program as STEP."));
+        out.issues.push_back(
+            problem("import.format",
+                    "SketchBillet can import STEP (.step or .stp), STL and 3MF files, so it can't "
+                    "import " +
+                        name + ". Export the part from the other program as one of those."));
         return out;
     }
     std::ifstream in(path, std::ios::binary);

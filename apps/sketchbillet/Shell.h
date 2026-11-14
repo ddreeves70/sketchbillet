@@ -54,7 +54,7 @@ public:
     std::function<Unsaved(const QString& name)> askUnsaved;
     // Asks where to save. Tests replace it. Empty means cancelled.
     std::function<QString(const QString& suggested)> askSavePath;
-    // Asks for a file to import (.step). Tests replace it. Empty means cancelled.
+    // Asks for a file to import (.step, .stl or .3mf). Tests replace it. Empty means cancelled.
     std::function<QString()> askImportPath;
     // Asks where to export (.stl, .3mf or .step). Tests replace it. Empty means cancelled.
     std::function<QString(const QString& suggested)> askExportPath;
@@ -72,7 +72,7 @@ public:
     // one that has no samples, the menu says so.
     void setSamplesFolder(const std::filesystem::path& folder);
     Diagnostics saveDesign(const std::filesystem::path& path);
-    // Adds a part from a STEP file to the active design (File > Import), as an
+    // Adds a part from a STEP, STL or 3MF file to the active design (File > Import), as an
     // Import step, and picks it. Returns what went wrong, if anything.
     Diagnostics importPart(const std::filesystem::path& path);
     bool save();  // to its file, or asks where; false if cancelled or failed

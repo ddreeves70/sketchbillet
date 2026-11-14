@@ -84,8 +84,7 @@ wrote plate.step
 
 ## Importing
 
-Parts made in other CAD programs can be imported from STEP files (`.step` or
-`.stp`): **File > Import...** in the desktop app, or
+Parts made in other programs can be imported from STEP (`.step` or `.stp`), STL
+and 3MF files: **File > Import...** in the desktop app, or
 [`feature.import`](../cli/commands.md#featureimport). The design keeps a copy of
-the file inside the `.sb`. See [Importing parts](importing.md). STL and 3MF
-import come next.
+the file inside the `.sb`. See [Importing parts](importing.md).

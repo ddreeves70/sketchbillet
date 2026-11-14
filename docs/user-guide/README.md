@@ -37,7 +37,7 @@ works in either.
 | Export STL and 3MF (3D printing) and STEP (other CAD programs), from the app's File menu or `sketchbillet_cli` | |
 | Check a part is ready to print: closed all round, no walls too thin | Overhang checks |
 | Measure a face, edge or point, or between two: sizes, distances, angles, hole spacing, in the app (Tools > Measure) or with `sketchbillet_cli` | |
-| Import parts from other CAD programs: STEP files, kept inside the design, with Reload from file | Import STL and 3MF |
+| Import parts from other programs: STEP, STL and 3MF files, kept inside the design, with Reload from file | |
 | Add plugins | |
 
 ## Contents

@@ -1,22 +1,27 @@
 /// @file
-/// The Import step: a part made in another program, read from a STEP file and
-/// kept in the design.
+/// The Import step: a part made in another program, read from a STEP, STL or
+/// 3MF file and kept in the design.
 #pragma once
 
 #include <memory>
 #include <string>
 
 #include "sb/core/Diagnostic.h"
+#include "sb/core/Units.h"
 #include "sb/model/Feature.h"
 
 namespace sb::model {
 
 /// The kinds of file a part can be imported from.
 enum class ImportFormat {
-    Step,  ///< STEP (ISO 10303-21): .step or .stp. The part is exact, with its curved faces.
+    Step,     ///< STEP (ISO 10303-21): .step or .stp. The part is exact, with its curved faces.
+    Stl,      ///< STL: .stl, binary or text. Triangles only, and no unit (see ImportFeature::unit()).
+    ThreeMf,  ///< 3MF: .3mf. Triangles, in the unit the file says.
 };
 
-/// An Import step: a part from another program, as a body. The file's whole
+/// An Import step: a part from another program, as a body. STEP files give the
+/// exact part; STL and 3MF files give triangles, made into a solid whose flat
+/// areas are one face each (see kernel::IKernel::solidFromMesh()). The file's whole
 /// contents are kept in the step (and saved in the design), so the design opens
 /// anywhere, even where the file isn't. It also remembers where the file came
 /// from, so it can be read again after the file changes (see
@@ -72,6 +77,14 @@ public:
     /// @return For example "bracket.step".
     std::string fileName() const;
 
+    /// Gives the unit an STL file's numbers are in (STL files don't say).
+    /// @return Millimeter unless it was changed; not used for STEP and 3MF.
+    LengthUnit unit() const { return unit_; }
+
+    /// Changes the unit an STL file's numbers are in. Use on a copy, or from a Command.
+    /// @param unit The unit, like LengthUnit::Inch for a part made in inches.
+    void setUnit(LengthUnit unit) { unit_ = unit; }
+
     /// Puts in new contents, read again from a file. Use on a copy, or from a Command.
     /// @param format What kind of file it is.
     /// @param content The file's whole contents.
@@ -86,11 +99,12 @@ private:
     ImportFormat format_;
     std::shared_ptr<const std::string> content_;
     std::string source_;
+    LengthUnit unit_ = LengthUnit::Millimeter;
 };
 
 /// The name of a format in files and messages.
 /// @param format The format.
-/// @return "step".
+/// @return "step", "stl" or "3mf".
 std::string_view formatName(ImportFormat format);
 
 /// What readImportFile() read.
@@ -102,7 +116,7 @@ struct ImportFile {
     Diagnostics issues;                          ///< Why it couldn't be read.
 };
 
-/// Reads a file to import. Its kind comes from its ending: .step or .stp. It
+/// Reads a file to import. Its kind comes from its ending: .step, .stp, .stl or .3mf. It
 /// isn't checked to be a part here: that happens when the step builds.
 /// @param file The file, as UTF-8 text: a whole path, or one from the current folder.
 /// @return Its contents, or why not: import.no_file (it isn't there), import.format
