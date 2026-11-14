@@ -572,7 +572,8 @@ CommandRegistry makeBuiltin() {
                                               : ExtrudeSide::One;
               const double distance = a.count("distance") ? argNumber(a, "distance") : 10.0;
               FeatureId body = argFeature(a, "body");
-              if (body.isNil() && onFace) body = sketch->face()->body;
+              if (body.isNil() && onFace)
+                  body = doc.latestBody(sketch->face()->body);  // the body as it is now
               if (body.isNil() && operation != ExtrudeOp::NewBody) {
                   return std::make_unique<ProblemCommand>(
                       Diagnostic{"extrude.no_body",
@@ -668,7 +669,7 @@ CommandRegistry makeBuiltin() {
                                                  : ExtrudeOp::NewBody;
             const std::string side = argText(a, "side", "one");
             FeatureId body = argFeature(a, "body");
-            if (body.isNil() && onFace) body = sketch->face()->body;
+            if (body.isNil() && onFace) body = doc.latestBody(sketch->face()->body);  // the body as it is now
             if (body.isNil() && operation != ExtrudeOp::NewBody) {
                 return problem(
                     "revolve.no_body",
@@ -773,7 +774,8 @@ CommandRegistry makeBuiltin() {
                 const auto* sk = dynamic_cast<const SketchFeature*>(doc.find(argFeature(a, "sketch")));
                 if (!sk) return problem("hole.sketch", "sketch= must be a sketch, like sketch=Sketch2.");
                 at.sketch = sk->id();
-                if (body.isNil() && sk->face()) body = sk->face()->body;
+                if (body.isNil() && sk->face())
+                    body = doc.latestBody(sk->face()->body);  // the body as it is now
                 if (body.isNil()) {
                     return problem(
                         "hole.no_body",

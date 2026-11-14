@@ -386,6 +386,27 @@ SketchWhere sketchAxes(const SketchFeature& step, const RebuildReport& report) {
 
 }  // namespace
 
+FeatureId Document::latestBody(const FeatureId& id) const {
+    FeatureId current = id;
+    const auto from = indexOf(id);
+    if (!from) return current;
+    for (std::size_t i = *from + 1; i < markerIndex(); ++i) {
+        const auto& f = *features_[i];
+        if (f.suppressed()) continue;
+        const auto sketches = f.sketchInputs();
+        const auto lookedAt = f.referenceInputs();
+        for (const auto& dep : f.dependencies()) {
+            if (dep != current) continue;
+            if (std::find(sketches.begin(), sketches.end(), dep) != sketches.end() ||
+                std::find(lookedAt.begin(), lookedAt.end(), dep) != lookedAt.end())
+                continue;
+            current = f.id();
+            break;
+        }
+    }
+    return current;
+}
+
 RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolver* solver,
                                    const RebuildReport* previous) const {
     RebuildReport report;
@@ -393,6 +414,7 @@ RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolve
     report.solver_ = solver;
     report.unit_ = lengthUnit_;
     std::set<FeatureId> usedAsInput;
+    std::map<FeatureId, FeatureId> changedBy;  // a body, and the first step that took it as its input
     const ParameterValues values = parameters_.evaluate();  // before any step, as the design says
     const std::size_t builtCount = markerIndex();
 
@@ -408,7 +430,8 @@ RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolve
         auto rev = previous->revisions_.find(f.id());
         if (rev == previous->revisions_.end() || rev->second != revision(f.id())) return nullptr;
         const auto* last = previous->result(f.id());
-        if (!last || (last->status != FeatureStatus::Ok && last->status != FeatureStatus::Failed)) return nullptr;
+        if (!last || (last->status != FeatureStatus::Ok && last->status != FeatureStatus::Failed))
+            return nullptr;
         for (const auto& dep : f.dependencies())
             if (!reused.count(dep)) return nullptr;
         return last;
@@ -422,13 +445,14 @@ RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolve
             const std::string what = c.name + " in " + step.name();
             auto worked = evalDimension(c.kind, c.expression, values, what);
             if (worked.ok()) continue;
-            out.push_back({"dimension.formula",
-                           Severity::Warning,
-                           worked.issues.front().message + " It keeps its last value, " +
-                               (c.kind == sketch::ConstraintKind::Angle ? quantityText({c.value, kAngle}, lengthUnit_)
-                                                                        : lengthText(c.value, lengthUnit_)) +
-                               ".",
-                           {}});
+            out.push_back(
+                {"dimension.formula",
+                 Severity::Warning,
+                 worked.issues.front().message + " It keeps its last value, " +
+                     (c.kind == sketch::ConstraintKind::Angle ? quantityText({c.value, kAngle}, lengthUnit_)
+                                                              : lengthText(c.value, lengthUnit_)) +
+                     ".",
+                 {}});
         }
         return out;
     };
@@ -444,7 +468,8 @@ RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolve
             // A feature is blocked if any input has no shape (failed, blocked,
             // suppressed or missing). Name the first such input for the message.
             std::optional<std::string> blocker;  // the message, once one input is found
-            Diagnostics formulaIssues;           // warnings about formulas that don't work
+            Diagnostics formulaIssues;           // warnings worked out on every rebuild: formulas that
+                                                 // don't work, a body used twice
             const auto sketchInputs = f->sketchInputs();
             const auto lookedAt = f->referenceInputs();
             for (const auto& dep : f->dependencies()) {
@@ -509,6 +534,30 @@ RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolve
                                              (n.dim == kAngle ? quantityText({last, kAngle}, lengthUnit_)
                                                               : lengthText(last, lengthUnit_)) +
                                              ".",
+                                         {}});
+            }
+            // A body an earlier step already changed: this step starts again from it as
+            // it was, and makes a second body where the first one is. Almost always a
+            // slip (Box1 picked instead of Cut1), so it gets a warning saying what to
+            // use instead. Sketches can be used again and again, and bodies only looked
+            // at (sketched on, or copied by a linked copy) aren't changed.
+            for (const auto& dep : f->dependencies()) {
+                if (std::find(sketchInputs.begin(), sketchInputs.end(), dep) != sketchInputs.end() ||
+                    std::find(lookedAt.begin(), lookedAt.end(), dep) != lookedAt.end())
+                    continue;
+                const auto [first, isNew] = changedBy.try_emplace(dep, f->id());
+                if (isNew) continue;
+                const Feature* body = find(dep);
+                const Feature* earlier = find(first->second);
+                if (!body || !earlier) continue;
+                const std::string b = body->name(), e = earlier->name(), self = f->name();
+                formulaIssues.push_back({"feature.used_twice",
+                                         Severity::Warning,
+                                         self + " uses " + b + ", but " + e + " already changed " + b +
+                                             ". So " + self + " starts again from " + b +
+                                             " as it was before " + e +
+                                             ", and makes a second body in the same place. To build on " + e +
+                                             ", use " + e + " instead of " + b + ".",
                                          {}});
             }
             std::optional<std::size_t> ownIssues;  // issues before the formula warnings, if not all of them

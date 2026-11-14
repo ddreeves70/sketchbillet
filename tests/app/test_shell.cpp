@@ -2006,6 +2006,43 @@ TEST_CASE("File > Export writes the part as STL, 3MF or STEP", "[app][export]") 
     CHECK(app.shell->statusBar()->currentMessage() == QStringLiteral("Exported Box1 to part.3mf"));
 }
 
+TEST_CASE("Combine > Cut with a used-up body picked cuts the body it has become",
+          "[app][combine][used_twice]") {
+    // Bug: Box1, Cylinder1, Cut1 = Box1 cut Cylinder1, then Cylinder2, then Box1 and
+    // Cylinder2 picked in the feature tree and Combine > Cut: Cut2 started again from
+    // Box1, so there were two boxes, each with one hole.
+    App app;
+    auto& docs = app.host.documents();
+    const auto doc = app.shell->activeDesign();
+    REQUIRE(docs.run(doc, "feature.add_box", {{"size", kernel::Vec3{60, 30, 4}}}).empty());
+    REQUIRE(docs.run(doc, "feature.add_cylinder",
+                     {{"base", kernel::Vec3{9, 15, -1}}, {"radius", 2.5}, {"height", 6.0}})
+                .empty());
+    const auto box = app.doc().featureAt(0).id(), first = app.doc().featureAt(1).id();
+    app.host.selection().set(doc, {box, first});
+    settle();
+    app.click("sb.modeling.cut");
+    REQUIRE(docs.run(doc, "feature.add_cylinder",
+                     {{"base", kernel::Vec3{51, 15, -1}}, {"radius", 2.5}, {"height", 6.0}})
+                .empty());
+    const auto cut1 = app.doc().featureAt(2).id(), second = app.doc().featureAt(3).id();
+
+    app.host.selection().set(doc, {box, second});  // the slip: Box1, not Cut1
+    settle();
+    app.click("sb.modeling.cut");
+    REQUIRE(app.doc().featureCount() == 5);
+    const auto& cut2 = dynamic_cast<const model::BooleanFeature&>(app.doc().featureAt(4));
+    CHECK(cut2.a() == cut1);
+    CHECK(cut2.b() == second);
+    CHECK(app.shell->statusBar()->currentMessage() ==
+          QStringLiteral("Box1 is part of Cut1 now, so Cut uses Cut1."));
+    const auto* rebuilt = docs.lastRebuild(doc);
+    REQUIRE(rebuilt);
+    CHECK(rebuilt->bodies() == std::vector{cut2.id()});  // one body, with both holes
+    CHECK(app.kernel->massProps(*rebuilt->shapeOf(cut2.id())).volume ==
+          Approx(60 * 30 * 4 - 2 * std::numbers::pi * 2.5 * 2.5 * 4));
+}
+
 TEST_CASE("File > Import adds a part from a STEP or STL file, picked, with Reload from file",
           "[app][import]") {
     App app;

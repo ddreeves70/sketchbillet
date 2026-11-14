@@ -138,17 +138,24 @@ block: 3 steps
 wrote block.sb
 ```
 
-Bevel the four upright corners of the block itself (Extrude1, without the rounds), edges 5 to 8, by 2 mm:
+Bevel the four upright corners of the rounded block too. A fillet makes a new
+body, Fillet1, with edges of its own, so list them with
+`sketchbillet_cli open block.sb --edges Fillet1`: the upright corners are edges 5 to 8.
+Bevel them by 2 mm:
 
 <!-- cli-example -->
 ```console
-$ sketchbillet_cli run --open block.sb feature.add_chamfer body=Extrude1 edges=5,6,7,8 distance=2
+$ sketchbillet_cli run --open block.sb feature.add_chamfer body=Fillet1 edges=5,6,7,8 distance=2
 block: 4 steps
   Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
   Extrude1     ok  volume 24000.00 mm^3
-  Fillet1      ok  volume 23845.49 mm^3  mass 29.57 g (PLA)
-  Chamfer1     ok  volume 23760.00 mm^3  mass 29.46 g (PLA)
+  Fillet1      ok  volume 23845.49 mm^3
+  Chamfer1     ok  volume 23544.17 mm^3  mass 29.19 g (PLA)
 ```
+
+Chamfer the step that made the body as it is now (Fillet1), not an earlier one
+(Extrude1): a step that starts again from Extrude1 makes a second block in the
+same place, and SketchBillet warns you that it does.
 
 [`feature.add_fillet`](../cli/commands.md#featureadd_fillet),
 [`feature.add_chamfer`](../cli/commands.md#featureadd_chamfer) and

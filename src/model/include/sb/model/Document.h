@@ -63,7 +63,9 @@ private:
     std::vector<FeatureId> reused_;
     // What each result was built from, so the next rebuild can tell what changed.
     std::map<FeatureId, std::uint64_t> revisions_;
-    std::map<FeatureId, std::size_t> formulaIssues_;  // how many of a result's issues are formula warnings, at the end
+    // How many of a result's issues, at the end, are worked out on every rebuild
+    // (formula warnings, a body used twice).
+    std::map<FeatureId, std::size_t> formulaIssues_;
     const kernel::IKernel* kernel_ = nullptr;
     const sketch::ISketchSolver* solver_ = nullptr;
     LengthUnit unit_ = LengthUnit::Millimeter;
@@ -299,6 +301,18 @@ public:
     /// @return Its revision, or 0 if it isn't in the document.
     std::uint64_t revision(const FeatureId& id) const;
 
+    /// Gives the step a body has become: the last step that changed it, through
+    /// every step after that. Box1, cut by Cut1, which Fillet1 then rounds, has
+    /// become Fillet1. Steps that only look at a body (a sketch on its face, a
+    /// linked copy), steps that are turned off, and steps after the rollback
+    /// marker don't count; nor does using a sketch.
+    /// @code
+    /// const FeatureId keep = doc.latestBody(picked);  // what the student means by "Box1"
+    /// @endcode
+    /// @param id The step that made the body.
+    /// @return The step it has become; @p id itself if no later step changed it.
+    FeatureId latestBody(const FeatureId& id) const;
+
 private:
     friend class DocumentEditor;
 
@@ -314,8 +328,8 @@ private:
     DocKind kind_;
     std::string name_;
     std::vector<std::unique_ptr<Feature>> features_;
-    std::map<FeatureId, std::uint64_t> revisions_;  // see revision(); set by DocumentEditor
-    void touch(const FeatureId& id);               // gives a step a new revision
+    std::map<FeatureId, std::uint64_t> revisions_;    // see revision(); set by DocumentEditor
+    void touch(const FeatureId& id);                  // gives a step a new revision
     LengthUnit lengthUnit_ = LengthUnit::Millimeter;  // what lengths are shown in
     std::vector<Material> materials_;                 // the design's own materials
     ParameterTable parameters_;                       // named values like wall = 3 mm

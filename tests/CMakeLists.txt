@@ -15,7 +15,7 @@ add_executable(sb_tests
   model/test_units_command.cpp
   model/test_parameters.cpp
   model/test_formulas.cpp
-  model/test_incremental.cpp
+  model/test_incremental.cpp model/test_used_twice.cpp
   model/test_print_check.cpp
   io/test_sketchbillet_file.cpp
   io/test_three_mf.cpp
