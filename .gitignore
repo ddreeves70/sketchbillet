@@ -30,3 +30,6 @@ __pycache__/
 # Website
 /website/node_modules/
 /website/dist/
+
+# STEP files that tests read (the rule above is for files the tools write).
+!tests/corpus/files/*.step
