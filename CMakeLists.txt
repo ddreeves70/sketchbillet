@@ -43,7 +43,7 @@ find_package(libzip CONFIG REQUIRED)
 find_package(Eigen3 3.3 CONFIG REQUIRED)
 
 if(SB_BUILD_APP)
-  find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets OpenGLWidgets Svg)
+  find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets OpenGLWidgets Svg Network)
   set(CMAKE_AUTOMOC ON)
   include(SbAds)
 endif()

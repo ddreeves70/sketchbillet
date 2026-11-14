@@ -33,6 +33,8 @@ class CDockWidget;
 namespace sb::app {
 
 class AppUi;
+class UpdateChecker;
+struct UpdateResult;
 class ViewOverlay;
 
 // The main window. It owns no features of its own: panels (the viewer too), menu
@@ -71,6 +73,15 @@ public:
     // (cmake/SbSamples.cmake). Fills File > Open Sample from it; with no folder, or
     // one that has no samples, the menu says so.
     void setSamplesFolder(const std::filesystem::path& folder);
+    // Checks for newer versions with `checker` (Updates.h): adds Help > Check for
+    // Updates and Help > Check for Updates Every Day, and starts a daily check if
+    // one is due. With no checker, or one a school turned off, Help has neither.
+    void setUpdates(UpdateChecker* checker);
+    // Shows what a check found: a box when the student asked, otherwise a link in
+    // the status bar if a newer version is out (and nothing if not).
+    void showUpdate(const UpdateResult& result, bool byHand);
+    // Shows a check's result in a box. Tests replace it so no dialog opens.
+    std::function<void(const UpdateResult& result)> showUpdateBox;
     Diagnostics saveDesign(const std::filesystem::path& path);
     // Adds a part from a STEP, STL or 3MF file to the active design (File > Import), as an
     // Import step, and picks it. Returns what went wrong, if anything.
@@ -203,6 +214,9 @@ private:
         int order = 0;
     };
     QMenu* samplesMenu_ = nullptr;
+    QMenu* helpMenu_ = nullptr;
+    UpdateChecker* updates_ = nullptr;
+    QLabel* updateLabel_ = nullptr;
     std::filesystem::path samplesFolder_;
     std::vector<Sample> samples_;
     QByteArray defaultLayout_;

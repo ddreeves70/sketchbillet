@@ -50,6 +50,20 @@ A newer `.msi` replaces the older SketchBillet the same way, and
 `msiexec /x SketchBillet-0.1.0-windows-x64.msi /qn` removes it. SketchBillet
 never needs the internet, an account or a license server.
 
+To answer the [update question](#updates) for everyone, set it for the whole
+computer in the registry, under
+`HKEY_LOCAL_MACHINE\Software\SketchBillet\SketchBillet\updates`:
+
+| Value | Type | What it does |
+| --- | --- | --- |
+| `daily` | `REG_SZ`, `true` or `false` | Answers the question for every student, so it isn't asked. A student can still change it in the Help menu |
+| `allowed` | `REG_SZ`, `false` | SketchBillet never checks or asks, and the Help menu has no update items |
+
+On a Mac, set them for every user with `defaults`, like
+`sudo defaults write /Library/Preferences/com.sketchbillet.SketchBillet updates.allowed -bool false`.
+On Linux, put them in `/etc/xdg/SketchBillet/SketchBillet.conf`, under `[updates]`,
+like `allowed=false`.
+
 ## macOS
 
 1. Download the `.dmg` file and open it.
@@ -74,6 +88,32 @@ The AppImage is the whole program in one file: nothing to install.
 3. Double-click it, or run `./SketchBillet-0.1.0-linux-x64.AppImage`.
 
 To remove it, delete the file.
+
+## Updates
+
+SketchBillet can tell you when a newer version is out. The first time it starts,
+it asks:
+
+> Should SketchBillet check once a day whether a newer version is out?
+
+If you choose **Check Every Day**, then once a day, when SketchBillet starts, it
+asks GitHub (github.com), where SketchBillet is published, which version is
+newest. That's all it sends, like opening a web page: never your designs or
+anything about you. When there's a newer one, a link in the bottom right corner
+of the window says so, like **SketchBillet 0.2.0 is out: get it**. Nothing is
+downloaded or installed by itself: click the link, download the new installer,
+and install it over the old SketchBillet. Your designs and settings stay.
+
+- **Help > Check for Updates** checks right now and tells you what it found.
+- **Help > Check for Updates Every Day** turns the daily check on or off.
+
+A release compares itself with the newest release, and a preview build with the
+newest preview build. If you built SketchBillet yourself, it never checks by
+itself, but Help > Check for Updates still compares it with the newest release.
+
+If the check says it couldn't reach GitHub, check that the computer is online
+(a school network may block it), then try again. Nothing else is affected:
+SketchBillet works the same without the internet.
 
 ## The command-line tool
 
