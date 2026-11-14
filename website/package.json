@@ -7,9 +7,10 @@
   "license": "Apache-2.0",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build --outDir dist/site && vite build --ssr src/entry-server.tsx --outDir dist/server && node scripts/prerender.mjs && node scripts/check-links.mjs",
+    "build": "tsc --noEmit && vite build --outDir dist/site && vite build --ssr src/entry-server.tsx --outDir dist/server && node scripts/prerender.mjs && node scripts/pdf.mjs && node scripts/check-links.mjs",
     "check": "node scripts/check-links.mjs",
-    "preview": "vite preview --outDir dist/site"
+    "preview": "vite preview --outDir dist/site",
+    "pdf": "node scripts/pdf.mjs"
   },
   "dependencies": {
     "@fontsource/barlow": "5.3.0",
@@ -26,6 +27,7 @@
     "@vitejs/plugin-react": "6.1.2",
     "github-slugger": "2.0.0",
     "markdown-it": "15.0.2",
+    "playwright": "1.56.0",
     "typescript": "6.0.3",
     "vite": "8.3.4"
   }

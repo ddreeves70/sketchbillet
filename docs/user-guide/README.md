@@ -75,6 +75,8 @@ works in either.
 - [Tutorials](../tutorials/README.md): step-by-step projects.
 - [sketchbillet_cli reference](../cli/README.md): every command, with examples.
 - [Plugin developer guide](../plugin-guide/README.md): write your own plugins.
+- [All the guides as one PDF](https://sketchbillet.org/sketchbillet-guides.pdf), to print or read
+  offline: made again whenever a guide changes.
 
 ## Units
 
