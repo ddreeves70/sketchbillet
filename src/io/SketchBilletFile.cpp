@@ -22,6 +22,7 @@
 #include "sb/model/Commands.h"
 #include "sb/model/ConstructionPlane.h"
 #include "sb/model/Holes.h"
+#include "sb/model/Import.h"
 #include "sb/model/Mirror.h"
 #include "sb/model/Pattern.h"
 #include "sb/model/Shell.h"
@@ -521,6 +522,11 @@ std::optional<model::GeometryRef> refFromJson(const json& j) {
     return r;
 }
 
+// Where an Import step's file is saved in the design: imports/<step id>.step.
+std::string importPath(const model::ImportFeature& f) {
+    return "imports/" + f.id().toString() + "." + std::string(model::formatName(f.format()));
+}
+
 json featureToJson(const Feature& f) {
     json j{{"id", f.id().toString()}, {"name", f.name()}};
     if (!f.material().empty()) j["material"] = f.material();  // left out when not picked
@@ -608,6 +614,16 @@ json featureToJson(const Feature& f) {
                 j["params"]["operation"] = e.operation() == model::ExtrudeOp::Join ? "join" : "cut";
                 j["inputs"]["body"] = e.body().toString();
             }
+            break;
+        }
+        case FeatureType::Import: {
+            // The file itself is saved next to this one (see importPath()); the
+            // clipboard carries it in "content" instead (see stepsToText()).
+            const auto& im = static_cast<const model::ImportFeature&>(f);
+            j["type"] = "Import";
+            j["params"] = {{"format", std::string(model::formatName(im.format()))},
+                           {"source", im.source()},
+                           {"data", importPath(im)}};
             break;
         }
         case FeatureType::Shell: {
@@ -915,6 +931,20 @@ std::unique_ptr<Feature> stepFromJson(const json& j, const FeatureId& id, std::s
         }
         return step;
     }
+    if (type == "Import") {
+        if (params.value("format", "") != "step") return bad("format");
+        const json source = params.value("source", json(""));
+        if (!source.is_string()) return bad("source");
+        // The contents come from the file named in "data" (read by readBytes()),
+        // or, on the clipboard, from "content".
+        std::shared_ptr<const std::string> content;
+        if (params.contains("content")) {
+            if (!params["content"].is_string()) return bad("content");
+            content = std::make_shared<const std::string>(params["content"].get<std::string>());
+        }
+        return std::make_unique<model::ImportFeature>(id, name, model::ImportFormat::Step, std::move(content),
+                                                      source.get<std::string>());
+    }
     if (type == "Shell") {
         const auto body = inputs.contains("body") && inputs["body"].is_string()
                               ? FeatureId::parse(inputs["body"].get<std::string>())
@@ -1208,6 +1238,12 @@ Diagnostics writeBytes(const Document& doc, Bytes& out) {
         timeline.push_back({{"id", f.id().toString()}, {"suppressed", f.suppressed()}});
         entries.emplace_back(featurePath(f.id()), dump(featureToJson(f)));
         files.push_back(featurePath(f.id()));
+        if (f.type() == FeatureType::Import) {
+            // The imported file, as it was: only designs with imports have these.
+            const auto& im = static_cast<const model::ImportFeature&>(f);
+            entries.emplace_back(importPath(im), im.content());
+            files.push_back(importPath(im));
+        }
     }
     if (const auto folders = doc.folders(); !folders.empty()) {
         // Only designs with folders get this file, so other designs save exactly as before.
@@ -1408,6 +1444,15 @@ OpenResult readBytes(const Bytes& data, std::string_view displayName) {
             }
             return fail(damaged(displayName, why));
         }
+        if (feature->type() == FeatureType::Import) {
+            // Its file, saved next to it.
+            auto& im = static_cast<model::ImportFeature&>(*feature);
+            const json where = fj->value("params", json::object()).value("data", json());
+            const auto text =
+                where.is_string() ? readEntry(za.get(), where.get<std::string>(), why) : std::nullopt;
+            if (!text) return fail(damaged(displayName, "step " + im.name() + ": " + why));
+            im.setContent(im.format(), std::make_shared<const std::string>(*text), im.source());
+        }
         feature->setSuppressed(entry.value("suppressed", false));
         if (fj->contains("material") && (*fj)["material"].is_string()) {
             // A key this SketchBillet doesn't know (a material from a newer SketchBillet) is kept,
@@ -1508,6 +1553,11 @@ std::string stepsToText(const Document& doc, const std::vector<FeatureId>& ids) 
     for (const auto& f : steps) {
         json j = featureToJson(*f);
         if (f->suppressed()) j["suppressed"] = true;
+        if (f->type() == FeatureType::Import) {
+            // The clipboard is one piece of text: the imported file goes in it.
+            j["params"].erase("data");
+            j["params"]["content"] = static_cast<const model::ImportFeature&>(*f).content();
+        }
         list.push_back(j);
         if (!f->material().empty()) used.push_back(f->material());
     }

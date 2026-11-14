@@ -20,6 +20,8 @@ sb_set_warnings(sb_app_core)
 sb_embed_files(sb_app_core HEADER AppIcons.h NAMESPACE sb::icons::app
   FILES icons/new.svg icons/open.svg icons/save.svg icons/undo.svg icons/redo.svg
         icons/dock.svg)
+sb_embed_files(sb_app_core HEADER ImportIcon.h NAMESPACE sb::icons::modeling
+  FILES ../../plugins/modeling/icons/import.svg)
 
 # The app's icon: on the .exe on Windows (sketchbillet.rc), on the app in Finder on
 # macOS. packaging/icons/ has how to remake them.

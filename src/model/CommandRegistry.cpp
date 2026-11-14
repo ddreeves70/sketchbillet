@@ -14,6 +14,7 @@
 #include "sb/model/Document.h"
 #include "sb/model/Formulas.h"
 #include "sb/model/Holes.h"
+#include "sb/model/Import.h"
 #include "sb/model/Mirror.h"
 #include "sb/model/Pattern.h"
 #include "sb/model/Shell.h"
@@ -339,6 +340,19 @@ sketch::Entity* entityNamed(sketch::Sketch& s, std::string_view name) {
     }
     return nullptr;
 }
+
+// A command that changes nothing and only reports problems: a file that couldn't
+// be read, say.
+class ReportCommand final : public Command {
+public:
+    explicit ReportCommand(Diagnostics problems) : problems_(std::move(problems)) {}
+    std::string label() const override { return "Report"; }
+    Diagnostics apply(DocumentEditor&) override { return problems_; }
+    void revert(DocumentEditor&) override {}
+
+private:
+    Diagnostics problems_;
+};
 
 // A command that only reports problems, for arguments that can't work together.
 std::unique_ptr<Command> failingCommand(FeatureId sketchId, Diagnostics problems) {
@@ -1055,6 +1069,53 @@ CommandRegistry makeBuiltin() {
                   copySteps(doc, {id}), std::vector<Material>{},
                   "Duplicate " + (f ? f->name() : std::string("step")));
           });
+
+    r.add({"feature.import",
+           "Import a part",
+           "Adds a part made in another CAD program, from a STEP file (.step or .stp), as a new body. A "
+           "copy of the file is kept in the design, so it opens anywhere; feature.reload_import reads the "
+           "file again after it changes.",
+           {{"file", ArgType::Text, "The STEP file, like bracket.step.", true, {}},
+            {"name", ArgType::Text, "Its name. Default the file's name, like bracket.", false, {}}}},
+          [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+              auto read = readImportFile(argText(a, "file"));
+              if (!read.issues.empty()) return std::make_unique<ReportCommand>(std::move(read.issues));
+              std::string name = argText(a, "name");
+              if (name.empty()) {
+                  // The file's name, like "bracket"; "bracket1", "bracket2", ... if that's taken.
+                  name = read.stem.empty() ? "Import" : read.stem;
+                  for (std::size_t i = 0; i < doc.featureCount(); ++i)
+                      if (doc.featureAt(i).name() == name) name = doc.uniqueName(name);
+              }
+              return std::make_unique<AddFeatureCommand>(std::make_unique<ImportFeature>(
+                  std::move(name), read.format, std::move(read.content), std::move(read.source)));
+          });
+
+    r.add(
+        {"feature.reload_import",
+         "Reload import from file",
+         "Reads an imported part's file again, from where it was imported, so the design follows changes "
+         "made to it in the other program.",
+         {{"feature", ArgType::FeatureRef, "The Import step, like bracket.", true, {}}}},
+        [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+            // The file is read now, so undo and redo put back exactly these contents.
+            const auto* f = doc.find(argFeature(a, "feature"));
+            if (!f || f->type() != FeatureType::Import) {
+                const std::string name = f ? f->name() : std::string("That step");
+                return std::make_unique<ReportCommand>(Diagnostics{
+                    {"import.not_import",
+                     Severity::Error,
+                     name + " isn't an imported part, so there's no file to read again. Pick an Import step.",
+                     {}}});
+            }
+            const auto& im = static_cast<const ImportFeature&>(*f);
+            auto read = readImportFile(im.source());
+            if (!read.issues.empty()) return std::make_unique<ReportCommand>(std::move(read.issues));
+            auto copy = im.clone();
+            static_cast<ImportFeature&>(*copy).setContent(read.format, std::move(read.content),
+                                                          std::move(read.source));
+            return std::make_unique<EditFeatureCommand>(std::move(copy));
+        });
 
     r.add({"feature.unlink",
            "Unlink copy",

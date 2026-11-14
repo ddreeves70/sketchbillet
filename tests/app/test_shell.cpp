@@ -2006,6 +2006,52 @@ TEST_CASE("File > Export writes the part as STL, 3MF or STEP", "[app][export]") 
     CHECK(app.shell->statusBar()->currentMessage() == QStringLiteral("Exported Box1 to part.3mf"));
 }
 
+TEST_CASE("File > Import adds a part from a STEP file, picked, with Reload from file", "[app][import]") {
+    App app;
+    // A STEP file of a 30 x 20 x 5 mm plate, as another program would make.
+    const QString file = app.dir.filePath(QStringLiteral("plate.step"));
+    const auto plate = app.kernel->makeBox({0, 0, 0}, 30, 20, 5);
+    REQUIRE(app.kernel->exportFile(plate.shape, kernel::ExportFormat::Step, file.toStdWString()).empty());
+    app.shell->askImportPath = [&] { return file; };
+    auto* import = app.shell->findChild<QAction*>(QStringLiteral("sb.shell.import"));
+    REQUIRE(import);
+    CHECK(import->shortcut().toString() == QStringLiteral("Ctrl+I"));
+    import->trigger();
+    settle();
+    REQUIRE(app.doc().featureCount() == 1);
+    CHECK(app.doc().featureAt(0).name() == "plate");
+    CHECK(app.tree()->topLevelItem(0)->text(1) == QStringLiteral("Import"));
+    CHECK(app.tree()->topLevelItem(0)->text(2) == QStringLiteral("ok"));
+    CHECK(app.host.selection().features() == std::vector{app.doc().featureAt(0).id()});
+    CHECK(app.shell->statusBar()->currentMessage() == QStringLiteral("Imported plate.step"));
+    // Properties shows the file, and reads it again after it changes.
+    REQUIRE(app.field<QLabel>("file"));
+    CHECK(app.field<QLabel>("file")->text() == QStringLiteral("plate.step"));
+    const auto thicker = app.kernel->makeBox({0, 0, 0}, 30, 20, 8);
+    REQUIRE(app.kernel->exportFile(thicker.shape, kernel::ExportFormat::Step, file.toStdWString()).empty());
+    auto* reload = app.field<QPushButton>("reload");
+    REQUIRE(reload);
+    reload->click();
+    settle();
+    const auto* report = app.host.documents().lastRebuild(app.shell->activeDesign());
+    REQUIRE(report);
+    CHECK(app.kernel->massProps(*report->shapeOf(app.doc().featureAt(0).id())).volume == Approx(30 * 20 * 8));
+
+    // A file SketchBillet can't import says so, and adds nothing.
+    const QString other = app.dir.filePath(QStringLiteral("part.dwg"));
+    app.shell->askImportPath = [&] { return other; };
+    import->trigger();
+    settle();
+    CHECK(app.doc().featureCount() == 1);
+    REQUIRE(app.shell->lastProblems().size() == 1);
+    CHECK(app.shell->lastProblems()[0].code == "import.format");
+    // Cancelled: nothing happens.
+    app.shell->askImportPath = [] { return QString(); };
+    import->trigger();
+    settle();
+    CHECK(app.doc().featureCount() == 1);
+}
+
 TEST_CASE("File > Check for Printing says whether the part is ready, and why not", "[app][export][print]") {
     App app;
     model::PrintCheckResult shown;
@@ -2033,8 +2079,9 @@ TEST_CASE("File > Check for Printing says whether the part is ready, and why not
 
     // Squash it to 0.5 mm: too thin.
     const auto box = app.doc().featureAt(0).id();
-    REQUIRE(app.host.documents().run(app.shell->activeDesign(), "feature.set_value",
-                                     {{"feature", box}, {"setting", std::string("size_z")}, {"value", 0.5}})
+    REQUIRE(app.host.documents()
+                .run(app.shell->activeDesign(), "feature.set_value",
+                     {{"feature", box}, {"setting", std::string("size_z")}, {"value", 0.5}})
                 .empty());
     settle();
     check->trigger();

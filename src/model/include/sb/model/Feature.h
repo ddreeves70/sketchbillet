@@ -36,6 +36,7 @@ enum class FeatureType {
     Mirror,    ///< A MirrorFeature (sb/model/Mirror.h).
     Plane,     ///< A PlaneFeature (sb/model/ConstructionPlane.h): a construction plane.
     Shell,     ///< A ShellFeature (sb/model/Shell.h).
+    Import,    ///< An ImportFeature (sb/model/Import.h): a part from another program.
 };
 
 /// The flat plane a sketch is drawn on.

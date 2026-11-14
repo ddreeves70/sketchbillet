@@ -34,12 +34,16 @@
 #include <Geom_BSplineCurve.hxx>
 #include <Geom_BSplineSurface.hxx>
 #include <Geom_Plane.hxx>
+#include <Interface_Static.hxx>
 #include <Message.hxx>
 #include <Message_Messenger.hxx>
 #include <Message_PrinterOStream.hxx>
 #include <Poly_Triangulation.hxx>
 #include <Precision.hxx>
+#include <STEPControl_Reader.hxx>
 #include <STEPControl_Writer.hxx>
+#include <ShapeFix_Shape.hxx>
+#include <ShapeFix_Solid.hxx>
 #include <Standard_Failure.hxx>
 #include <StlAPI_Writer.hxx>
 #include <TColStd_Array1OfInteger.hxx>
@@ -52,8 +56,10 @@
 #include <TopTools_IndexedMapOfShape.hxx>
 #include <TopTools_ListOfShape.hxx>
 #include <TopoDS.hxx>
+#include <TopoDS_Compound.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
+#include <TopoDS_Shell.hxx>
 #include <TopoDS_Vertex.hxx>
 #include <TopoDS_Wire.hxx>
 #include <gp_Ax1.hxx>
@@ -75,6 +81,7 @@
 #include <mutex>
 #include <optional>
 #include <set>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <variant>
@@ -1172,6 +1179,63 @@ public:
                 error("measure.failed", "The distance couldn't be worked out (" + describe(e) + ")."));
         }
         return out;
+    }
+
+    OpResult importStep(std::string_view text) override {
+        const auto unreadable = [](std::string detail) {
+            return failed("import.step.unreadable",
+                          "This isn't a STEP file SketchBillet can read. Export the part from the other "
+                          "program again, as STEP (AP203, AP214 or AP242).",
+                          std::move(detail));
+        };
+        if (text.find("ISO-10303-21") == std::string_view::npos) return unreadable("no ISO-10303-21 header");
+        // OCCT's STEP reader keeps settings for the whole program: one at a time.
+        static std::mutex reading;
+        std::lock_guard<std::mutex> lock(reading);
+        try {
+            Interface_Static::SetCVal("xstep.cascade.unit", "MM");  // whatever the file's unit, in mm
+            STEPControl_Reader reader;
+            std::istringstream in{std::string(text)};
+            if (reader.ReadStream("import.step", in) != IFSelect_RetDone)
+                return unreadable("ReadStream failed");
+            reader.TransferRoots();
+            const TopoDS_Shape all = reader.OneShape();
+            if (all.IsNull()) {
+                return failed("import.step.no_solid",
+                              "This STEP file has no part in it. Check it's the right file, and export the "
+                              "part again from the other program.");
+            }
+            // Mend small problems (gaps, wrong-way faces), as most CAD programs do on import.
+            ShapeFix_Shape fix(all);
+            fix.Perform();
+            const TopoDS_Shape fixed = fix.Shape();
+
+            // Its solids; a closed surface with no solid is made into one.
+            BRep_Builder builder;
+            TopoDS_Compound solids;
+            builder.MakeCompound(solids);
+            int count = 0;
+            for (TopExp_Explorer ex(fixed, TopAbs_SOLID); ex.More(); ex.Next(), ++count)
+                builder.Add(solids, ex.Current());
+            for (TopExp_Explorer ex(fixed, TopAbs_SHELL, TopAbs_SOLID); ex.More(); ex.Next()) {
+                if (!BRep_Tool::IsClosed(ex.Current())) continue;
+                ShapeFix_Solid outward;  // a solid with its faces facing out
+                builder.Add(solids, outward.SolidFromShell(TopoDS::Shell(ex.Current())));
+                ++count;
+            }
+            if (count == 0) {
+                return failed("import.step.no_solid",
+                              "This STEP file has surfaces but no solid part, so it has no inside to print "
+                              "or cut. Export it from the other program as a solid body.");
+            }
+            if (count == 1) {
+                TopExp_Explorer one(solids, TopAbs_SOLID);
+                return {wrap(one.Current()), {}, {}};
+            }
+            return {wrap(solids), {}, {}};
+        } catch (const Standard_Failure& e) {
+            return unreadable(describe(e));
+        }
     }
 
     Elements elements(const ShapeHandle& h) const override {

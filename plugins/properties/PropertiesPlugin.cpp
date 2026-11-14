@@ -35,6 +35,7 @@
 #include "sb/model/Expression.h"
 #include "sb/model/Formulas.h"
 #include "sb/model/Holes.h"
+#include "sb/model/Import.h"
 #include "sb/model/Material.h"
 #include "sb/model/Mirror.h"
 #include "sb/model/Pattern.h"
@@ -579,6 +580,31 @@ private:
                     fillet ? tr("Radius") : tr("Distance"),
                     [](const model::Feature& g) { return static_cast<const model::EdgeFeature&>(g).size(); },
                     [](model::Feature& g, double v) { static_cast<model::EdgeFeature&>(g).setSize(v); });
+                break;
+            }
+            case model::FeatureType::Import: {
+                // The file it came from, and a button to read it again after it changes.
+                auto* file = new QLabel(form_);
+                file->setObjectName(QStringLiteral("file"));
+                file->setWordWrap(true);
+                form->addRow(tr("File"), file);
+                auto* reload = new QPushButton(tr("Reload from file"), form_);
+                reload->setObjectName(QStringLiteral("reload"));
+                reload->setToolTip(
+                    tr("Read the file again, after it was changed in the other program. The design keeps "
+                       "its own copy until then."));
+                form->addRow(QString(), reload);
+                const FeatureId step = f.id();
+                connect(reload, &QPushButton::clicked, this, [this, step] {
+                    auto problems = ctx_.documents().run(ctx_.selection().doc(), "feature.reload_import",
+                                                         {{"feature", step}});
+                    if (!problems.empty()) ui_.showProblems(problems);
+                });
+                updaters_.push_back([file](const model::Feature& g) {
+                    const auto& im = static_cast<const model::ImportFeature&>(g);
+                    file->setText(QString::fromStdString(im.fileName()));
+                    file->setToolTip(QString::fromStdString(im.source()));
+                });
                 break;
             }
             case model::FeatureType::Shell: {

@@ -8,7 +8,7 @@ step's numbers in Properties. Everything you do can be undone.
 
 | # | Part | What it's for |
 | --- | --- | --- |
-| 1 | **Menus** | File (new, open, open a sample, save), Edit (undo, redo, copy, paste, duplicate, turn off and on, folders, delete, pick edges), Create (shapes), Combine (union, cut, intersect), Modify (move, linked copy, unlink copy, fillet, chamfer, parameters), Tools (measure), Sketch (new, on a face, edit, draw, move to a face), View (the grid), Window (panels, layouts) |
+| 1 | **Menus** | File (new, open, open a sample, save, import, export, check for printing), Edit (undo, redo, copy, paste, duplicate, turn off and on, folders, delete, pick edges), Create (shapes), Combine (union, cut, intersect), Modify (move, linked copy, unlink copy, fillet, chamfer, parameters), Tools (measure), Sketch (new, on a face, edit, draw, move to a face), View (the grid), Window (panels, layouts) |
 | 2 | **Toolbar** | The most-used menu items, one click away, each with a picture and its name. While you edit a sketch it shows the sketch tools instead, plus the constraint buttons that fit what you picked. If they don't all fit across the window, the rest go on a second row |
 | 3 | **Feature tree** | Every step of the design, in the order SketchBillet builds them, with how each one built. It floats over the viewer, see-through, and starts with the design's **Document settings** |
 | 4 | **Viewer** | Your part in 3D, on the grid. Turn it with the mouse, the view cube or the **view bar** at its bottom, and click a body to pick it |
@@ -233,6 +233,13 @@ To use one, type a formula like `wall * 2` into a number's box in Properties or
 the Sketch panel, instead of a number. A box whose number follows a formula has
 a small blue ***fx*** in front. See
 [Typing formulas in the app](parameters.md#typing-formulas-in-the-app).
+
+## Importing
+
+**File > Import...** (Ctrl+I) adds a part made in another CAD program, from a
+STEP file, as an **Import** step. Properties shows the file it came from, and
+**Reload from file** reads it again after it changes. See
+[Importing parts](importing.md).
 
 ## Measuring
 

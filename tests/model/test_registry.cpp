@@ -36,19 +36,20 @@ TEST_CASE("The built-in registry lists its commands sorted by name", "[model][re
     REQUIRE(
         names ==
         std::vector<std::string>{
-            "document.set_units",      "feature.add_boolean", "feature.add_box",      "feature.add_chamfer",
-            "feature.add_cylinder",    "feature.add_extrude", "feature.add_fillet",   "feature.add_hole",
-            "feature.add_mirror",      "feature.add_move",    "feature.add_pattern",  "feature.add_plane",
-            "feature.add_revolve",     "feature.add_shell",   "feature.add_sketch",   "feature.delete",
-            "feature.duplicate",       "feature.rename",      "feature.set_edges",    "feature.set_material",
-            "feature.set_sketch_face", "feature.set_value",   "feature.slide",        "feature.suppress",
-            "feature.unlink",          "folder.add",          "folder.delete",        "folder.rename",
-            "material.define",         "material.delete",     "parameter.delete",     "parameter.rename",
-            "parameter.set",           "sketch.add_arc",      "sketch.add_circle",    "sketch.add_line",
-            "sketch.add_point",        "sketch.add_pole",     "sketch.add_rectangle", "sketch.add_spline",
-            "sketch.constrain",        "sketch.delete",       "sketch.import_spline", "sketch.reload_spline",
-            "sketch.remove_pole",      "sketch.round_corner", "sketch.set_spline",    "sketch.set_value",
-            "sketch.set_weight",       "sketch.trim",         "timeline.move",        "timeline.rollback"});
+            "document.set_units",   "feature.add_boolean",  "feature.add_box",         "feature.add_chamfer",
+            "feature.add_cylinder", "feature.add_extrude",  "feature.add_fillet",      "feature.add_hole",
+            "feature.add_mirror",   "feature.add_move",     "feature.add_pattern",     "feature.add_plane",
+            "feature.add_revolve",  "feature.add_shell",    "feature.add_sketch",      "feature.delete",
+            "feature.duplicate",    "feature.import",       "feature.reload_import",   "feature.rename",
+            "feature.set_edges",    "feature.set_material", "feature.set_sketch_face", "feature.set_value",
+            "feature.slide",        "feature.suppress",     "feature.unlink",          "folder.add",
+            "folder.delete",        "folder.rename",        "material.define",         "material.delete",
+            "parameter.delete",     "parameter.rename",     "parameter.set",           "sketch.add_arc",
+            "sketch.add_circle",    "sketch.add_line",      "sketch.add_point",        "sketch.add_pole",
+            "sketch.add_rectangle", "sketch.add_spline",    "sketch.constrain",        "sketch.delete",
+            "sketch.import_spline", "sketch.reload_spline", "sketch.remove_pole",      "sketch.round_corner",
+            "sketch.set_spline",    "sketch.set_value",     "sketch.set_weight",       "sketch.trim",
+            "timeline.move",        "timeline.rollback"});
     for (const auto* c : cmds) {
         REQUIRE_FALSE(c->label.empty());
         REQUIRE_FALSE(c->description.empty());

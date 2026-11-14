@@ -19,6 +19,8 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`feature.delete`](#featuredelete) | Deletes a step |
 | [`feature.duplicate`](#featureduplicate) | Copies a step, and the steps it uses |
 | [`feature.unlink`](#featureunlink) | Makes a linked copy a copy of its own, so it stops following the original |
+| [`feature.import`](#featureimport) | Adds a part made in another CAD program, from a STEP file |
+| [`feature.reload_import`](#featurereload_import) | Reads an imported part's file again, after it changes |
 | [`feature.set_material`](#featureset_material) | Picks what a body is made of |
 | [`feature.slide`](#featureslide) | Slides a body by a distance, as dragging its arrows does |
 | [`feature.set_value`](#featureset_value) | Changes a step's number, like an extrude's distance, to a number or a formula |
@@ -374,6 +376,94 @@ Only a linked copy can be unlinked:
 ```console
 $ sketchbillet_cli run --open demo.sb feature.unlink feature=Tag
 error [unlink.not_linked]: Tag isn't a linked copy, so there's nothing to unlink. Pick a linked copy (a step made with Modify > Linked Copy).
+```
+
+## feature.import
+
+Adds a part made in another CAD program, from a STEP file (`.step` or `.stp`), as
+a new body: an **Import** step. Steps after it can build on it like any body:
+cut holes in it, sketch on its faces, join things to it. See
+[Importing parts](../user-guide/importing.md).
+
+A copy of the file goes into the design, so the design opens anywhere, even
+where the file isn't. Whatever unit the file uses, the part comes in at its real
+size, in mm.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `file` | text | yes | The STEP file, like `bracket.step` |
+| `name` | text | no | Its name. Default the file's name without its ending, like `bracket` |
+
+`sketchbillet_cli demo` can write the demo tag as a STEP file, as another
+program would. Import it, then cut a second hole in it:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli demo tag.step
+volume: 7121.46 mm^3
+wrote tag.step
+$ sketchbillet_cli run --save strap.sb feature.import file=tag.step
+strap: 1 step
+  tag          ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
+wrote strap.sb
+$ sketchbillet_cli run --open strap.sb --save strap.sb feature.add_cylinder base=51,15,-1 radius=2.5 height=6
+strap: 2 steps
+  tag          ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
+  Cylinder1    ok  volume 117.81 mm^3  mass 0.15 g (PLA)
+wrote strap.sb
+$ sketchbillet_cli run --open strap.sb --save strap.sb feature.add_boolean operation=cut a=tag b=Cylinder1 name=Strap
+strap: 3 steps
+  tag          ok  volume 7121.46 mm^3
+  Cylinder1    ok  volume 117.81 mm^3
+  Strap        ok  volume 7042.92 mm^3  mass 8.73 g (PLA)
+wrote strap.sb
+```
+
+Only STEP files can be imported so far:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open strap.sb feature.import file=tag.stl
+error [import.format]: SketchBillet can import STEP files (.step or .stp), so it can't import tag.stl. Export the part from the other program as STEP.
+```
+
+## feature.reload_import
+
+Reads an imported part's file again, from where it was imported, after it was
+changed in the other program. Steps built on it follow the new part. Undo puts
+the old one back.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `feature` | step name | yes | The Import step, like `tag` |
+
+Here the tag in `tag.step` is made again as the plain plate, with no hole, and read again:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save plate.sb feature.add_box size=60,30,4 name=Plate
+plate: 1 step
+  Plate        ok  volume 7200.00 mm^3  mass 8.93 g (PLA)
+wrote plate.sb
+$ sketchbillet_cli open plate.sb --export tag.step
+plate: 1 step
+  Plate        ok  volume 7200.00 mm^3  mass 8.93 g (PLA)
+wrote tag.step
+$ sketchbillet_cli run --open strap.sb feature.reload_import feature=tag
+strap: 3 steps
+  tag          ok  volume 7200.00 mm^3
+  Cylinder1    ok  volume 117.81 mm^3
+  Strap        ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
+```
+
+If the file isn't where it was any more, it says where it looked; the design
+keeps its own copy of the part, so it still opens and builds. Only an Import step
+has a file to read again:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open strap.sb feature.reload_import feature=Strap
+error [import.not_import]: Strap isn't an imported part, so there's no file to read again. Pick an Import step.
 ```
 
 ## feature.set_material
