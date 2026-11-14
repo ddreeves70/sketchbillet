@@ -59,7 +59,7 @@ which can be binary.
 | `app` | The SketchBillet version that saved the file. For information only. |
 | `units` | Units of every number in the file: lengths in millimeters, angles in radians. |
 | `document.id` | The design's UUID. It never changes, even when the file is renamed. |
-| `document.kind` | `"part"` (or `"assembly"`, from Phase 3). |
+| `document.kind` | `"part"` (or `"assembly"`, from Phase 4: see [Assemblies](design/assemblies.md#file-format)). |
 | `document.name` | The design's name. |
 | `document.lengthUnit` | Only when the student picked another unit: the unit the design *shows* lengths in, `"cm"`, `"m"`, `"in"` or `"ft"`. The numbers in the file are still in mm (see `units`). A unit SketchBillet doesn't know opens as mm. |
 | `files` | Every other entry in the zip. For information only; readers go by `timeline.json`. |
@@ -396,7 +396,8 @@ failed save never damages the last good copy.
 
 From the design document's file format plan, these come later:
 
-- `components.json` (assemblies, Phase 3).
+- Assemblies (schema 2: `components.json`, `joints.json` and `parts/`), planned on
+  [Assemblies](design/assemblies.md#file-format), Phase 4.
 - A `cache/` folder with built geometry for faster opening.
 - Keeping keys this SketchBillet doesn't understand when it saves a file from a newer
   minor version. Today they are dropped.
