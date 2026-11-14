@@ -9,6 +9,8 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QCloseEvent>
+#include <QDateTime>
+#include <QDesktopServices>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -22,6 +24,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QPushButton>
 #include <QResizeEvent>
 #include <QScreen>
 #include <QSettings>
@@ -38,6 +41,7 @@
 #include "AppUi.h"
 #include "Icons.h"
 #include "ImportIcon.h"
+#include "Updates.h"
 #include "ViewOverlay.h"
 #include "sb/core/Version.h"
 #include "sb/io/SketchBilletFile.h"
@@ -121,6 +125,21 @@ Shell::Shell(plugin::PluginHost& host, AppUi& ui, QSettings& settings, QWidget* 
             QMessageBox::information(this, tr("Check for Printing"), lines.join(QStringLiteral("\n\n")));
         else
             QMessageBox::warning(this, tr("Check for Printing"), lines.join(QStringLiteral("\n\n")));
+    };
+    showUpdateBox = [this](const UpdateResult& result) {
+        if (result.kind != UpdateResult::Kind::Newer) {
+            if (result.kind == UpdateResult::Kind::Newest)
+                QMessageBox::information(this, tr("Check for Updates"), result.message);
+            else
+                QMessageBox::warning(this, tr("Check for Updates"), result.message);
+            return;
+        }
+        QMessageBox box(QMessageBox::Information, tr("Check for Updates"), result.message,
+                        QMessageBox::NoButton, this);
+        auto* get = box.addButton(tr("Open the Download Page"), QMessageBox::AcceptRole);
+        box.addButton(tr("Not Now"), QMessageBox::RejectRole);
+        box.exec();
+        if (box.clickedButton() == get) QDesktopServices::openUrl(result.url);
     };
     askImportPath = [this] {
         return QFileDialog::getOpenFileName(
@@ -360,8 +379,8 @@ void Shell::buildMenus() {
 
     menuBar()->addMenu(viewMenu_);  // after the plugins' own menus
     windowMenu_ = menuBar()->addMenu(tr("&Window"));
-    auto* help = menuBar()->addMenu(tr("&Help"));
-    help->addAction(tr("&About SketchBillet"), this, [this] {
+    helpMenu_ = menuBar()->addMenu(tr("&Help"));
+    helpMenu_->addAction(tr("&About SketchBillet"), this, [this] {
         const auto ver = sb::version();
         QMessageBox::about(this, tr("About SketchBillet"),
                            tr("SketchBillet %1\nFree, open-source CAD.\nhttps://github.com/ddreeves70/khan")
@@ -900,6 +919,50 @@ Diagnostics Shell::openDesign(const std::filesystem::path& path) {
     replaceActive(std::move(opened.document), path);
     showMessage(tr("Opened %1").arg(QString::fromStdWString(path.filename().wstring())));
     return {};
+}
+
+void Shell::setUpdates(UpdateChecker* checker) {
+    updates_ = checker;
+    if (!checker || !checker->allowed()) return;
+    connect(checker, &UpdateChecker::finished, this,
+            [this](const UpdateResult& result, bool byHand) { showUpdate(result, byHand); });
+    helpMenu_->addSeparator();
+    auto* now = helpMenu_->addAction(tr("Check for &Updates..."), this, [this] { updates_->check(true); });
+    now->setObjectName(QStringLiteral("sb.shell.checkupdates"));
+    now->setStatusTip(tr("Ask GitHub whether a newer SketchBillet is out. Nothing is downloaded."));
+    // Copies built by hand have no daily checks (Updates.h, UpdateChannel::None).
+    if (checker->channel() != UpdateChannel::None) {
+        auto* daily = helpMenu_->addAction(tr("Check for Updates Every &Day"));
+        daily->setObjectName(QStringLiteral("sb.shell.dailyupdates"));
+        daily->setCheckable(true);
+        daily->setChecked(checker->daily());
+        daily->setStatusTip(
+            tr("Once a day, when SketchBillet starts, ask GitHub whether a newer version is out."));
+        connect(daily, &QAction::toggled, this, [this](bool on) { updates_->setDaily(on); });
+    }
+    if (checker->due(QDateTime::currentDateTimeUtc())) checker->check(false);
+}
+
+void Shell::showUpdate(const UpdateResult& result, bool byHand) {
+    if (byHand) {
+        showUpdateBox(result);
+        return;
+    }
+    // A daily check only speaks up when there's something new; a failed one waits for tomorrow.
+    if (result.kind != UpdateResult::Kind::Newer) return;
+    if (!updateLabel_) {
+        updateLabel_ = new QLabel(this);
+        updateLabel_->setObjectName(QStringLiteral("sb.shell.updatenote"));
+        updateLabel_->setOpenExternalLinks(true);
+        statusBar()->addPermanentWidget(updateLabel_);
+    }
+    const QString what = result.version.isEmpty() ? tr("A newer preview build is out")
+                                                  : tr("SketchBillet %1 is out").arg(result.version);
+    updateLabel_->setText(
+        QStringLiteral("<a href=\"%1\">%2</a>")
+            .arg(result.url.toString().toHtmlEscaped(), (what + tr(": get it")).toHtmlEscaped()));
+    updateLabel_->setToolTip(result.message);
+    updateLabel_->show();
 }
 
 void Shell::setSamplesFolder(const std::filesystem::path& folder) {

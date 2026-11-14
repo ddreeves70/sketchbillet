@@ -9,14 +9,28 @@ qt_add_library(sb_app_core STATIC
   Icons.h
   Shell.cpp
   Shell.h
+  Updates.cpp
+  Updates.h
   ViewOverlay.cpp
   ViewOverlay.h
 )
 target_include_directories(sb_app_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(sb_app_core PUBLIC
-  Qt6::Widgets Qt6::Svg ads::qtadvanceddocking-qt6
+  Qt6::Widgets Qt6::Svg Qt6::Network ads::qtadvanceddocking-qt6
   sb::core sb::kernel sb::model sb::io sb::plugin sb::ui)
 sb_set_warnings(sb_app_core)
+
+# Which builds Help > Check for Updates compares this one with (Updates.h): CI sets
+# "release" for version tags and "preview" for main, and the commit it built.
+# Copies built by hand have neither, so they never check by themselves.
+set(SB_UPDATE_CHANNEL "" CACHE STRING "Update checks: release, preview, or empty for none")
+set(SB_BUILD_COMMIT "" CACHE STRING "The commit this copy is built from (for preview update checks)")
+if(SB_UPDATE_CHANNEL)
+  if(NOT SB_UPDATE_CHANNEL MATCHES "^(release|preview)$")
+    message(FATAL_ERROR "SB_UPDATE_CHANNEL must be release, preview or empty, not ${SB_UPDATE_CHANNEL}")
+  endif()
+  target_compile_definitions(sb_app_core PRIVATE SB_UPDATE_CHANNEL="${SB_UPDATE_CHANNEL}")
+endif()
 sb_embed_files(sb_app_core HEADER AppIcons.h NAMESPACE sb::icons::app
   FILES icons/new.svg icons/open.svg icons/save.svg icons/undo.svg icons/redo.svg
         icons/dock.svg)
@@ -38,6 +52,9 @@ target_link_libraries(sketchbillet PRIVATE
   sb_app_core sb::kernel_occt sb::view sb::sketch_planegcs
   sb::plugin_modeling sb::plugin_featuretree sb::plugin_properties sb::plugin_viewoptions sb::plugin_axes sb::plugin_grid sb::plugin_viewer sb::plugin_sketcher sb::plugin_movehandles sb::plugin_parameters sb::plugin_timeline sb::plugin_measure)
 sb_set_warnings(sketchbillet)
+if(SB_BUILD_COMMIT)
+  target_compile_definitions(sketchbillet PRIVATE SB_BUILD_COMMIT="${SB_BUILD_COMMIT}")
+endif()
 
 # File > Open Sample's designs, made from the reference parts (cmake/SbSamples.cmake).
 if(TARGET sketchbillet_cli)

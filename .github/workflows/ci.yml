@@ -111,7 +111,12 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cmake --preset ci -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" 2>&1 | tee configure.log
+          # Help > Check for Updates compares a release with the newest release,
+          # and anything else (main, pull requests) with the newest preview build.
+          channel=preview
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then channel=release; fi
+          cmake --preset ci -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
+            -DSB_UPDATE_CHANNEL=$channel -DSB_BUILD_COMMIT="$GITHUB_SHA" 2>&1 | tee configure.log
 
       # Right after Configure, which is when vcpkg builds the packages, so the copy
       # is saved even if SketchBillet's own build or tests fail. Only on main: pull requests
@@ -175,6 +180,14 @@ jobs:
           unset QT_PLUGIN_PATH QML2_IMPORT_PATH
           out="$RUNNER_TEMP/installed-test"
           mkdir -p "$out"
+          # Help > Check for Updates needs secure (https) connections, which need
+          # Qt's TLS plugin in the installer. Exit 3 means it's missing; 2 (GitHub
+          # couldn't be reached, or limited how often it answers) doesn't fail.
+          updates() {
+            local code=0
+            "$@" --check-updates --settings "$out/updates.ini" || code=$?
+            if [ "$code" = 3 ]; then echo "::error::The installed app can't make secure connections"; return 1; fi
+          }
           case "$RUNNER_OS" in
             Linux)
               pkg=$(ls build/ci/packages/*.AppImage)
@@ -182,6 +195,7 @@ jobs:
               "$pkg" cli --version
               "$pkg" cli demo "$out/demo.step" && test -s "$out/demo.step"
               xvfb-run -a "$pkg" --smoke-test --settings "$out/settings.ini"
+              updates xvfb-run -a "$pkg"
               ;;
             Windows)
               pkg=$(cygpath -w "$(ls build/ci/packages/*.msi)")
@@ -191,6 +205,7 @@ jobs:
               "$dir/sketchbillet_cli.exe" --version
               "$dir/sketchbillet_cli.exe" demo "$out/demo.step" && test -s "$out/demo.step"
               "$dir/sketchbillet.exe" --smoke-test --settings "$out/settings.ini"
+              updates "$dir/sketchbillet.exe"
               test -f "$dir/samples/index.json" && test -f "$dir/samples/L bracket.sb"  # File > Open Sample
               test -f "/c/ProgramData/Microsoft/Windows/Start Menu/Programs/SketchBillet.lnk"
               powershell -Command "\$p = Start-Process msiexec -ArgumentList '/x','\"$pkg\"','/qn' -Wait -PassThru; exit \$p.ExitCode"
@@ -204,6 +219,7 @@ jobs:
               "$app/Contents/MacOS/sketchbillet_cli" --version
               "$app/Contents/MacOS/sketchbillet_cli" demo "$out/demo.step" && test -s "$out/demo.step"
               "$app/Contents/MacOS/sketchbillet" --smoke-test --settings "$out/settings.ini"
+              updates "$app/Contents/MacOS/sketchbillet"
               test -f "$app/Contents/Resources/samples/index.json"  # File > Open Sample
               test -f "$app/Contents/Resources/samples/L bracket.sb"
               # The disk can stay busy for a moment after the app quits (Spotlight

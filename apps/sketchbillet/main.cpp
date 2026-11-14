@@ -12,6 +12,10 @@
 //   sketchbillet --settings file.ini         keep layouts in this file instead of the user's settings
 //   sketchbillet --screenshot out.png        save a picture of the window and quit
 //   sketchbillet --smoke-test                build the window, check it, and quit (CI)
+//   sketchbillet --check-updates             check for a newer version, say what was found, and
+//                                      quit: 0 checked, 2 couldn't reach GitHub, 3 can't make
+//                                      secure connections (CI checks the installers can)
+//   sketchbillet --update-server URL         ask this server instead of GitHub's API (tests)
 //
 // --screenshot and --smoke-test work without a screen: QT_QPA_PLATFORM=offscreen
 // (the viewer then shows its flat view). For a screenshot of the 3D view on Linux
@@ -22,11 +26,16 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QEventLoop>
 #include <QFileInfo>
+#include <QMessageBox>
 #include <QPixmap>
+#include <QPushButton>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QStringList>
+#include <QTimer>
+#include <QUrl>
 
 #include <chrono>
 #include <cstdio>
@@ -39,6 +48,7 @@
 #include "AppUi.h"
 #include "Icons.h"
 #include "Shell.h"
+#include "Updates.h"
 #include "sb/core/Version.h"
 #include "sb/kernel_occt/OcctKernel.h"
 #include "sb/plugin/PluginHost.h"
@@ -85,6 +95,39 @@ int smokeTest(sb::app::Shell& shell) {
     std::printf("sketchbillet smoke test: %lld panels, Create > Box works, layout saved and restored\n",
                 static_cast<long long>(ids.size()));
     return 0;
+}
+
+// --check-updates: one check, as Help > Check for Updates does, printed.
+int checkUpdates(sb::app::UpdateChecker& updates) {
+    using Kind = sb::app::UpdateResult::Kind;
+    int code = 2;
+    QEventLoop loop;
+    QObject::connect(
+        &updates, &sb::app::UpdateChecker::finished, &loop, [&](const sb::app::UpdateResult& result, bool) {
+            std::printf("%s\n", qPrintable(result.message));
+            if (result.kind == Kind::Newer) std::printf("%s\n", qPrintable(result.url.toString()));
+            code = result.kind == Kind::Failed ? 2 : result.kind == Kind::NoSecureConnection ? 3 : 0;
+            loop.quit();
+        });
+    updates.check(true);
+    loop.exec();
+    return code;
+}
+
+// The first time SketchBillet starts (where it can check), it asks once.
+bool askAboutUpdates(QWidget* parent) {
+    QMessageBox box(QMessageBox::Question, QObject::tr("Check for updates?"),
+                    QObject::tr("Should SketchBillet check once a day whether a newer version is out?"),
+                    QMessageBox::NoButton, parent);
+    box.setInformativeText(
+        QObject::tr("It asks GitHub (github.com), where SketchBillet is published, which version is newest, "
+                    "like opening a web page. It never sends your designs or anything about you, and it "
+                    "never installs anything by itself. You can change this any time in the Help menu."));
+    auto* yes = box.addButton(QObject::tr("Check Every Day"), QMessageBox::AcceptRole);
+    box.addButton(QObject::tr("Don't Check"), QMessageBox::RejectRole);
+    box.setDefaultButton(yes);
+    box.exec();
+    return box.clickedButton() == yes;
 }
 
 // File > Open Sample's designs: installed next to the app (Windows), in the app
@@ -137,6 +180,17 @@ int main(int argc, char** argv) {
     const QString settingsFile = option(args, QStringLiteral("--settings"));
     auto settings = settingsFile.isEmpty() ? std::make_unique<QSettings>()
                                            : std::make_unique<QSettings>(settingsFile, QSettings::IniFormat);
+
+#ifdef SB_BUILD_COMMIT
+    const QString commit = QStringLiteral(SB_BUILD_COMMIT);
+#else
+    const QString commit;
+#endif
+    sb::app::UpdateChecker updates(*settings, sb::app::UpdateChecker::builtChannel(),
+                                   QApplication::applicationVersion(), commit);
+    if (const auto server = option(args, QStringLiteral("--update-server")); !server.isEmpty())
+        updates.setServer(QUrl(server));
+    if (args.contains(QStringLiteral("--check-updates"))) return checkUpdates(updates);
 
     // Plugins: the built-in ones, then folders of outside plugins: "plugins" next
     // to the program, and the user's own plugin folder.
@@ -236,5 +290,9 @@ int main(int argc, char** argv) {
         return screenshot(shell, file);
 
     shell.show();
+    QTimer::singleShot(0, &shell, [&] {
+        if (updates.shouldAsk()) updates.setDaily(askAboutUpdates(&shell));
+        shell.setUpdates(&updates);
+    });
     return QApplication::exec();
 }
