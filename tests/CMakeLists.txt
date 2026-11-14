@@ -156,12 +156,12 @@ endif()
 if(TARGET sb_app_core)
   add_executable(sb_app_tests app/main.cpp app/test_shell.cpp app/test_grid_plugin.cpp app/test_axes.cpp
   app/test_view_options.cpp app/test_constrain.cpp app/test_movehandles.cpp app/test_parameters_panel.cpp
-  app/test_timeline_bar.cpp)
+  app/test_timeline_bar.cpp app/test_measure_tool.cpp)
   # The sketcher's constraint rules (Constrain.h) are tested on their own too.
   target_include_directories(sb_app_tests PRIVATE "${PROJECT_SOURCE_DIR}/plugins/sketcher")
   target_link_libraries(sb_app_tests PRIVATE Catch2::Catch2 sb_app_core sb::kernel_occt sb::view
     sb::plugin_modeling sb::plugin_featuretree sb::plugin_properties sb::plugin_viewoptions sb::plugin_axes sb::plugin_grid sb::plugin_viewer
-    sb::plugin_sketcher sb::plugin_movehandles sb::plugin_parameters sb::plugin_timeline sb::sketch_planegcs)
+    sb::plugin_sketcher sb::plugin_movehandles sb::plugin_parameters sb::plugin_timeline sb::plugin_measure sb::sketch_planegcs)
   sb_set_warnings(sb_app_tests)
   if(WIN32)
     # Qt's DLLs and plugins (including the offscreen platform) and ADS, next to the .exe.

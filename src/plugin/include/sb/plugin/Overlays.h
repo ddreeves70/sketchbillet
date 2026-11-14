@@ -71,6 +71,9 @@ struct Overlay {
     /// cube hides what's behind it. The cube's sides are kViewCubeHalfSize pixels
     /// from its middle. Lattices are never drawn on the cube.
     bool onViewCube = false;
+    /// True to draw it over the design: never hidden behind a body, like a
+    /// measurement's line and its words. Otherwise bodies hide it.
+    bool overBodies = false;
     std::string id{};    ///< Set by SketchBillet: the plugin id and the overlay's name.
     std::string pane{};  ///< Set by SketchBillet: the pane it's for (see PluginOverlays::set()), or empty for
                          ///< every pane.

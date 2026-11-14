@@ -8,7 +8,7 @@ step's numbers in Properties. Everything you do can be undone.
 
 | # | Part | What it's for |
 | --- | --- | --- |
-| 1 | **Menus** | File (new, open, save), Edit (undo, redo, copy, paste, duplicate, turn off and on, folders, delete, pick edges), Create (shapes), Combine (union, cut, intersect), Modify (move, linked copy, unlink copy, fillet, chamfer, parameters), Sketch (new, on a face, edit, draw, move to a face), View (the grid), Window (panels, layouts) |
+| 1 | **Menus** | File (new, open, save), Edit (undo, redo, copy, paste, duplicate, turn off and on, folders, delete, pick edges), Create (shapes), Combine (union, cut, intersect), Modify (move, linked copy, unlink copy, fillet, chamfer, parameters), Tools (measure), Sketch (new, on a face, edit, draw, move to a face), View (the grid), Window (panels, layouts) |
 | 2 | **Toolbar** | The most-used menu items, one click away, each with a picture and its name. While you edit a sketch it shows the sketch tools instead, plus the constraint buttons that fit what you picked. If they don't all fit across the window, the rest go on a second row |
 | 3 | **Feature tree** | Every step of the design, in the order SketchBillet builds them, with how each one built. It floats over the viewer, see-through, and starts with the design's **Document settings** |
 | 4 | **Viewer** | Your part in 3D, on the grid. Turn it with the mouse, the view cube or the **view bar** at its bottom, and click a body to pick it |
@@ -131,13 +131,13 @@ set the environment variable `SB_NO_3D` to `1` before starting SketchBillet (on 
 
 ## Panels over the viewer
 
-The feature tree, Properties, the Parameters panel, the Sketch panel and View
+The feature tree, Properties, the Parameters panel, the Sketch panel, Measure and View
 options float over the viewer, like the browser and dialogs in other CAD programs, so your part gets the
 whole window. They're see-through, and only as tall as what's in them, so they
 cover as little of your part as they can. The feature tree is at the top left,
 with Parameters under it when it's open;
 Properties is at the top right, under the view cube, with the Sketch panel
-(while you edit a sketch) and View options under it.
+(while you edit a sketch), Measure (while you measure) and View options under it.
 
 - **Fold one up** with the arrow on its title bar, so only the title shows.
   Click the arrow again to open it.
@@ -226,6 +226,13 @@ To use one, type a formula like `wall * 2` into a number's box in Properties or
 the Sketch panel, instead of a number. A box whose number follows a formula has
 a small blue ***fx*** in front. See
 [Typing formulas in the app](parameters.md#typing-formulas-in-the-app).
+
+## Measuring
+
+**Tools > Measure** (Ctrl+Shift+I, or **Measure** on the toolbar) measures your
+part. Click a face, edge or point in the view to see its size, then another to
+see the distance between them; a line shows where the distance is measured. Click
+**Done** to go back to picking bodies. See [Measuring](measuring.md).
 
 ## Properties
 

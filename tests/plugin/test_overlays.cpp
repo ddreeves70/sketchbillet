@@ -94,3 +94,25 @@ TEST_CASE("an overlay for one pane is drawn there instead of the every-pane one"
     list.removeOwner("test.grid");  // every pane's
     CHECK(list.all().empty());
 }
+
+TEST_CASE("changing only where an overlay is drawn is a change", "[plugin][overlays]") {
+    // Bug: moving an overlay onto the view cube, or over the bodies, and nothing
+    // else, sent no OverlaysChanged, so the viewers kept drawing it where it was.
+    EventBus bus;
+    OverlayList list(bus);
+    int heard = 0;
+    auto sub = bus.subscribe<OverlaysChanged>([&](const OverlaysChanged&) { ++heard; });
+    PluginOverlays a(list, "test.a");
+    auto o = line(50);
+    a.set("guide", o);
+    CHECK(heard == 1);
+    o.overBodies = true;
+    a.set("guide", o);
+    CHECK(heard == 2);
+    CHECK(list.find("test.a.guide")->overBodies);
+    o.onViewCube = true;
+    a.set("guide", o);
+    CHECK(heard == 3);
+    a.set("guide", o);  // the same again: no event
+    CHECK(heard == 3);
+}

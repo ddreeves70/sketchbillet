@@ -8,6 +8,7 @@
 //   sketchbillet --edges Extrude1:9,12       then pick edges of a body, numbered as
 //                                      `sketchbillet_cli open --edges` lists them (for screenshots)
 //   sketchbillet --faces Extrude1:6          ... or a face, as `open --faces` lists them
+//                                      (after --trigger sb.measure.measure, they're measured)
 //   sketchbillet --settings file.ini         keep layouts in this file instead of the user's settings
 //   sketchbillet --screenshot out.png        save a picture of the window and quit
 //   sketchbillet --smoke-test                build the window, check it, and quit (CI)
@@ -42,6 +43,7 @@
 #include "sb/plugins/Axes.h"
 #include "sb/plugins/FeatureTree.h"
 #include "sb/plugins/Grid.h"
+#include "sb/plugins/Measure.h"
 #include "sb/plugins/Modeling.h"
 #include "sb/plugins/MoveHandles.h"
 #include "sb/plugins/Parameters.h"
@@ -135,6 +137,7 @@ int main(int argc, char** argv) {
     host.addBuiltin(sb::plugins::moveHandlesPlugin());
     host.addBuiltin(sb::plugins::parametersPlugin());
     host.addBuiltin(sb::plugins::timelinePlugin());
+    host.addBuiltin(sb::plugins::measurePlugin());
     host.addFolder((QCoreApplication::applicationDirPath() + QStringLiteral("/plugins")).toStdWString());
     host.addFolder(
         (QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/plugins"))

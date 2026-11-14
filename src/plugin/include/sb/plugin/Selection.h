@@ -16,8 +16,8 @@ namespace sb::plugin {
 ///
 /// Picking a step in the feature tree selects it here, and every other panel
 /// and view hears SelectionChanged and highlights it too. A selection is a list of
-/// steps in one design, or, while viewers pick edges (PickMode::Edges), a list of
-/// edges of its bodies.
+/// steps in one design, or, while viewers pick edges, faces or things to measure
+/// (see PickMode), a list of edges, faces or points of its bodies.
 ///
 /// The selection keeps itself valid: steps that are deleted or undone away drop
 /// out of it, and closing the design clears it.
@@ -58,18 +58,18 @@ public:
     /// Selects nothing. Sends SelectionChanged if something was selected.
     void clear();
 
-    /// Gives the picked edges, while the selection is edges instead of steps.
-    /// @return The edges, in the order they were picked; empty when steps are selected.
+    /// Gives the picked edges, faces or points, while the selection is those instead of steps.
+    /// @return Them, in the order they were picked; empty when steps are selected.
     const std::vector<PickedElement>& elements() const { return elements_; }
 
-    /// Selects edges instead of steps. Sends SelectionChanged if it differs.
-    /// Edges on steps that aren't in @p doc, and repeats, are left out.
+    /// Selects edges, faces or points instead of steps. Sends SelectionChanged if
+    /// it differs. Ones on steps that aren't in @p doc, and repeats, are left out.
     /// @param doc The design.
-    /// @param elements The edges, in order.
+    /// @param elements The edges, faces or points, in order.
     void setElements(const DocId& doc, std::vector<PickedElement> elements);
 
     /// Gives what clicking a body in a viewer picks.
-    /// @return Bodies (steps), or edges.
+    /// @return Bodies (steps), edges, faces, or things to measure.
     PickMode pickMode() const { return mode_; }
 
     /// Changes what clicking a body picks. Sends PickModeChanged if it differs,

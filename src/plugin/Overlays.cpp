@@ -19,7 +19,8 @@ bool same(const Overlay& a, const Overlay& b) {
            std::equal(a.points.begin(), a.points.end(), b.points.begin(),
                       [](const auto& x, const auto& y) { return same(x, y); }) &&
            same(p.origin, q.origin) && same(p.xAxis, q.xAxis) && same(p.yAxis, q.yAxis) &&
-           p.spacing == q.spacing && p.halfSize == q.halfSize && p.dots == q.dots;
+           p.spacing == q.spacing && p.halfSize == q.halfSize && p.dots == q.dots &&
+           a.onViewCube == b.onViewCube && a.overBodies == b.overBodies;
 }
 
 }  // namespace

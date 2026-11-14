@@ -212,6 +212,7 @@ Mockups of the main window, split views, two monitors and the Plugin manager, ea
 | `sb.featuretree` | The feature tree panel | 0 |
 | `sb.properties` | The properties panel for the selected step | 0 |
 | `sb.io` | `.sb` save and open, STEP and STL import and export | 0 |
+| `sb.measure` | Tools > Measure: picks faces, edges and points (`PickMode::Measure`), the Measure panel, and the line between the nearest points (overlays drawn over the bodies) (built Nov 2026) | 3 |
 | `sb.timeline` | The timeline bar: the steps in order with the rollback marker, through the `timeline.rollback` and `timeline.move` commands (built Nov 2026) | 2 |
 | `sb.lessons` | The lesson panel, lesson steps and checks | 3 |
 | `sb.assistant` | The AI assistant panel and its tools | 3 (checks), 4 to 5 (AI) |

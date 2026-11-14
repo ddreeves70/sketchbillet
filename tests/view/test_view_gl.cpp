@@ -629,3 +629,85 @@ TEST_CASE("picking faces: a click picks the face under it, one at a time", "[vie
     CHECK(last.empty());
     CHECK(edgePicks == 0);
 }
+
+TEST_CASE("picking to measure: a face, edge or point, two at a time", "[view][gl][measure]") {
+    Fixture f;
+    const auto parts = f.kernel->elements(f.box);
+    auto at = [&](kernel::TopoKind kind, kernel::Vec3 p) {
+        const auto& list = parts.of(kind);
+        for (std::size_t i = 0; i < list.size(); ++i) {
+            const auto& c = list[i].center;
+            if (std::abs(c.x - p.x) < 1e-9 && std::abs(c.y - p.y) < 1e-9 && std::abs(c.z - p.z) < 1e-9)
+                return static_cast<int>(i);
+        }
+        return -1;
+    };
+    // The box is 20 mm, from -10 to 10 across and 0 to 20 tall.
+    const kernel::Vec3 topMiddle{0, 0, 20}, frontTopEdge{0, -10, 20}, corner{10, -10, 20};
+    const int top = at(kernel::TopoKind::Face, topMiddle);
+    const int edge = at(kernel::TopoKind::Edge, frontTopEdge);
+    const int point = at(kernel::TopoKind::Vertex, corner);
+    REQUIRE(top >= 0);
+    REQUIRE(edge >= 0);
+    REQUIRE(point >= 0);
+
+    SceneContent c;
+    c.bodies = {{f.boxId, f.box, false}};
+    c.pickMeasure = true;
+    f.view.setContent(c);
+    f.view.fitAll();
+    settle(f.view);
+
+    int picks = 0, other = 0;
+    std::vector<ScenePick> last;
+    QObject::connect(&f.view, &ViewWidget::picked, [&](const std::vector<FeatureId>&) { ++other; });
+    QObject::connect(&f.view, &ViewWidget::edgesPicked, [&](const std::vector<ScenePick>&) { ++other; });
+    QObject::connect(&f.view, &ViewWidget::facesPicked, [&](const std::vector<ScenePick>&) { ++other; });
+    QObject::connect(&f.view, &ViewWidget::measurePicked, [&](const std::vector<ScenePick>& p) {
+        ++picks;
+        last = p;
+        auto now = f.view.content();
+        now.picked = p;
+        f.view.setContent(now);
+    });
+    const auto topAt = f.view.toScreen(topMiddle);
+    const auto edgeAt = f.view.toScreen(frontTopEdge);
+    const auto pointAt = f.view.toScreen(corner);
+    REQUIRE(topAt);
+    REQUIRE(edgeAt);
+    REQUIRE(pointAt);
+    const ScenePick topPick{f.boxId, top, kernel::TopoKind::Face};
+    const ScenePick edgePick{f.boxId, edge, kernel::TopoKind::Edge};
+    const ScenePick pointPick{f.boxId, point, kernel::TopoKind::Vertex};
+
+    // The first click picks one; the second adds another, without Ctrl.
+    f.view.clickAt(*topAt);
+    REQUIRE(waitFor([&] { return picks == 1; }));
+    CHECK(last == std::vector<ScenePick>{topPick});
+    f.view.clickAt(*pointAt);
+    REQUIRE(waitFor([&] { return picks == 2; }));
+    CHECK(last == std::vector<ScenePick>{topPick, pointPick});
+    // The picked point is a big orange dot: orange just below the corner too,
+    // where the sides are blue-grey (the top is orange already, being picked).
+    settle(f.view);
+    const QImage img = f.view.grabFramebuffer();
+    const double ratio = f.view.devicePixelRatioF();
+    const QColor dot =
+        img.pixelColor(static_cast<int>(pointAt->x() * ratio), static_cast<int>((pointAt->y() + 3) * ratio));
+    INFO("picked point pixel " << dot.name().toStdString());
+    CHECK(dot.red() > dot.blue() + 60);
+    // A third starts again with just that one.
+    f.view.clickAt(*edgeAt);
+    REQUIRE(waitFor([&] { return picks == 3; }));
+    CHECK(last == std::vector<ScenePick>{edgePick});
+    // Clicking a picked one again takes it away; empty space clears them all.
+    f.view.clickAt(*topAt);
+    REQUIRE(waitFor([&] { return picks == 4; }));
+    f.view.clickAt(*topAt);
+    REQUIRE(waitFor([&] { return picks == 5; }));
+    CHECK(last == std::vector<ScenePick>{edgePick});
+    f.view.clickAt(QPoint(8, f.view.height() - 8));
+    REQUIRE(waitFor([&] { return picks == 6; }));
+    CHECK(last.empty());
+    CHECK(other == 0);
+}
