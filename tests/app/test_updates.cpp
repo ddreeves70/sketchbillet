@@ -12,6 +12,8 @@
 #include <QFile>
 #include <QLabel>
 #include <QSettings>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QUrl>
 
@@ -280,5 +282,39 @@ TEST_CASE("Help > Check for Updates, and the note a daily check leaves", "[app][
         shell.setUpdates(&checker);
         CHECK(shell.findChild<QAction*>(QStringLiteral("sb.shell.checkupdates")) == nullptr);
         CHECK(shell.findChild<QAction*>(QStringLiteral("sb.shell.dailyupdates")) == nullptr);
+    }
+}
+
+TEST_CASE("GitHub's error answers are explained in plain words", "[app][updates]") {
+    // A web server that answers every request with one HTTP status, like GitHub
+    // does when a network has asked too often (403).
+    for (const int status : {403, 500}) {
+        QTcpServer server;
+        REQUIRE(server.listen(QHostAddress::LocalHost));
+        QObject::connect(&server, &QTcpServer::newConnection, [&server, status] {
+            auto* socket = server.nextPendingConnection();
+            QObject::connect(socket, &QTcpSocket::readyRead, [socket, status] {
+                socket->readAll();
+                socket->write(
+                    QStringLiteral("HTTP/1.1 %1 Nope\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                        .arg(status)
+                        .toLatin1());
+                socket->disconnectFromHost();
+            });
+        });
+        QTemporaryDir dir;
+        QSettings settings(dir.filePath(QStringLiteral("settings.ini")), QSettings::IniFormat);
+        UpdateChecker checker(settings, UpdateChannel::Preview, QStringLiteral("0.1.0"),
+                              QStringLiteral("bbbb"));
+        checker.setServer(QUrl(QStringLiteral("http://127.0.0.1:%1/repos/x/y").arg(server.serverPort())));
+        const auto got = waitFor(checker, true);
+        REQUIRE(got);
+        CHECK(got->first.kind == Kind::Failed);
+        if (status == 403)
+            CHECK(got->first.message.contains(
+                QStringLiteral("too many questions from this network for now (error "
+                               "403). Try Help > Check for Updates again in an hour.")));
+        else
+            CHECK(got->first.message.contains(QStringLiteral("GitHub answered with error 500. Check that")));
     }
 }

@@ -174,6 +174,15 @@ void UpdateChecker::check(bool byHand) {
         UpdateResult r;
         if (!preview && (status == 404 || reply->error() == QNetworkReply::ContentNotFoundError)) {
             r = newest(version_);  // no releases yet
+        } else if (status == 403 || status == 429) {
+            // GitHub answers each network a limited number of times an hour.
+            r.kind = UpdateResult::Kind::Failed;
+            r.message = tr("SketchBillet couldn't check for a newer version: GitHub has had too many "
+                           "questions from this network for now (error %1). Try Help > Check for Updates "
+                           "again in an hour.")
+                            .arg(status);
+        } else if (status >= 400) {
+            r = failed(tr("GitHub answered with error %1").arg(status));
         } else if (reply->error() != QNetworkReply::NoError) {
             r = failed(reply->errorString());
         } else if (preview) {
