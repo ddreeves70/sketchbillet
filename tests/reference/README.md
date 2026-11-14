@@ -13,6 +13,10 @@ changes. CTest runs each one as `reference.<name>` through
 The formulas use the changed numbers, so a change that is ignored fails just like
 one that breaks the part.
 
+The build also makes each part into a sample design, `<build>/samples/<title>.sb`, for
+the desktop app's **File > Open Sample** (`cmake/SbSamples.cmake`), so a part whose
+steps fail breaks the app's build too.
+
 The gallery page, [docs/user-guide/reference-parts.md](../../docs/user-guide/reference-parts.md),
 is made from these files; `reference.gallery` fails if it's out of date. Each part's
 picture is a `"part"` recipe in `docs/pictures.json`.

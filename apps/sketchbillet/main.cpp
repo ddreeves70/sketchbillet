@@ -22,6 +22,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QFileInfo>
 #include <QPixmap>
 #include <QSettings>
 #include <QStandardPaths>
@@ -29,6 +30,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <memory>
 #include <string>
 
@@ -83,6 +85,23 @@ int smokeTest(sb::app::Shell& shell) {
     std::printf("sketchbillet smoke test: %lld panels, Create > Box works, layout saved and restored\n",
                 static_cast<long long>(ids.size()));
     return 0;
+}
+
+// File > Open Sample's designs: installed next to the app (Windows), in the app
+// (macOS) or in share/sketchbillet (Linux); or, when running from the build
+// folder, where the build made them. Empty if there are none.
+std::filesystem::path samplesFolder() {
+    const QString app = QCoreApplication::applicationDirPath();
+    QStringList candidates{app + QStringLiteral("/samples"), app + QStringLiteral("/../Resources/samples"),
+                           app + QStringLiteral("/../share/sketchbillet/samples")};
+#ifdef SB_BUILD_SAMPLES
+    candidates << QStringLiteral(SB_BUILD_SAMPLES);
+#endif
+    for (const auto& dir : candidates) {
+        if (QFileInfo::exists(dir + QStringLiteral("/index.json")))
+            return QDir(dir).absolutePath().toStdWString();
+    }
+    return {};
 }
 
 int screenshot(sb::app::Shell& shell, const QString& file) {
@@ -160,6 +179,7 @@ int main(int argc, char** argv) {
     }
 
     sb::app::Shell shell(host, ui, *settings);
+    shell.setSamplesFolder(samplesFolder());
 
     QString open = option(args, QStringLiteral("--open"));
     if (open.isEmpty() && args.size() > 1 &&

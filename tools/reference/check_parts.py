@@ -162,8 +162,13 @@ def gallery(parts):
            "SketchBillet builds all twenty, checks every volume against a hand calculation,",
            "changes the dimension listed under each, and checks them all again.",
            "",
-           "To build one, run its commands one after the other, in a folder of your own. The",
-           "first one makes `part.sb`; the others open it, change it and save it.",
+           "To look inside one, open it in the desktop app: **File > Open Sample**, then",
+           "its group and its name. It opens as a new design, so try the change listed under",
+           "it in Properties, or make it your own and save it wherever you like.",
+           "",
+           "To build one with `sketchbillet_cli`, run its commands one after the other, in a",
+           "folder of your own. The first one makes `part.sb`; the others open it, change it",
+           "and save it.",
            ""]
     for group in GROUPS:
         members = [p for p in parts if p["group"] == group]
