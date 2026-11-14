@@ -85,7 +85,6 @@ when a library is added to or removed from what ships.
 | **pybind11** + embedded **CPython** | Python scripting, console, Python plugins; bindings generated from the command registry | Phase 5 | BSD-3-Clause; PSF | vcpkg (`pybind11`, `python3`). Ship Python with the installer |
 | **lib3mf** | 3MF import and export for 3D printing | Not used | BSD-2-Clause | 3MF export is written by SketchBillet itself with libzip (it's a zip with XML in it; Nov 13, 2026), and 3MF import is read by SketchBillet itself too, in `sb_kernel` with its own unzip (stored and deflated files, RFC 1951; Nov 13, 2026), so the kernel library needs nothing but the standard library. lib3mf stays an option if slicers' files need more of 3MF than meshes, parts and placements |
 | **Our own DXF reader** | Importing splines, lines and arcs from DXF (Inkscape, other CAD) | Phase 1 or 2 | Apache-2.0 (ours) | The common DXF libraries (libdxfrw, dxflib) are GPL, and OCCT's DXF importer is commercial, so we write a small reader for the entities we need |
-| **Crash reporter** (opt-in) | Crash reports users choose to send | Phase 3 | To decide: Crashpad (BSD-3) or sentry-native (MIT) | Off by default; works offline; never sends designs |
 | **Manifold** | Fast, robust mesh Booleans for the mesh workspace | Phase 6 | Apache-2.0 | vcpkg (`manifold`) |
 | **Clipper2** | 2D polygon offsets for CAM toolpaths | Phase 6 | BSL-1.0 | vcpkg (`clipper2`) |
 | **CalculiX** (`ccx`) | Finite-element strength simulation (FEA) | Phase 7 | GPL | **Decided Oct 24, 2026: a separate program, never built into SketchBillet.** SketchBillet writes CalculiX's input file, runs `ccx` and reads the results, so SketchBillet stays Apache-2.0. The installer may ship the `ccx` program with its license and an offer of its source. Practical work: building `ccx` for Windows and macOS (Fortran plus solver libraries; PARDISO isn't free, so use SPOOLES or similar) and turning its text errors into plain words. Uses the material strength numbers SketchBillet stores now. Have the exact license wording and the bundling checked before shipping |
@@ -96,6 +95,7 @@ when a library is added to or removed from what ships.
 
 | What | Why not |
 | --- | --- |
+| **Crashpad**, **sentry-native** (crash reporting) | Decided Nov 13, 2026: SketchBillet writes its own small crash report (`apps/sketchbillet/CrashReport.h`, a page of code on each system's own crash hooks) and offers to open it as a GitHub issue the student reads before sending. No server, no account to run, and nothing sent by itself. Revisit if reports need full minidumps |
 | libdxfrw, dxflib | GPL: can't be linked into Apache-2.0 SketchBillet |
 | OCCT's DXF importer | Commercial add-on |
 | FreeCAD's whole sketcher | Tied to FreeCAD's document model and GPL/LGPL code; we take only the solver (PlaneGCS) |

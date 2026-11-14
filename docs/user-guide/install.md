@@ -59,10 +59,14 @@ computer in the registry, under
 | `daily` | `REG_SZ`, `true` or `false` | Answers the question for every student, so it isn't asked. A student can still change it in the Help menu |
 | `allowed` | `REG_SZ`, `false` | SketchBillet never checks or asks, and the Help menu has no update items |
 
+Crash reports work the same way, under `...\SketchBillet\SketchBillet\crashes`:
+an `allowed` value of `false` means SketchBillet never writes one or asks to
+send one ([crash reports](troubleshooting.md#sketchbillet-closed-by-itself)).
+
 On a Mac, set them for every user with `defaults`, like
 `sudo defaults write /Library/Preferences/com.sketchbillet.SketchBillet updates.allowed -bool false`.
-On Linux, put them in `/etc/xdg/SketchBillet/SketchBillet.conf`, under `[updates]`,
-like `allowed=false`.
+On Linux, put them in `/etc/xdg/SketchBillet/SketchBillet.conf`, under `[updates]`
+(or `[crashes]`), like `allowed=false`.
 
 ## macOS
 

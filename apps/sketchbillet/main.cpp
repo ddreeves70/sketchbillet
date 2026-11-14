@@ -16,6 +16,11 @@
 //                                      quit: 0 checked, 2 couldn't reach GitHub, 3 can't make
 //                                      secure connections (CI checks the installers can)
 //   sketchbillet --update-server URL         ask this server instead of GitHub's API (tests)
+//   sketchbillet --crash-folder DIR          keep crash reports here instead of the user's app data
+//   sketchbillet --crash-for-test HOW        crash on purpose (segfault, abort or exception), to
+//                                      test crash reports (CI)
+//   sketchbillet --crash-report              print the newest crash report as it would be sent,
+//                                      and its link, and quit: 0 if there is one, 1 if not
 //
 // --screenshot and --smoke-test work without a screen: QT_QPA_PLATFORM=offscreen
 // (the viewer then shows its flat view). For a screenshot of the 3D view on Linux
@@ -46,6 +51,7 @@
 #include "AppLogo.h"
 #include "AppSettings.h"
 #include "AppUi.h"
+#include "CrashReport.h"
 #include "Icons.h"
 #include "Shell.h"
 #include "Updates.h"
@@ -186,6 +192,33 @@ int main(int argc, char** argv) {
 #else
     const QString commit;
 #endif
+    // Crash reports (CrashReport.h): written on a crash, offered the next time.
+    // A school can turn them off (crashes/allowed = false).
+    QString crashFolder = option(args, QStringLiteral("--crash-folder"));
+    if (crashFolder.isEmpty())
+        crashFolder =
+            QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/crashes");
+    const bool crashReports = settings->value(QStringLiteral("crashes/allowed"), true).toBool();
+    if (crashReports) {
+        const auto channel = sb::app::UpdateChecker::builtChannel();
+        sb::app::crash::install(crashFolder,
+                                {QApplication::applicationVersion(),
+                                 channel == sb::app::UpdateChannel::Release   ? QStringLiteral("release")
+                                 : channel == sb::app::UpdateChannel::Preview ? QStringLiteral("preview")
+                                                                              : QString(),
+                                 commit});
+    }
+    if (args.contains(QStringLiteral("--crash-report"))) {
+        const auto reports = sb::app::crash::pending(crashFolder);
+        if (reports.empty()) {
+            std::printf("No crash reports in %s\n", qPrintable(QDir::toNativeSeparators(crashFolder)));
+            return 1;
+        }
+        std::printf("%s\n\n%s\n", qPrintable(sb::app::crash::issueBody(reports.front())),
+                    sb::app::crash::issueUrl(reports.front()).toEncoded().constData());
+        return 0;
+    }
+
     sb::app::UpdateChecker updates(*settings, sb::app::UpdateChecker::builtChannel(),
                                    QApplication::applicationVersion(), commit);
     if (const auto server = option(args, QStringLiteral("--update-server")); !server.isEmpty())
@@ -285,12 +318,17 @@ int main(int argc, char** argv) {
         QApplication::processEvents();
     }
 
+    // After --open and --trigger, so the report has the last thing clicked.
+    if (const auto how = option(args, QStringLiteral("--crash-for-test")); !how.isEmpty())
+        sb::app::crash::crashForTest(how);
+
     if (args.contains(QStringLiteral("--smoke-test"))) return smokeTest(shell);
     if (const auto file = option(args, QStringLiteral("--screenshot")); !file.isEmpty())
         return screenshot(shell, file);
 
     shell.show();
     QTimer::singleShot(0, &shell, [&] {
+        if (crashReports) shell.offerCrashReport(crashFolder);
         if (updates.shouldAsk()) updates.setDaily(askAboutUpdates(&shell));
         shell.setUpdates(&updates);
     });
