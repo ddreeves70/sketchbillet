@@ -239,6 +239,16 @@ QString plainWhat(const QString& what, const QString& exception) {
     if (what == QStringLiteral("illegal-instruction"))
         return QObject::tr("An instruction the processor can't run (SIGILL).");
     if (what == QStringLiteral("bus-error")) return QObject::tr("A bad memory address (SIGBUS).");
+    // Windows' codes for the same kinds of crash.
+    const auto code = what.section(QLatin1Char(' '), 1).toLower();
+    if (code == QStringLiteral("0xc0000005"))
+        return QObject::tr("SketchBillet used memory it shouldn't have (an access violation, 0xc0000005).");
+    if (code == QStringLiteral("0xc00000fd"))
+        return QObject::tr(
+            "SketchBillet ran out of room to keep track of what it was doing (a stack overflow, "
+            "0xc00000fd).");
+    if (code == QStringLiteral("0xc0000094"))
+        return QObject::tr("A math error, like dividing by zero (0xc0000094).");
     if (what.startsWith(QStringLiteral("exception-code")))
         return QObject::tr("Windows stopped SketchBillet (exception %1).")
             .arg(what.section(QLatin1Char(' '), 1));

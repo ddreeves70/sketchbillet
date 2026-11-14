@@ -76,8 +76,11 @@ TEST_CASE("Each kind of crash is said in plain words", "[app][crash]") {
     CHECK(what("what=exception\nexception=Standard_ConstructionError") ==
           QStringLiteral("An error nobody caught: Standard_ConstructionError"));
     CHECK(what("what=arithmetic").startsWith(QStringLiteral("A math error")));
-    CHECK(what("what=exception-code 0xc0000005") ==
-          QStringLiteral("Windows stopped SketchBillet (exception 0xc0000005)."));
+    CHECK(what("what=exception-code 0xc0000005")
+              .startsWith(QStringLiteral("SketchBillet used memory it shouldn't have")));
+    CHECK(what("what=exception-code 0xc00000fd").contains(QStringLiteral("stack overflow")));
+    CHECK(what("what=exception-code 0xe0434352") ==
+          QStringLiteral("Windows stopped SketchBillet (exception 0xe0434352)."));
 }
 
 TEST_CASE("The GitHub issue: a place for the student, the facts, and a link that isn't too long",
