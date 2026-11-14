@@ -8,8 +8,10 @@
 
 #include <zip.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <numbers>
 #include <random>
 #include <sstream>
 #include <string>
