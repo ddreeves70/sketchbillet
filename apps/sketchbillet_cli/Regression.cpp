@@ -175,6 +175,52 @@ Outcome build(IKernel& k, const json& c) {
     }
 
     const auto& shape = shapes.at(c.value("result", last));
+    // Distances asked for between faces, edges or points of the result, each found by
+    // where its middle is: {"face": [x, y, z]}, {"edge": ...} or {"point": ...}.
+    json distances = json::array();
+    if (c.contains("measure")) {
+        const auto parts = k.elements(shape);
+        auto find = [&](const json& at, kernel::ElementOf& into) {
+            for (const auto& [word, kind] :
+                 {std::pair{"face", kernel::TopoKind::Face}, std::pair{"edge", kernel::TopoKind::Edge},
+                  std::pair{"point", kernel::TopoKind::Vertex}}) {
+                if (!at.contains(word)) continue;
+                const Vec3 p = vec3(at.at(word));
+                const auto& list = parts.of(kind);
+                int count = 0;
+                for (std::size_t i = 0; i < list.size(); ++i) {
+                    const auto& mid = list[i].center;
+                    if (std::abs(mid.x - p.x) < 1e-6 && std::abs(mid.y - p.y) < 1e-6 &&
+                        std::abs(mid.z - p.z) < 1e-6) {
+                        into = {shape, kind, static_cast<int>(i)};
+                        ++count;
+                    }
+                }
+                if (count == 1) return true;
+                out.errorMessage = std::string(count == 0 ? "No " : "More than one ") + word +
+                                   " has its middle at " + at.at(word).dump() + ".";
+                return false;
+            }
+            out.errorMessage = "Say face, edge or point in " + at.dump() + ".";
+            return false;
+        };
+        for (const auto& m : c.at("measure")) {
+            kernel::ElementOf a, b;
+            if (!find(m.at("a"), a) || !find(m.at("b"), b)) {
+                out.errorStep = "measure";
+                out.errorCode = "regress.element";
+                return out;
+            }
+            const auto gap = k.distance(a, b);
+            if (!gap.ok()) {
+                out.errorStep = "measure";
+                out.errorCode = gap.issues.empty() ? "unknown" : gap.issues.front().code;
+                out.errorMessage = gap.issues.empty() ? "" : gap.issues.front().message;
+                return out;
+            }
+            distances.push_back(round6(gap.distance));
+        }
+    }
     const auto mp = k.massProps(shape);
     const auto b = k.bounds(shape);
     const auto t = k.topology(shape);
@@ -188,6 +234,7 @@ Outcome build(IKernel& k, const json& c) {
         {"edges", t.edges},
         {"vertices", t.vertices},
     };
+    if (c.contains("measure")) out.actual["distances"] = distances;
     return out;
 }
 
@@ -246,6 +293,14 @@ std::vector<std::string> compare(const json& expect, const Outcome& o) {
         if (expect.contains(key) && expect[key] != a[key]) {
             fails.push_back(std::string(key) + " expected " + str(expect[key]) + ", got " + str(a[key]));
         }
+    }
+    if (expect.contains("distances")) {
+        const auto& want = expect["distances"];
+        const json got = a.value("distances", json::array());
+        bool same = want.size() == got.size();
+        for (std::size_t i = 0; same && i < want.size(); ++i)
+            same = std::abs(want[i].get<double>() - got[i].get<double>()) <= lenTol;
+        if (!same) fails.push_back("distances expected " + str(want) + ", got " + str(got));
     }
     return fails;
 }

@@ -3,13 +3,14 @@
 Opens a saved design, rebuilds it, and prints every step with its volume, and
 each finished body's mass and material. It can
 also export the finished shape for 3D printing or another CAD program, list a
-sketch as the solver left it, or list a body's edges and faces.
+sketch as the solver left it, or list a body's edges, faces and points.
 
 ```text
 sketchbillet_cli open <file.sb> [--export <out.stl|out.3mf|out.step> [--step <name>]]
 sketchbillet_cli open <file.sb> --sketch <name>
 sketchbillet_cli open <file.sb> --edges <name>
 sketchbillet_cli open <file.sb> --faces <name>
+sketchbillet_cli open <file.sb> --points <name>
 ```
 
 | Option | Meaning |
@@ -22,6 +23,7 @@ sketchbillet_cli open <file.sb> --faces <name>
 | `--sketch <name>` | Also list this sketch: each line, circle, arc, spline and point where the solver put it (in the design's unit, angles in degrees; a spline lists its degree and control points), each constraint (a dimension with a formula shows it after its number, like `40.00 mm = wall * 10`), then its closed shapes (with their areas) and any ends that aren't joined |
 | `--edges <name>` | Also list the edges of this step's body, numbered, as [fillet and chamfer](commands.md#featureadd_fillet) take them (see below) |
 | `--faces <name>` | Also list the faces of this step's body, numbered |
+| `--points <name>` | Also list the points (corners) of this step's body, numbered |
 
 Each step shows one of these:
 
@@ -153,9 +155,10 @@ the constraints that fight.
 
 ## A body's edges and faces
 
-`--edges` lists the edges of a step's body, and `--faces` its faces, each
-numbered. A [fillet](commands.md#featureadd_fillet) or
-[chamfer](commands.md#featureadd_chamfer) takes edges by these numbers. They're
+`--edges` lists the edges of a step's body, `--faces` its faces, and `--points`
+its points, each numbered. A [fillet](commands.md#featureadd_fillet) or
+[chamfer](commands.md#featureadd_chamfer) takes edges by these numbers, and
+[`measure`](measure.md) takes all three. They're
 listed bottom to top, then front to back, then left to right (by where each
 middle is), each with what it is (a straight `line`, a `circle`; a `flat` face, a
 `cylinder`), its length or area, where its middle is, and where it came from:
@@ -203,6 +206,29 @@ Demo tag: 3 steps
   Hole         ok  volume 117.81 mm^3
   Tag          ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
 error: this design has no step called Missing.
+```
+
+`--points` lists a body's points: its corners, and where a seam meets an edge.
+Each is named for the faces that meet there:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli open tag.sb --points Tag
+Demo tag: 3 steps
+  Plate        ok  volume 7200.00 mm^3
+  Hole         ok  volume 117.81 mm^3
+  Tag          ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
+points of Tag: 10
+   1  point                    at 0.00,0.00,0.00  corner of bottom of Plate, front side of Plate and left side of Plate
+   2  point                    at 60.00,0.00,0.00  corner of bottom of Plate, front side of Plate and right side of Plate
+   3  point                    at 11.50,15.00,0.00  corner of bottom of Plate and side of Hole
+   4  point                    at 0.00,30.00,0.00  corner of back side of Plate, bottom of Plate and left side of Plate
+   5  point                    at 60.00,30.00,0.00  corner of back side of Plate, bottom of Plate and right side of Plate
+   6  point                    at 0.00,0.00,4.00  corner of front side of Plate, left side of Plate and top of Plate
+   7  point                    at 60.00,0.00,4.00  corner of front side of Plate, right side of Plate and top of Plate
+   8  point                    at 11.50,15.00,4.00  corner of side of Hole and top of Plate
+   9  point                    at 0.00,30.00,4.00  corner of back side of Plate, left side of Plate and top of Plate
+  10  point                    at 60.00,30.00,4.00  corner of back side of Plate, right side of Plate and top of Plate
 ```
 
 ## Files that can't be opened

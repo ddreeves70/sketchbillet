@@ -36,6 +36,7 @@ works in either.
 | Save and open `.sb` designs | |
 | Export STL and 3MF (3D printing) and STEP (other CAD programs), from the app's File menu or `sketchbillet_cli` | |
 | Check a part is ready to print: closed all round, no walls too thin | Overhang checks |
+| Measure a face, edge or point, or between two: sizes, distances, angles, hole spacing (with `sketchbillet_cli`) | Measuring in the desktop app |
 | Add plugins | Import STEP, STL and 3MF |
 
 ## Contents
@@ -62,9 +63,10 @@ works in either.
 20. [The timeline](timeline.md): roll back, add steps in the middle, change the order.
 21. [Files](files.md): saving, opening, and exporting for 3D printing.
 22. [Getting ready to print](printing.md): check for gaps and walls too thin to print.
-23. [Plugins](plugins.md): adding features to SketchBillet.
-24. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
-25. [Reference parts](reference-parts.md): twenty real parts to build, from brackets to knobs.
+23. [Measuring](measuring.md): sizes, distances and angles, like how far apart two holes are.
+24. [Plugins](plugins.md): adding features to SketchBillet.
+25. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
+26. [Reference parts](reference-parts.md): twenty real parts to build, from brackets to knobs.
 
 ## Other guides
 

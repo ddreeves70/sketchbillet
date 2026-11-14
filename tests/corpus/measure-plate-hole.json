@@ -1,0 +1,142 @@
+{
+  "name": "measure-plate-hole",
+  "description": "Distances on the keychain tag (a 60 x 30 x 4 mm plate with a 5 mm hole): between faces, edges and points, apart and touching. Worked out by hand: the two ends are 60 mm apart; the hole's rim (radius 2.5 mm, center x 9) is 6.5 mm from the left end; opposite corners are sqrt(60^2 + 30^2 + 4^2) = 67.201190 mm apart; the rims are 4 mm apart; a corner touches the front face.",
+  "steps": [
+    {
+      "id": "plate",
+      "op": "box",
+      "size": [
+        60,
+        30,
+        4
+      ]
+    },
+    {
+      "id": "hole",
+      "op": "cylinder",
+      "base": [
+        9,
+        15,
+        -1
+      ],
+      "radius": 2.5,
+      "height": 6
+    },
+    {
+      "id": "tag",
+      "op": "cut",
+      "a": "plate",
+      "b": "hole"
+    }
+  ],
+  "measure": [
+    {
+      "a": {
+        "face": [
+          0,
+          15,
+          2
+        ]
+      },
+      "b": {
+        "face": [
+          60,
+          15,
+          2
+        ]
+      }
+    },
+    {
+      "a": {
+        "edge": [
+          9,
+          15,
+          4
+        ]
+      },
+      "b": {
+        "face": [
+          0,
+          15,
+          2
+        ]
+      }
+    },
+    {
+      "a": {
+        "point": [
+          0,
+          0,
+          0
+        ]
+      },
+      "b": {
+        "point": [
+          60,
+          30,
+          4
+        ]
+      }
+    },
+    {
+      "a": {
+        "edge": [
+          9,
+          15,
+          4
+        ]
+      },
+      "b": {
+        "edge": [
+          9,
+          15,
+          0
+        ]
+      }
+    },
+    {
+      "a": {
+        "point": [
+          0,
+          0,
+          0
+        ]
+      },
+      "b": {
+        "face": [
+          30,
+          0,
+          2
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "valid": true,
+    "volume": 7121.460184,
+    "area": 4343.561945,
+    "bounds": [
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        60.0,
+        30.0,
+        4.0
+      ]
+    ],
+    "solids": 1,
+    "faces": 7,
+    "edges": 15,
+    "vertices": 10,
+    "distances": [
+      60.0,
+      6.5,
+      67.20119,
+      4.0,
+      0.0
+    ]
+  }
+}

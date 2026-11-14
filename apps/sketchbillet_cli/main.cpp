@@ -4,8 +4,12 @@
 //   sketchbillet_cli demo <out.stl|out.3mf|out.step|out.sb> box with a hole, as a toolchain smoke test
 //   sketchbillet_cli open <file.sb> [--export out [--step name]]  open a design, rebuild it, report each step
 //   sketchbillet_cli open <file.sb> --sketch <name>               ... and list a sketch, solved
-//   sketchbillet_cli open <file.sb> --edges|--faces <name>        ... and list a body's edges or faces,
-//   numbered sketchbillet_cli materials [<file.sb>]      list materials (SketchBillet's own, and a design's)
+//   sketchbillet_cli open <file.sb> --edges|--faces|--points <name>  ... and list a body's edges, faces
+//                                       or points, numbered
+//   sketchbillet_cli check <file.sb> [--step <name>] [--min-wall <mm>]  check a part is ready to 3D print
+//   sketchbillet_cli measure <file.sb> <name> face|edge|point <n> [<name> face|edge|point <n>]
+//                                       measure one face, edge or point, or between two
+//   sketchbillet_cli materials [<file.sb>]      list materials (SketchBillet's own, and a design's)
 //   sketchbillet_cli regress [--update] <case|dir>... run regression cases (see tests/corpus/README.md)
 //   sketchbillet_cli plugins [--plugins <folder>]... [--slow-start-ms <n>] [--strict]  list plugins, their
 //                                       commands, services, problems and warnings
@@ -13,13 +17,14 @@
 //   sketchbillet_cli run [--plugins <folder>]... [--open in.sb] [--save out.sb] <command> [name=value]...
 
 #include <algorithm>
-#include <cmath>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <numbers>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -32,6 +37,7 @@
 #include "sb/kernel_occt/OcctKernel.h"
 #include "sb/model/Commands.h"
 #include "sb/model/Document.h"
+#include "sb/model/Measure.h"
 #include "sb/model/PrintCheck.h"
 #include "sb/sketch/Profiles.h"
 #include "sb/sketch_planegcs/PlaneGcsSolver.h"
@@ -46,7 +52,9 @@ int usage() {
         "       sketchbillet_cli open <file.sb> --sketch <name>\n"
         "       sketchbillet_cli open <file.sb> --edges <name>\n"
         "       sketchbillet_cli open <file.sb> --faces <name>\n"
+        "       sketchbillet_cli open <file.sb> --points <name>\n"
         "       sketchbillet_cli check <file.sb> [--step <name>] [--min-wall <mm>]\n"
+        "       sketchbillet_cli measure <file.sb> <name> face|edge|point <n> [<name> face|edge|point <n>]\n"
         "       sketchbillet_cli materials [<file.sb>]\n"
         "       sketchbillet_cli regress [--update] <case.json|folder>...\n"
         "       sketchbillet_cli plugins [--plugins <folder>]... [--slow-start-ms <n>] [--strict]\n"
@@ -282,22 +290,29 @@ const char* geomWord(sb::kernel::GeomKind g) {
     return "?";
 }
 
-// Lists a body's edges or faces, numbered from 1 in listing order (bottom to top,
-// front to back, left to right), as feature.add_fillet's edges= takes them.
+// Lists a body's edges, faces or points, numbered from 1 in listing order (bottom
+// to top, front to back, left to right), as feature.add_fillet's edges= and
+// measure take them.
 void printElements(const sb::model::Document& doc, const sb::model::Feature& step,
                    const sb::model::ShapeNames& names, sb::kernel::TopoKind kind) {
     const auto unit = doc.lengthUnit();
     const std::string symbol(sb::unitSymbol(unit));
     const bool faces = kind == sb::kernel::TopoKind::Face;
+    const bool points = kind == sb::kernel::TopoKind::Vertex;
     const auto& infos = names.elements.of(kind);
-    std::printf("%s of %s: %zu\n", faces ? "faces" : "edges", step.name().c_str(), infos.size());
+    std::printf("%s of %s: %zu\n",
+                faces    ? "faces"
+                : points ? "points"
+                         : "edges",
+                step.name().c_str(), infos.size());
     const auto order = sb::model::listingOrder(names.elements, kind);
     for (std::size_t i = 0; i < order.size(); ++i) {
         const auto k = static_cast<std::size_t>(order[i]);
         const auto& e = infos[k];
         const double per = sb::mmPerUnit(unit);
-        const std::string size =
-            faces ? mm(e.size / (per * per)) + " " + symbol + "^2" : length(e.size, unit) + " " + symbol;
+        const std::string size = points  ? std::string()
+                                 : faces ? mm(e.size / (per * per)) + " " + symbol + "^2"
+                                         : length(e.size, unit) + " " + symbol;
         std::printf("  %2zu  %-8s %14s  at %s,%s,%s  %s\n", i + 1, geomWord(e.geom), size.c_str(),
                     length(e.center.x, unit).c_str(), length(e.center.y, unit).c_str(),
                     length(e.center.z, unit).c_str(),
@@ -313,7 +328,9 @@ int openDesign(int argc, char** argv) {
     const bool showSketch = argc == 5 && std::string_view(argv[3]) == "--sketch";
     const bool showEdges = argc == 5 && std::string_view(argv[3]) == "--edges";
     const bool showFaces = argc == 5 && std::string_view(argv[3]) == "--faces";
-    if (argc != 3 && !(argc == 5 && exporting) && !oneStep && !showSketch && !showEdges && !showFaces) {
+    const bool showPoints = argc == 5 && std::string_view(argv[3]) == "--points";
+    if (argc != 3 && !(argc == 5 && exporting) && !oneStep && !showSketch && !showEdges && !showFaces &&
+        !showPoints) {
         return usage();
     }
     auto opened = sb::io::openFile(argv[2]);
@@ -372,7 +389,7 @@ int openDesign(int argc, char** argv) {
         printSketch(doc, static_cast<const sb::model::SketchFeature&>(*found), *report.result(found->id()),
                     doc.lengthUnit());
     }
-    if (showEdges || showFaces) {
+    if (showEdges || showFaces || showPoints) {
         const sb::model::Feature* found = nullptr;
         for (std::size_t i = 0; i < doc.featureCount(); ++i) {
             if (doc.featureAt(i).name() == argv[4]) found = &doc.featureAt(i);
@@ -386,7 +403,9 @@ int openDesign(int argc, char** argv) {
             return 1;
         }
         printElements(doc, *found, *r->names,
-                      showEdges ? sb::kernel::TopoKind::Edge : sb::kernel::TopoKind::Face);
+                      showEdges   ? sb::kernel::TopoKind::Edge
+                      : showFaces ? sb::kernel::TopoKind::Face
+                                  : sb::kernel::TopoKind::Vertex);
     }
     if (!report.ok()) return 1;
 
@@ -497,6 +516,70 @@ int checkDesign(int argc, char** argv) {
     return result.ready() ? 0 : 1;
 }
 
+// Measures one face, edge or point of a design, or between two, each given as a
+// step name, a kind and its number in `open --faces|--edges|--points`. Returns 1
+// if the design or a pick has a problem, 2 for a usage mistake.
+int measureDesign(int argc, char** argv) {
+    if (argc != 6 && argc != 9) return usage();
+    auto opened = sb::io::openFile(argv[2]);
+    if (!opened.ok()) {
+        printIssues(opened.issues);
+        return 1;
+    }
+    const auto& doc = *opened.document;
+    auto kernel = sb::kernel::makeOcctKernel();
+    auto solver = sb::sketch::makePlaneGcsSolver();
+    const auto report = doc.regenerate(*kernel, solver.get());
+
+    std::vector<sb::model::MeasurePick> picks;
+    for (int i = 3; i + 2 < argc; i += 3) {
+        const std::string name = argv[i];
+        const std::string_view word = argv[i + 1];
+        const auto kind = word == "face"    ? std::optional(sb::kernel::TopoKind::Face)
+                          : word == "edge"  ? std::optional(sb::kernel::TopoKind::Edge)
+                          : word == "point" ? std::optional(sb::kernel::TopoKind::Vertex)
+                                            : std::nullopt;
+        if (!kind) {
+            std::fprintf(stderr, "error: say face, edge or point after %s, not %s.\n", name.c_str(),
+                         argv[i + 1]);
+            return 2;
+        }
+        const sb::model::Feature* step = nullptr;
+        for (std::size_t k = 0; k < doc.featureCount(); ++k)
+            if (doc.featureAt(k).name() == name) step = &doc.featureAt(k);
+        if (!step) {
+            std::fprintf(stderr, "error: this design has no step called %s.\n", name.c_str());
+            return 1;
+        }
+        const auto* r = report.result(step->id());
+        if (!r || !r->names || r->status != sb::model::FeatureStatus::Ok) {
+            std::fprintf(stderr, "error: %s has no body to measure (it's a sketch, or has a problem).\n",
+                         name.c_str());
+            return 1;
+        }
+        const auto order = sb::model::listingOrder(r->names->elements, *kind);
+        char* end = nullptr;
+        const long n = std::strtol(argv[i + 2], &end, 10);
+        if (end == argv[i + 2] || *end != '\0' || n < 1 || n > static_cast<long>(order.size())) {
+            const char* what = *kind == sb::kernel::TopoKind::Face   ? "faces"
+                               : *kind == sb::kernel::TopoKind::Edge ? "edges"
+                                                                     : "points";
+            std::fprintf(stderr,
+                         "error: %s has %zu %s, numbered 1 to %zu, so there's no %s %s. "
+                         "`sketchbillet_cli open %s --%s %s` lists them.\n",
+                         name.c_str(), order.size(), what, order.size(), argv[i + 1], argv[i + 2], argv[2],
+                         what, name.c_str());
+            return 1;
+        }
+        picks.push_back(
+            {step->id(), sb::model::referTo(*r->names, *kind, order[static_cast<std::size_t>(n - 1)])});
+    }
+    const auto m = sb::model::measure(doc, report, *kernel, picks);
+    for (const auto& line : sb::model::describe(m, doc.lengthUnit())) std::printf("%s\n", line.c_str());
+    printIssues(m.issues);
+    return m.ok() ? 0 : 1;
+}
+
 // Lists SketchBillet's materials, and a design's own ones after them.
 int materials(int argc, char** argv) {
     if (argc > 3) return usage();
@@ -552,11 +635,10 @@ int demo(const std::filesystem::path& out) {
     const auto mp = kernel->massProps(tag.shape);
     std::printf("volume: %.2f mm^3\n", mp.volume);
 
-    auto issues = isThreeMf(out)
-                      ? sb::io::write3mf({{"Tag", kernel->tessellate(tag.shape, MeshQuality{}),
-                                           sb::model::defaultMaterial()}},
-                                         "Demo tag", out)
-                      : kernel->exportFile(tag.shape, formatFor(out), out);
+    auto issues = isThreeMf(out) ? sb::io::write3mf({{"Tag", kernel->tessellate(tag.shape, MeshQuality{}),
+                                                      sb::model::defaultMaterial()}},
+                                                    "Demo tag", out)
+                                 : kernel->exportFile(tag.shape, formatFor(out), out);
     if (!issues.empty()) {
         printIssues(issues);
         return 1;
@@ -596,6 +678,7 @@ int main(int argc, char** argv) {
     if (cmd == "demo" && argc == 3) return demo(argv[2]);
     if (cmd == "open") return openDesign(argc, argv);
     if (cmd == "check") return checkDesign(argc, argv);
+    if (cmd == "measure") return measureDesign(argc, argv);
     if (cmd == "materials") return materials(argc, argv);
     if (cmd == "regress") return regress(argc, argv);
     if (cmd == "plugins") return sb::cli::listPlugins(argc, argv);

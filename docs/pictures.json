@@ -1050,6 +1050,24 @@
       ]
     },
     {
+      "out": "docs/user-guide/images/measure-strap-tag.png",
+      "size": "560x340",
+      "commands": [
+        "run --save s.sb feature.add_box size=60,30,4 name=Plate",
+        "run --open s.sb --save s.sb feature.add_cylinder base=9,15,-1 radius=2.5 height=6 name=Left",
+        "run --open s.sb --save s.sb feature.add_cylinder base=51,15,-1 radius=2.5 height=6 name=Right",
+        "run --open s.sb --save s.sb feature.add_boolean operation=cut a=Plate b=Left name=Half",
+        "run --open s.sb --save s.sb feature.add_boolean operation=cut a=Half b=Right name=Strap"
+      ],
+      "show": [
+        {
+          "file": "s.sb",
+          "step": "Strap",
+          "color": "blue"
+        }
+      ]
+    },
+    {
       "out": "docs/user-guide/images/app-drag-handles.png",
       "size": "1280x800",
       "commands": [

@@ -199,6 +199,21 @@ public:
     ///         with OriginKind::Inside. Diagnostics if a face number isn't in the
     ///         shape or the walls don't fit.
     virtual OpResult shell(const ShapeHandle& shape, const std::vector<int>& faces, double thickness) = 0;
+
+    // Added in Phase 3: measuring.
+
+    /// Finds the shortest distance between two faces, edges or vertices, of one
+    /// shape or of two, and the points where it's shortest.
+    /// @code
+    /// auto box = kernel.makeBox({0, 0, 0}, 10, 20, 30).shape;
+    /// auto gap = kernel.distance({box, TopoKind::Face, 0}, {box, TopoKind::Face, 1});
+    /// @endcode
+    /// @param a The first element.
+    /// @param b The second element.
+    /// @return The distance (mm) and the two nearest points, or diagnostics if an
+    ///         element isn't in its shape. Where many points are nearest (two
+    ///         parallel faces, say), it gives one of them, the same one every time.
+    virtual Closest distance(const ElementOf& a, const ElementOf& b) const = 0;
 };
 
 }  // namespace sb::kernel
