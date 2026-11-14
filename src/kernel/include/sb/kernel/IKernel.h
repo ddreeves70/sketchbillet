@@ -214,6 +214,21 @@ public:
     ///         element isn't in its shape. Where many points are nearest (two
     ///         parallel faces, say), it gives one of them, the same one every time.
     virtual Closest distance(const ElementOf& a, const ElementOf& b) const = 0;
+
+    // Added in Phase 3: importing.
+
+    /// Reads a part from a STEP file's text: its solids, in mm (whatever unit
+    /// the file uses), mended where the file is slightly off.
+    /// @code
+    /// auto part = kernel.importStep(textOfTheFile);
+    /// if (part.ok()) { /* one solid, or several in one shape */ }
+    /// @endcode
+    /// @param text The whole STEP file (ISO 10303-21), as read from disk.
+    /// @return The solid, or several as one shape; a closed surface with no solid
+    ///     is made solid. Diagnostics if it isn't a STEP file
+    ///     (import.step.unreadable), or has no closed solid in it
+    ///     (import.step.no_solid). The same text always gives the same shape.
+    virtual OpResult importStep(std::string_view text) = 0;
 };
 
 }  // namespace sb::kernel

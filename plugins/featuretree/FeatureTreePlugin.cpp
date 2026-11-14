@@ -74,6 +74,8 @@ const char* kindName(const model::Feature& f) {
             return "Fillet";
         case model::FeatureType::Chamfer:
             return "Chamfer";
+        case model::FeatureType::Import:
+            return "Import";
     }
     return "Step";
 }

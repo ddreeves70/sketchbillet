@@ -149,7 +149,10 @@ class PluginContext;
 /// and kernel::Closest), which a kernel must now provide, and sb/model/Measure.h.
 /// Version 51 added the Measure tool's picking: plugin::PickMode::Measure (faces,
 /// edges and points, two at a time), and plugin::Overlay::overBodies.
-inline constexpr int kPluginApiVersion = 51;
+/// Version 52 added importing: kernel::IKernel::importStep(), which a kernel must
+/// now provide; sb/model/Import.h (model::ImportFeature, model::readImportFile());
+/// FeatureType::Import; and the feature.import and feature.reload_import commands.
+inline constexpr int kPluginApiVersion = 52;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

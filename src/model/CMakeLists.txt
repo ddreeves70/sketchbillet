@@ -14,6 +14,7 @@ sb_add_library(sb_model
     Formulas.cpp
     PrintCheck.cpp
     Measure.cpp
+    Import.cpp
   DEPS
     sb::core
     sb::kernel

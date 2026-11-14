@@ -37,6 +37,7 @@
 #include "AppIcons.h"
 #include "AppUi.h"
 #include "Icons.h"
+#include "ImportIcon.h"
 #include "ViewOverlay.h"
 #include "sb/core/Version.h"
 #include "sb/io/SketchBilletFile.h"
@@ -120,6 +121,10 @@ Shell::Shell(plugin::PluginHost& host, AppUi& ui, QSettings& settings, QWidget* 
             QMessageBox::information(this, tr("Check for Printing"), lines.join(QStringLiteral("\n\n")));
         else
             QMessageBox::warning(this, tr("Check for Printing"), lines.join(QStringLiteral("\n\n")));
+    };
+    askImportPath = [this] {
+        return QFileDialog::getOpenFileName(this, tr("Import a part"), QString(),
+                                            tr("STEP, from other CAD programs (*.step *.stp *.STEP *.STP)"));
     };
     askExportPath = [this](const QString& suggested) {
         const QString stl = tr("STL, for 3D printing (*.stl)");
@@ -240,6 +245,14 @@ void Shell::buildMenus() {
     });
     saveAs->setShortcut(QKeySequence::SaveAs);
     file->addSeparator();
+    auto* importAct = file->addAction(tr("&Import..."), this, [this] {
+        const auto path = askImportPath();
+        if (!path.isEmpty()) importPart(path.toStdWString());
+    });
+    importAct->setObjectName(QStringLiteral("sb.shell.import"));
+    importAct->setShortcut(QKeySequence(QStringLiteral("Ctrl+I")));
+    importAct->setIcon(svgIcon(icons::modeling::import_svg));
+    importAct->setStatusTip(tr("Add a part from another CAD program, from a STEP file, as a new body."));
     export_ = file->addAction(tr("&Export..."), this, [this] {
         const auto* doc = host_.documents().find(activeDesign());
         const auto path = askExportPath(qs(doc ? doc->name() : "Untitled") + QStringLiteral(".stl"));
@@ -928,6 +941,33 @@ Diagnostics Shell::openSample(const QString& key) {
     }
     replaceActive(std::move(opened.document), {});  // no file yet: Save asks where
     showMessage(tr("Opened the sample %1. Save it to keep your changes.").arg(it->title));
+    return {};
+}
+
+Diagnostics Shell::importPart(const std::filesystem::path& path) {
+    const DocId doc = activeDesign();
+    auto& docs = host_.documents();
+    const auto* design = docs.find(doc);
+    if (!design) return {};
+    const auto before = design->featureCount();
+    const auto u = path.u8string();
+    auto problems = docs.run(doc, "feature.import", {{"file", std::string(u.begin(), u.end())}});
+    if (!problems.empty()) {
+        showProblems(problems);
+        return problems;
+    }
+    design = docs.find(doc);
+    if (design && design->featureCount() > before) {
+        const auto& step = design->featureAt(design->featureCount() - 1);
+        host_.selection().set(doc, {step.id()});  // Properties shows it, with Reload from file
+        const auto* report = docs.lastRebuild(doc);
+        const auto* r = report ? report->result(step.id()) : nullptr;
+        if (r && r->status != model::FeatureStatus::Ok && !r->issues.empty()) {
+            showProblems(r->issues);  // added, but the file has no part SketchBillet can read
+            return r->issues;
+        }
+    }
+    showMessage(tr("Imported %1").arg(QString::fromStdWString(path.filename().wstring())));
     return {};
 }
 

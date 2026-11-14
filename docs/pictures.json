@@ -1050,6 +1050,18 @@
       ]
     },
     {
+      "out": "docs/user-guide/images/import-app.png",
+      "size": "1280x800",
+      "commands": [
+        "demo tag.step",
+        "run --save strap.sb feature.import file=tag.step"
+      ],
+      "app": {
+        "open": "strap.sb",
+        "select": ["tag"]
+      }
+    },
+    {
       "out": "docs/user-guide/images/app-sample.png",
       "size": "1280x800",
       "commands": [],

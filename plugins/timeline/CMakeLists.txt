@@ -15,5 +15,5 @@ sb_embed_files(sb_plugin_timeline HEADER TimelineIcons.h NAMESPACE sb::icons::ti
         ../modeling/icons/cut.svg ../modeling/icons/intersect.svg ../modeling/icons/move.svg
         ../modeling/icons/extrude.svg ../modeling/icons/fillet.svg ../modeling/icons/chamfer.svg
         ../modeling/icons/revolve.svg ../modeling/icons/hole.svg ../modeling/icons/pattern-linear.svg
-        ../modeling/icons/pattern-circular.svg ../modeling/icons/mirror.svg ../modeling/icons/shell.svg
+        ../modeling/icons/pattern-circular.svg ../modeling/icons/mirror.svg ../modeling/icons/shell.svg ../modeling/icons/import.svg
         ../sketcher/icons/new_sketch.svg ../sketcher/icons/new_plane.svg)

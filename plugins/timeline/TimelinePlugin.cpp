@@ -96,6 +96,8 @@ std::string_view iconOf(const model::Feature& f) {
             return i::new_plane_svg;
         case model::FeatureType::Shell:
             return i::shell_svg;
+        case model::FeatureType::Import:
+            return i::import_svg;
     }
     return {};
 }

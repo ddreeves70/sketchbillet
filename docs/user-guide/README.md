@@ -37,7 +37,8 @@ works in either.
 | Export STL and 3MF (3D printing) and STEP (other CAD programs), from the app's File menu or `sketchbillet_cli` | |
 | Check a part is ready to print: closed all round, no walls too thin | Overhang checks |
 | Measure a face, edge or point, or between two: sizes, distances, angles, hole spacing, in the app (Tools > Measure) or with `sketchbillet_cli` | |
-| Add plugins | Import STEP, STL and 3MF |
+| Import parts from other CAD programs: STEP files, kept inside the design, with Reload from file | Import STL and 3MF |
+| Add plugins | |
 
 ## Contents
 
@@ -62,11 +63,12 @@ works in either.
 19. [Parameters](parameters.md): named values like `wall = 3 mm`, and formulas that use them.
 20. [The timeline](timeline.md): roll back, add steps in the middle, change the order.
 21. [Files](files.md): saving, opening, and exporting for 3D printing.
-22. [Getting ready to print](printing.md): check for gaps and walls too thin to print.
-23. [Measuring](measuring.md): sizes, distances and angles, like how far apart two holes are.
-24. [Plugins](plugins.md): adding features to SketchBillet.
-25. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
-26. [Reference parts](reference-parts.md): twenty real parts to build, from brackets to knobs.
+22. [Importing parts](importing.md): parts from other CAD programs, from STEP files.
+23. [Getting ready to print](printing.md): check for gaps and walls too thin to print.
+24. [Measuring](measuring.md): sizes, distances and angles, like how far apart two holes are.
+25. [Plugins](plugins.md): adding features to SketchBillet.
+26. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
+27. [Reference parts](reference-parts.md): twenty real parts to build, from brackets to knobs.
 
 ## Other guides
 

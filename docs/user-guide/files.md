@@ -84,5 +84,8 @@ wrote plate.step
 
 ## Importing
 
-Opening STEP, STL and 3MF files from other programs is planned (see the
-[user's guide overview](README.md#where-sketchbillet-is-today)).
+Parts made in other CAD programs can be imported from STEP files (`.step` or
+`.stp`): **File > Import...** in the desktop app, or
+[`feature.import`](../cli/commands.md#featureimport). The design keeps a copy of
+the file inside the `.sb`. See [Importing parts](importing.md). STL and 3MF
+import come next.

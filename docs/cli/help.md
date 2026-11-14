@@ -35,6 +35,8 @@ Commands for sketchbillet_cli run:
   feature.add_sketch       Add sketch
   feature.delete           Delete step
   feature.duplicate        Duplicate step
+  feature.import           Import a part
+  feature.reload_import    Reload import from file
   feature.rename           Rename step
   feature.set_edges        Pick edges again
   feature.set_material     Set material

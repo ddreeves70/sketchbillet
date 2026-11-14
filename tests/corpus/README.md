@@ -50,7 +50,8 @@ deterministic).
   `"reversed": true` for an edge the loop runs backwards), `extrude` (`face`, an
   earlier step id; `by`, the direction and distance), `shell` (`body`; `faces`, the face numbers to leave open, from 0 in
   elements() order; `thickness` mm), `mirror` (`body`, an earlier step id; `about`, a point on the plane, default 0, 0, 0;
-  `normal`, the direction square to the plane), `revolve` (`face`; `about`, a
+  `normal`, the direction square to the plane), `step` (`file`: a STEP file to read,
+  from the case's folder, like `files/keychain-tag.step`), `revolve` (`face`; `about`, a
   point on the line, default 0, 0, 0; `axis`, its direction; `angle` in degrees,
   default 360), and `fillet` (`radius`) and
   `chamfer` (`distance`) with `body`, an earlier step id, and `edges`, a list of

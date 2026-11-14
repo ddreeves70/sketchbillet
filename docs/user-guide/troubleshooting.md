@@ -65,6 +65,19 @@ The desktop app shows these in the status bar after **File > Export...**:
 | `export.format` | The file name doesn't end with `.stl`, `.3mf`, `.step` or `.stp` | End the name with `.stl` or `.3mf` (3D printing) or `.step` (other CAD programs) |
 | `export.stl.failed`, `export.step.failed`, `export.cant_write` | The file couldn't be written | Check the folder is still there, that you're allowed to save in it, and that the disk isn't full |
 
+## Import didn't work
+
+These show after **File > Import...** or `feature.import`, or on the Import step
+when it builds:
+
+| Code | Meaning | Fix |
+| --- | --- | --- |
+| `import.format` | The file isn't a STEP file (`.step` or `.stp`) | Export the part from the other program as STEP. STL and 3MF import come later |
+| `import.no_file` | The file isn't where SketchBillet looked (it says where) | Check the file's name and folder. For Reload from file, put the file back where it was imported from |
+| `import.empty`, `import.too_big` | The file is empty, or over 64 MB | Export the part again; for a big one, export just the piece you need |
+| `import.step.unreadable` | The file ends in `.step` but isn't a STEP file SketchBillet can read | Export it again from the other program, as STEP AP203, AP214 or AP242 |
+| `import.step.no_solid` | The file has only surfaces (skin), no solid with an inside | Export the part as a solid body |
+
 ## The print check found a problem
 
 **File > Check for Printing...** and `sketchbillet_cli check` show these. The

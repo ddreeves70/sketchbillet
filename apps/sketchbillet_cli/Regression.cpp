@@ -79,7 +79,8 @@ struct Outcome {
     json actual;               // measured results (empty if a step failed)
 };
 
-Outcome build(IKernel& k, const json& c) {
+// `dir` is the case file's folder: a step op's file is found from there.
+Outcome build(IKernel& k, const json& c, const std::filesystem::path& dir) {
     Outcome out;
     std::map<std::string, ShapeHandle> shapes;
     std::string last;
@@ -118,6 +119,18 @@ Outcome build(IKernel& k, const json& c) {
             kernel::Profile2 profile{loop2(step.at("outer")), {}};
             for (const auto& h : step.value("holes", json::array())) profile.holes.push_back(loop2(h));
             r = k.makeFace(profile, plane);
+        } else if (op == "step") {
+            // A part read from a STEP file, next to the case (like files/tag.step).
+            std::ifstream in(dir / step.at("file").get<std::string>(), std::ios::binary);
+            if (!in) {
+                out.errorStep = id;
+                out.errorCode = "regress.file";
+                out.errorMessage = "Can't open " + step.at("file").get<std::string>() + ".";
+                return out;
+            }
+            std::stringstream text;
+            text << in.rdbuf();
+            r = k.importStep(text.str());
         } else if (op == "extrude") {
             r = k.extrude(shapes.at(step.at("face").get<std::string>()), vec3(step.at("by")));
         } else if (op == "shell") {
@@ -347,12 +360,12 @@ int runRegression(IKernel& k, const std::vector<std::filesystem::path>& paths,
         try {
             auto c = readCase(file);
             const auto start = std::chrono::steady_clock::now();
-            const auto first = build(k, c);
+            const auto first = build(k, c, file.parent_path());
             ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 
             // Rule: kernel operations are deterministic. Build the case a second
             // time and require identical results.
-            const auto second = build(k, c);
+            const auto second = build(k, c, file.parent_path());
             if (first.actual != second.actual || first.errorCode != second.errorCode) {
                 fails.push_back("results differ between two identical runs (not deterministic)");
             }

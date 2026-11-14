@@ -1,0 +1,53 @@
+{
+  "name": "import-step-tag",
+  "description": "The keychain tag (60 x 30 x 4 mm with a 5 mm hole) read from a STEP file written by SketchBillet: the same as building it, 7121.460184 mm^3 = 60*30*4 - pi*2.5^2*4.",
+  "steps": [
+    {
+      "id": "tag",
+      "op": "step",
+      "file": "files/keychain-tag.step"
+    }
+  ],
+  "measure": [
+    {
+      "a": {
+        "face": [
+          0,
+          15,
+          2
+        ]
+      },
+      "b": {
+        "face": [
+          60,
+          15,
+          2
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "valid": true,
+    "volume": 7121.460184,
+    "area": 4343.561945,
+    "bounds": [
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        60.0,
+        30.0,
+        4.0
+      ]
+    ],
+    "solids": 1,
+    "faces": 7,
+    "edges": 15,
+    "vertices": 10,
+    "distances": [
+      60.0
+    ]
+  }
+}
