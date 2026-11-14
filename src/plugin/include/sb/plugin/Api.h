@@ -156,7 +156,8 @@ class PluginContext;
 /// kernel must now provide; sb/kernel/MeshFiles.h (kernel::readStl(), kernel::read3mf());
 /// ImportFormat::Stl and ThreeMf; ImportFeature::unit() and setUnit(); and
 /// feature.import's unit= setting.
-inline constexpr int kPluginApiVersion = 53;
+/// Version 54 added model::Document::latestBody(), and the feature.used_twice warning.
+inline constexpr int kPluginApiVersion = 54;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

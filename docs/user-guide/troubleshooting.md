@@ -20,6 +20,16 @@ Steps that use a failed step show `blocked`: fix the failed step first, and they
 build again. A step is also `blocked` when it uses a step that's turned off
 (`off`): turn that step back on (Edit > Turn on), or change the blocked step.
 
+## A step has a warning
+
+A warning means the step built, but probably not the way you meant:
+
+| Code | Meaning | Fix |
+| --- | --- | --- |
+| `feature.used_twice` | The step uses a body that an earlier step already changed (like a cut from Box1 after Cut1 cut Box1), so it starts again from the body as it was, and makes a second body in the same place | Use the newest step instead, as the warning says (Cut1, not Box1): delete the step and make it again from the right one. See [Combining bodies](combining.md#chains-of-boolean-steps) |
+| `extrude.cut_missed` | A cut didn't reach the body, so nothing was cut | Flip it, to go into the body, or make it longer |
+| `dimension.formula` | A formula doesn't work any more (a parameter was deleted, say), so the number keeps its last value | Fix the formula, or the parameter it uses |
+
 ## A command was typed wrong
 
 `sketchbillet_cli run` checks the settings first and changes nothing if one is wrong.

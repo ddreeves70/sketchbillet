@@ -1811,8 +1811,8 @@ $ sketchbillet_cli run --open pocket.sb feature.add_extrude sketch=Sketch1 dista
 pocket: 4 steps
   Box1         ok  volume 8000.00 mm^3
   Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
-  Extrude1     ok  volume 7200.00 mm^3  mass 8.93 g (PLA)
-  Extrude2     ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+  Extrude1     ok  volume 7200.00 mm^3
+  Extrude2     ok  volume 7200.00 mm^3  mass 8.93 g (PLA)
     warning [extrude.cut_missed]: Extrude2 doesn't reach the body, so nothing was cut. Try Flip, to go into it, or a longer distance.
 ```
 
@@ -2238,16 +2238,19 @@ tray: 2 steps
   Shell1       ok  volume 10128.00 mm^3  mass 12.56 g (PLA)
 ```
 
-Another shell of the same box, with the top and the bottom open (faces 1 and 6),
+A shell of a box the same size, with the top and the bottom open (faces 1 and 6),
 is a square tube:
 24000 − 36 × 26 × 20 = 5280 mm³:
 
 <!-- cli-example -->
 ```console
-$ sketchbillet_cli run --open tray.sb --save tube.sb feature.add_shell body=Box1 faces=1,6 name=Tube
-tray: 3 steps
+$ sketchbillet_cli run --save tube.sb feature.add_box size=40,30,20
+tube: 1 step
+  Box1         ok  volume 24000.00 mm^3  mass 29.76 g (PLA)
+wrote tube.sb
+$ sketchbillet_cli run --open tube.sb --save tube.sb feature.add_shell body=Box1 faces=1,6 name=Tube
+tube: 2 steps
   Box1         ok  volume 24000.00 mm^3
-  Shell1       ok  volume 7152.00 mm^3  mass 8.87 g (PLA)
   Tube         ok  volume 5280.00 mm^3  mass 6.55 g (PLA)
 wrote tube.sb
 ```
@@ -2407,11 +2410,11 @@ have, gets a message that says what to change:
 
 <!-- cli-example exit=1 -->
 ```console
-$ sketchbillet_cli run --open block.sb feature.add_fillet body=Extrude1 edges=9 radius=12
+$ sketchbillet_cli run --open block.sb feature.add_fillet body=Fillet1 edges=5 radius=12
 block: 4 steps
   Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
   Extrude1     ok  volume 8000.00 mm^3
-  Fillet1      ok  volume 7845.49 mm^3  mass 9.73 g (PLA)
+  Fillet1      ok  volume 7845.49 mm^3
   Fillet2      failed
     error [kernel.fillet.failed]: The edges couldn't be rounded. The radius may be too big for the faces next to them: try a smaller one.
 ```
@@ -2437,15 +2440,17 @@ back along both faces it joined. It works like [`feature.add_fillet`](#featuread
 | `distance` | number (mm) | no | How far back from each edge the bevel starts, on both faces. Default `1` |
 | `name` | text | no | Step name. Default `Chamfer1`, `Chamfer2`, ... |
 
-The block's four upright corners, edges 5 to 8, beveled by 2 mm:
+A 40 × 20 × 10 mm box's four upright corners, edges 5 to 8, beveled by 2 mm:
 
 <!-- cli-example -->
 ```console
-$ sketchbillet_cli run --open block.sb feature.add_chamfer body=Extrude1 edges=5,6,7,8 distance=2
-block: 4 steps
-  Sketch1      ok  4 lines, 8 constraints, free to move 4 ways
-  Extrude1     ok  volume 8000.00 mm^3
-  Fillet1      ok  volume 7845.49 mm^3  mass 9.73 g (PLA)
+$ sketchbillet_cli run --save bevel.sb feature.add_box size=40,20,10
+bevel: 1 step
+  Box1         ok  volume 8000.00 mm^3  mass 9.92 g (PLA)
+wrote bevel.sb
+$ sketchbillet_cli run --open bevel.sb feature.add_chamfer body=Box1 edges=5,6,7,8 distance=2
+bevel: 2 steps
+  Box1         ok  volume 8000.00 mm^3
   Chamfer1     ok  volume 7920.00 mm^3  mass 9.82 g (PLA)
 ```
 

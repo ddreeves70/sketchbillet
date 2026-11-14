@@ -84,6 +84,17 @@ A Boolean step can use the result of another Boolean step. The
 [desk organizer](../tutorials/02-desk-organizer.md) joins a cup to a base, then
 cuts the inside of the cup, then cuts a slot: each step uses the one before.
 
+**Use the newest step.** To cut a second hole in a box you've already cut once,
+cut it from **Cut1** (the box with the first hole), not from **Box1**. Box1 is the
+box as it was *before* Cut1, so a cut from Box1 starts again from a box with no
+hole, and makes a second box in the same place. SketchBillet helps:
+
+- In the desktop app, if you pick Box1 in the feature tree, **Combine** uses the
+  step Box1 has become (Cut1), and the status bar says so. Clicking the part in
+  the 3D view always picks the newest step.
+- A step that still uses a body another step already changed gets a warning that
+  says which step to use instead (`feature.used_twice`).
+
 ## Tips
 
 - **Bodies that don't touch:** a union of two bodies that don't touch still makes

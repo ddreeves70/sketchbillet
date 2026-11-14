@@ -738,6 +738,20 @@ void Shell::runAction(const plugin::ActionSpec& spec) {
             return;
         }
         for (std::size_t i = 0; i < picked.size(); ++i) args[spec.fromSelection[i]] = picked[i];
+        // The body to change (a Boolean's A, a Move's body), picked in the feature
+        // tree as a step a later step already changed (Box1, now part of Cut1): the
+        // student means the body as it is now, so use the step it has become.
+        const auto* design = docs.find(doc);
+        for (std::size_t i = 0; design && i < picked.size(); ++i) {
+            const auto& arg = spec.fromSelection[i];
+            if (arg != "a" && arg != "body") continue;
+            const FeatureId now = design->latestBody(picked[i]);
+            if (now == picked[i] || std::find(picked.begin(), picked.end(), now) != picked.end()) continue;
+            args[arg] = now;
+            showMessage(
+                tr("%1 is part of %2 now, so %3 uses %2.")
+                    .arg(qs(design->find(picked[i])->name()), qs(design->find(now)->name()), qs(spec.text)));
+        }
     }
     if (!spec.fromSelectionList.empty()) {
         if (picked.empty() || host_.selection().doc() != doc) {
