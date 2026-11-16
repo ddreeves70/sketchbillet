@@ -108,8 +108,8 @@ Phase 2 started Oct 31, 2026, with the parameter table.
 
 ### Phase 4: v0.2 Assemblies and drawings
 
-- Multi-component documents, joints (rigid, revolute, slider), interference check, exploded view.
-- Groups of bodies that move together, as parts placed in an assembly (needs its own design page first).
+- Multi-component documents, joints (rigid, revolute, slider), interference check, exploded view. (Planned on [Assemblies](assemblies.md), drafted Nov 13, 2026: parts inside the assembly or linked to their own files, joints placed exactly along chains, loops later.)
+- Groups of bodies that move together, as parts placed in an assembly ([Make Parts from Bodies](assemblies.md#9-parts-from-bodies)).
 - Drawings: base/projected/section views, dimensions, BOM, PDF and DXF export.
 - More features: sweep, loft, draft, rib, thread.
 - **Gate:** a multi-part project goes from model to printed drawing.

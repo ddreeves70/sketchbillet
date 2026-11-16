@@ -172,5 +172,6 @@ when it changes: a Move whose input isn't used up.
 ## 5. Groups that move together (Phase 4)
 
 Moving several bodies as one is really a *part* placed in an *assembly*
-(Phase 4: assemblies and drawings). It needs its own design page first: what's
-grouped (bodies, not steps), how it's placed, and how it's saved.
+(Phase 4: assemblies and drawings). [Assemblies](assemblies.md#9-parts-from-bodies)
+plans it: **Make Parts from Bodies** turns a part's bodies into parts of a new
+assembly, each placed where it was, ready to join.
