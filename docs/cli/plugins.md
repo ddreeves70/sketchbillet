@@ -94,30 +94,30 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command sketch.trim
            command timeline.move
            command timeline.rollback
-           action  Create > Box  (feature.add_box)
-           action  Create > Cylinder  (feature.add_cylinder)
-           action  Combine > Union  (feature.add_boolean)
-           action  Combine > Cut  (feature.add_boolean)
-           action  Combine > Intersect  (feature.add_boolean)
-           action  Modify > Move  (feature.add_move)
-           action  Modify > Linked Copy  (feature.add_move)
-           action  Modify > Unlink Copy  (feature.unlink)
-           action  Create > Extrude  (feature.add_extrude)
-           action  Create > Revolve  (feature.add_revolve)
-           action  Create > Hole  (feature.add_hole)
-           action  Create > Hole from two edges  (feature.add_hole)
-           action  Create > Linear pattern  (feature.add_pattern)
-           action  Create > Circular pattern  (feature.add_pattern)
-           action  Create > Mirror  (feature.add_mirror)
-           action  Modify > Shell  (feature.add_shell)
-           action  Modify > Fillet  (feature.add_fillet)
-           action  Modify > Chamfer  (feature.add_chamfer)
-           action  Edit > Pick edges  (check mark)
-           action  Edit > Duplicate step  (feature.duplicate)
-           action  Edit > Turn off  (feature.suppress)
-           action  Edit > Turn on  (feature.suppress)
-           action  Edit > New folder  (folder.add)
-           action  Edit > Delete step  (feature.delete)
+           action  Model/Create > Box  (feature.add_box)
+           action  Model/Create > Cylinder  (feature.add_cylinder)
+           action  Model/Combine > Union  (feature.add_boolean)
+           action  Model/Combine > Cut  (feature.add_boolean)
+           action  Model/Combine > Intersect  (feature.add_boolean)
+           action  Model/Modify > Move  (feature.add_move)
+           action  Model/Modify > Linked Copy  (feature.add_move)
+           action  Model/Modify > Unlink Copy  (feature.unlink)
+           action  Model/Create > Extrude  (feature.add_extrude)
+           action  Model/Create > Revolve  (feature.add_revolve)
+           action  Model/Create > Hole  (feature.add_hole)
+           action  Model/Create > Hole from two edges  (feature.add_hole)
+           action  Model/Pattern > Linear pattern  (feature.add_pattern)
+           action  Model/Pattern > Circular pattern  (feature.add_pattern)
+           action  Model/Pattern > Mirror  (feature.add_mirror)
+           action  Model/Modify > Shell  (feature.add_shell)
+           action  Model/Modify > Fillet  (feature.add_fillet)
+           action  Model/Modify > Chamfer  (feature.add_chamfer)
+           action  Model/Select > Pick edges  (check mark)
+           action  Model/Steps > Duplicate step  (feature.duplicate)
+           action  Model/Steps > Turn off  (feature.suppress)
+           action  Model/Steps > Turn on  (feature.suppress)
+           action  Model/Steps > New folder  (folder.add)
+           action  Model/Steps > Delete step  (feature.delete)
 ```
 
 With the plugins in your build folder (the plugin guide's Hello plugin is one):
@@ -128,7 +128,7 @@ $ sketchbillet_cli plugins --plugins build/dev/sketchbillet-plugins
 loaded   example.ruler 1.0.0  Ruler
            tier    foundation
            service example.ruler/1
-           action  View > Ruler shows inches  (check mark)
+           action  View/Display > Ruler shows inches  (check mark)
 loaded   example.tape 1.0.0  Tape
            tier    tools
            log: The ruler shows lengths in in.
@@ -189,34 +189,34 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command sketch.trim
            command timeline.move
            command timeline.rollback
-           action  Create > Box  (feature.add_box)
-           action  Create > Cylinder  (feature.add_cylinder)
-           action  Combine > Union  (feature.add_boolean)
-           action  Combine > Cut  (feature.add_boolean)
-           action  Combine > Intersect  (feature.add_boolean)
-           action  Modify > Move  (feature.add_move)
-           action  Modify > Linked Copy  (feature.add_move)
-           action  Modify > Unlink Copy  (feature.unlink)
-           action  Create > Extrude  (feature.add_extrude)
-           action  Create > Revolve  (feature.add_revolve)
-           action  Create > Hole  (feature.add_hole)
-           action  Create > Hole from two edges  (feature.add_hole)
-           action  Create > Linear pattern  (feature.add_pattern)
-           action  Create > Circular pattern  (feature.add_pattern)
-           action  Create > Mirror  (feature.add_mirror)
-           action  Modify > Shell  (feature.add_shell)
-           action  Modify > Fillet  (feature.add_fillet)
-           action  Modify > Chamfer  (feature.add_chamfer)
-           action  Edit > Pick edges  (check mark)
-           action  Edit > Duplicate step  (feature.duplicate)
-           action  Edit > Turn off  (feature.suppress)
-           action  Edit > Turn on  (feature.suppress)
-           action  Edit > New folder  (folder.add)
-           action  Edit > Delete step  (feature.delete)
+           action  Model/Create > Box  (feature.add_box)
+           action  Model/Create > Cylinder  (feature.add_cylinder)
+           action  Model/Combine > Union  (feature.add_boolean)
+           action  Model/Combine > Cut  (feature.add_boolean)
+           action  Model/Combine > Intersect  (feature.add_boolean)
+           action  Model/Modify > Move  (feature.add_move)
+           action  Model/Modify > Linked Copy  (feature.add_move)
+           action  Model/Modify > Unlink Copy  (feature.unlink)
+           action  Model/Create > Extrude  (feature.add_extrude)
+           action  Model/Create > Revolve  (feature.add_revolve)
+           action  Model/Create > Hole  (feature.add_hole)
+           action  Model/Create > Hole from two edges  (feature.add_hole)
+           action  Model/Pattern > Linear pattern  (feature.add_pattern)
+           action  Model/Pattern > Circular pattern  (feature.add_pattern)
+           action  Model/Pattern > Mirror  (feature.add_mirror)
+           action  Model/Modify > Shell  (feature.add_shell)
+           action  Model/Modify > Fillet  (feature.add_fillet)
+           action  Model/Modify > Chamfer  (feature.add_chamfer)
+           action  Model/Select > Pick edges  (check mark)
+           action  Model/Steps > Duplicate step  (feature.duplicate)
+           action  Model/Steps > Turn off  (feature.suppress)
+           action  Model/Steps > Turn on  (feature.suppress)
+           action  Model/Steps > New folder  (folder.add)
+           action  Model/Steps > Delete step  (feature.delete)
 loaded   example.hello 1.0.0  Hello
            tier    tools
            command example.hello.add_cube
-           action  Create > Cube (Hello)  (example.hello.add_cube)
+           action  Model/Create > Cube (Hello)  (example.hello.add_cube)
 ```
 
 ## When a plugin doesn't load
@@ -235,7 +235,7 @@ failed   test.badname 1.0.0  Test badname
 failed   test.noentry 1.0.0  Test noentry
            error [plugin.library_bad]: The Test noentry plugin's program file isn't a SketchBillet plugin (it has no SB_PLUGIN_ENTRY). Ask its author for a fixed version. (...)
 failed   test.oldapi 1.0.0  Test oldapi
-           error [plugin.api_version]: The Test oldapi plugin was built for a different version of SketchBillet (plugin API 0; this SketchBillet uses 54). Get a version of the plugin made for this SketchBillet. (...)
+           error [plugin.api_version]: The Test oldapi plugin was built for a different version of SketchBillet (plugin API 0; this SketchBillet uses 55). Get a version of the plugin made for this SketchBillet. (...)
 ```
 
 Every reason and its fix is listed in the plugin guide's

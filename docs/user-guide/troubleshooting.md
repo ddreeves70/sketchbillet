@@ -18,7 +18,7 @@ Untitled: 1 step
 
 Steps that use a failed step show `blocked`: fix the failed step first, and they
 build again. A step is also `blocked` when it uses a step that's turned off
-(`off`): turn that step back on (Edit > Turn on), or change the blocked step.
+(`off`): turn that step back on (Steps > Turn on), or change the blocked step.
 
 ## A step has a warning
 
@@ -107,11 +107,11 @@ when it builds:
 
 ## Paste didn't work
 
-The desktop app shows these in the status bar after **Edit > Paste**:
+The desktop app shows these in the status bar after **Steps > Paste steps**:
 
 | Code | Meaning | Fix |
 | --- | --- | --- |
-| `paste.not_steps` | What's on the clipboard isn't steps copied from SketchBillet | Pick steps in the feature tree, Edit > Copy, then paste |
+| `paste.not_steps` | What's on the clipboard isn't steps copied from SketchBillet | Pick steps in the feature tree, Steps > Copy steps, then paste |
 | `paste.too_new` | The steps were copied from a newer SketchBillet | Update SketchBillet, then paste again |
 | `paste.damaged` | The copied text was changed or cut short | Copy the steps again |
 | `paste.unknown_step` | A copied step is a kind this SketchBillet doesn't know | Update SketchBillet, or add the plugin that makes that kind of step |

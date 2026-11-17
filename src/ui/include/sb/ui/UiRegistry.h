@@ -31,7 +31,7 @@ struct PanelSpec {
     QString title{};   ///< The panel's tab title, e.g. "Feature tree".
     PanelArea area = PanelArea::Left;    ///< Where it docks by default.
     std::function<QWidget*()> create{};  ///< Makes the panel's widget. SketchBillet owns the widget.
-    /// The student can open more than one of this panel (Window > New ...), like
+    /// The student can open more than one of this panel (Panels > New ..., on the View tab), like
     /// a second viewer. Each one is made by its own call to create().
     bool allowMultiple = false;
     /// Starts closed: the student opens it from the Window menu (or the plugin
@@ -40,7 +40,7 @@ struct PanelSpec {
     /// Floats over the 3D view, see-through, at its top left, like the browser
     /// in Fusion, instead of taking room beside it. The student can fold it up to
     /// its title, resize it, or dock it as an ordinary panel (the button on its
-    /// title bar, or **Window > *title* over the view**); SketchBillet remembers which.
+    /// title bar, or **Panels > *title* over the view** on the View tab); SketchBillet remembers which.
     /// While it floats, it's as tall as the widget's `sizeHint()` (so it covers
     /// no more of the view than its rows need; call `updateGeometry()` when they
     /// change), up to the size the student drags it to.

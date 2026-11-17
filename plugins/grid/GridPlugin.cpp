@@ -10,6 +10,7 @@
 #include <sstream>
 #include <string>
 
+#include "GridIcons.h"
 #include "sb/plugin/Events.h"
 #include "sb/ui/UiRegistry.h"
 
@@ -25,7 +26,7 @@ constexpr const char* kManifest = R"({
   "id": "sb.grid",
   "name": "Grid",
   "version": "0.1.0",
-  "description": "The grid: its View menu items, its drawing in the viewers, and snapping to it.",
+  "description": "The grid: its View tab items, its drawing in the viewers, and snapping to it.",
   "tier": "foundation",
   "requires": ["sb.viewoptions"]
 })";
@@ -125,14 +126,18 @@ std::vector<viewoptions::OptionSpec> gridOptions() {
          .tip = "Show or hide the grid in the views.",
          .kind = OptionKind::Flag,
          .initial = true,
-         .shortcut = "Ctrl+G"},
+         .shortcut = "Ctrl+G",
+         .button = true,
+         .icon = std::string(icons::grid::grid_svg)},
         {.id = "sb.grid.snap",
          .text = "Snap to grid",
          .group = "Grid",
          .tip = "Make points you pick with the mouse jump to the nearest grid crossing.",
          .kind = OptionKind::Flag,
          .initial = false,
-         .shortcut = "Ctrl+Shift+G"},
+         .shortcut = "Ctrl+Shift+G",
+         .button = true,
+         .icon = std::string(icons::grid::snap_svg)},
         {.id = "sb.grid.style",
          .text = "Grid style",
          .group = "Grid",

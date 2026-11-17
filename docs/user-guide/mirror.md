@@ -27,7 +27,7 @@ And it reflects across:
 1. Model half the part, on one side of the plane. The easy way: start it at
    x = 0, so the YZ plane is its cut side.
 2. Pick the body (or the steps to mirror, like a hole) in the feature tree.
-3. Click **Mirror** on the toolbar, or **Create > Mirror**. It mirrors across YZ.
+3. Click **Mirror** on the toolbar, or **Pattern > Mirror**. It mirrors across YZ.
 4. Pick Mirror1 to change it in **Properties**:
 
 ![Mirror1 picked: Properties shows what it mirrors, the plane and the offset](images/app-mirror.png)

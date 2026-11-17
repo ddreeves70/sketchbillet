@@ -22,13 +22,14 @@ dimensions, and the solver makes it exact.
    tree and use **Sketch > Edit sketch** (Ctrl+K); it starts with **Select**, for
    picking and dragging (see below). Edit sketch is grey unless exactly one
    sketch is picked, and while you're already editing one.
-2. Pick a tool in **Sketch > Draw**, then click in the view. The status bar says
+2. Pick a tool in **Draw**, then click in the view. The status bar says
    what to click next. The tools (and **Finish sketch**) are grey until you're
-   editing a sketch. While you edit, the toolbar changes to just the sketch
-   buttons (**Finish sketch**, **Select**, **Line**, **Rectangle**, **Round
-   corner**, **Trim**, **Circle**,
-   **Arc**, **Point** and the spline tools); when you finish, the 3D buttons (**Box**, **Cylinder** and the
-   rest) come back.
+   editing a sketch. While you edit, the **Sketch** tab takes the Model tab's
+   place, with **Draw** (**Line**, **Rectangle**, **Circle**, **Arc**,
+   **Spline**, and **Point** and **Fit spline** under **Draw**), **Edit**
+   (**Select**, **Round corner**, **Trim**), **Constrain**, **Dimension**, and
+   the green **Finish sketch** at the right. When you finish, the Model tab comes
+   back.
 
 | Tool | Click |
 | --- | --- |
@@ -44,7 +45,7 @@ dimensions, and the solver makes it exact.
 
 3. **Escape** steps back one thing at a time: it stops the shape you're
    drawing, then switches to **Select**, then lets go of what's picked, then
-   finishes the sketch. **Sketch > Finish sketch** finishes straight away. After
+   finishes the sketch. **Finish sketch** finishes straight away. After
    that, clicks pick steps and turn the view again.
 
 While drawing:
@@ -63,9 +64,9 @@ While drawing:
   `Tangent` constraint.
 - **The hint.** Before you click, a small orange **H**, **V**, **T** or **On**
   beside the mouse shows what will be added.
-- **Drawing freely.** Turn off **Sketch > Add constraints while drawing** to put
+- **Drawing freely.** Turn off **Constrain > Add constraints while drawing** to put
   ends exactly where you click, with nothing added (joins at points still snap).
-- **Snapping to the grid.** With **View > Snap to grid** on, clicks land on the
+- **Snapping to the grid.** With **Grid > Snap to grid** on, clicks land on the
   grid's crossings (when they don't land on a point, line or circle).
 - **Undo.** Each line, circle, arc or point is one undo step, with the constraints
   added with it.
@@ -93,7 +94,7 @@ A closed shape inside another one is a **hole** in it (like the plate's circle).
 
 ![A sketch that isn't fully constrained: the bottom line is fixed (black), everything else can still move (blue)](images/app-sketch-free.png)
 
-With **Select** (the arrow on the toolbar, or **Sketch > Draw > Select**):
+With **Select** (the arrow in the Sketch tab's **Edit** panel):
 
 - **Pick** a line, circle, arc or point by clicking it; it turns orange. Click
   near an end or a center to pick just that point. Hold **Ctrl** (or Shift) to
@@ -113,7 +114,7 @@ With **Select** (the arrow on the toolbar, or **Sketch > Draw > Select**):
     `coincident` constraint: the quick way to close a gap in a shape.
 
   Each drag is one undo step. Press **Escape** while dragging to put it back.
-- **Delete** (the key, or **Sketch > Delete picked**) deletes the picked lines,
+- **Delete** (the key, or **Edit > Delete picked**) deletes the picked lines,
   circles, arcs and points, with their constraints. A picked end loses its
   constraints instead (it isn't a thing of its own). While you edit a sketch,
   the Delete key works on the sketch, not on the steps in the feature tree.
@@ -136,7 +137,8 @@ them. Its **degree** says how smooth it is: 3 (the usual) bends smoothly
 everywhere; 1 is just straight lines from point to point. A **closed** spline is
 a smooth loop, with no ends.
 
-There are two ways to draw one, both on the sketch toolbar:
+There are two ways to draw one, both in the Sketch tab's **Draw** panel (**Fit
+spline** is under **Draw**):
 
 | Button | Click | The curve |
 | --- | --- | --- |
@@ -203,8 +205,8 @@ x,y
 30,0
 ```
 
-- While editing a sketch, use **Sketch > Import spline through points...** (the
-  curve goes through every point) or **Sketch > Import spline with control
+- While editing a sketch, use **Draw > Import spline through points...** (the
+  curve goes through every point) or **Draw > Import spline with control
   points...** (the points are its control points), and pick the file.
 - The numbers are taken to be in the design's unit (mm, or the one picked in
   **Document settings**).
@@ -228,13 +230,13 @@ x,y
 
 ![Editing the plate: every constraint is labeled beside what it's on, and the Sketch panel lists them with their numbers](images/app-sketch-edit.png)
 
-Pick what you want to constrain with **Select**, then click a button. The
-buttons only show when they fit what's picked: pick one line and you get
-**Horizontal**, **Vertical**, **Dimension**, **Width** and **Height**; pick two
-lines and you get **Parallel**, **Perpendicular**, **Equal** and an angle
-**Dimension**. (All of them are in **Sketch > Constrain** and **Sketch >
-Dimension** too, greyed out when they don't fit.) If the buttons don't fit across
-the window, the rest go on a second row.
+Pick what you want to constrain with **Select**, then click a constraint. The
+most-used are buttons in the **Constrain** panel (**Coincident**,
+**Horizontal**, **Vertical**, **Equal**) and the **Dimension** panel; click
+**Constrain** or **Dimension** under the panel for all of them. Each one is grey
+until it fits what's picked: pick one line and you can use **Horizontal**,
+**Vertical**, **Dimension**, **Width** and **Height**; pick two lines and you can
+use **Parallel**, **Perpendicular**, **Equal** and an angle **Dimension**.
 
 | Button | Pick | It keeps true |
 | --- | --- | --- |

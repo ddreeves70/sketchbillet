@@ -75,7 +75,7 @@ Open `first.stl` in a slicer to print it, or in any 3D viewer to look at it.
 
 ## Or use the desktop app
 
-Everything above also works in the desktop app, `sketchbillet`, with menus instead of
+Everything above also works in the desktop app, `sketchbillet`, with a toolbar instead of
 commands: see [The desktop app](desktop-app.md). To see finished parts and how
 they're made, open one from **File > Open Sample**.
 

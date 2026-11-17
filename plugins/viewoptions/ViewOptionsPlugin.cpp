@@ -20,6 +20,7 @@
 #include <map>
 #include <memory>
 
+#include "ViewOptionsIcons.h"
 #include "sb/plugin/Events.h"
 #include "sb/ui/UiRegistry.h"
 
@@ -353,7 +354,10 @@ void registerViewOptions(plugin::PluginContext& ctx) {
     ui->addPanel(std::move(panel));
     ctx.addAction({.id = "sb.viewoptions.show",
                    .text = "View options...",
-                   .menu = "View",
+                   .menu = "View/Display",
+                   .toolbar = true,
+                   .buttonText = "View options",
+                   .icon = std::string(icons::viewoptions::view_options_svg),
                    .tip = "Open the panel with every view option, like the grid and the axes.",
                    .run = [ui] { ui->showPanel("sb.viewoptions.panel"); }});
 }

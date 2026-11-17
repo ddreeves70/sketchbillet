@@ -30,10 +30,10 @@ void registerHello(plugin::PluginContext& ctx) {
          {{"size", model::ArgType::Number, "Length of each side, in mm. Default 20 mm.", false, {}}}},
         &makeAddCube);
 
-    // 2. A menu item in the desktop app that runs the command.
+    // 2. A dropdown item in the desktop app that runs the command.
     ctx.addAction({.id = "example.hello.cube",
                    .text = "Cube (Hello)",
-                   .menu = "Create",
+                   .menu = "Model/Create",
                    .command = "example.hello.add_cube",
                    .tip = "Add a 20 mm cube from the Hello plugin."});
 

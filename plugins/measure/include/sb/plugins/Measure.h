@@ -12,7 +12,7 @@
 
 namespace sb::plugins {
 
-/// Gives the sb.measure plugin: Tools > Measure (Ctrl+Shift+I) switches the
+/// Gives the sb.measure plugin: Inspect > Measure (Ctrl+Shift+I) switches the
 /// viewers to picking faces, edges and points (plugin::PickMode::Measure). The
 /// Measure panel shows the size of the one picked, or the distance and angle
 /// between two (model::measure()), and every viewer draws a line between the

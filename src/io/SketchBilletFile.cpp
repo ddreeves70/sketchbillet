@@ -1656,7 +1656,7 @@ StepsResult stepsFromText(std::string_view text) {
     if (j.is_discarded() || !j.is_object() || j.value("format", "") != kStepsFormat) {
         return fail("paste.not_steps",
                     "What's on the clipboard isn't steps copied from SketchBillet. Copy steps in "
-                    "the feature tree first (Edit > Copy), then paste.");
+                    "the feature tree first (Steps > Copy steps, or Ctrl+C), then paste.");
     }
     if (j.value("version", 0) > 1) {
         return fail("paste.too_new",

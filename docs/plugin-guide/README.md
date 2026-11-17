@@ -59,12 +59,12 @@ SketchBillet grows. Every change to the plugin API updates it in the same pull r
 | Commands | Works |
 | Events: design opened, closed, changed, rebuilt, active design, setting changed | Works |
 | Menu items and toolbar buttons (actions) | Works |
-| Check-mark menu items, submenus, status-bar items | Works |
+| Toolbar tabs, panels and dropdowns, check-mark items, submenus, status-bar items | Works |
 | Plugin settings SketchBillet remembers | Works |
 | The shared selection | Works |
 | The grid (settings and snapping), from the `sb.grid` plugin | Works in the desktop app |
 | Drawing in the viewer (overlays) | Works |
-| View options (menu items and a panel for what the viewer shows) | Works in the desktop app |
+| View options (View tab items and a panel for what the viewer shows) | Works in the desktop app |
 | Tiers, and tiers a plugin adds | Works: [plugin.json](manifest.md#tiers) |
 | Panels in the desktop app | Works: the feature tree, Properties and the viewer are plugins |
 | Sharing services and events between plugins | Works: [Share something](sharing.md) |

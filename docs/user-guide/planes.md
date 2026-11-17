@@ -21,9 +21,11 @@ open along its spine.
 
 ## In the desktop app
 
-1. Pick what the plane starts from: a flat face (with **Edit > Pick faces** on),
+1. Pick what the plane starts from: a flat face (picked as for
+   [New sketch on a face](sketch-on-face.md)),
    a construction plane in the feature tree, or nothing for the ground.
-2. Click **Plane** on the toolbar (**Sketch > New plane**). It's 10 mm off the
+2. Click **Sketch** under the Sketch panel, then **New plane** (**Sketch > New
+   plane**). It's 10 mm off the
    face or plane you picked, or 20 mm above the ground. It's drawn as an outlined
    square with its name; the picked one is orange.
 3. Change it in **Properties**:

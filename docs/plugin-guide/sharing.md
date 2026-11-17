@@ -73,7 +73,7 @@ struct UnitChanged {
 
 ```cpp
 // The Ruler plugin: shares a ruler that shows lengths in inches or mm. The
-// student picks with View > Ruler shows inches, and SketchBillet remembers it.
+// student picks with Display > Ruler shows inches, and SketchBillet remembers it.
 #include <string>
 
 #include "example/ruler/Ruler.h"
@@ -102,10 +102,10 @@ void registerRuler(sb::plugin::PluginContext& ctx) {
     // Step 1, registering: offer the ruler to every other plugin.
     ctx.provide<IRuler>(ruler);
 
-    // A View menu item with a check mark. Clicking it changes the setting.
+    // An item on the View tab with a check mark. Clicking it changes the setting.
     ctx.addAction({.id = "example.ruler.inches",
                    .text = "Ruler shows inches",
-                   .menu = "View",
+                   .menu = "View/Display",
                    .tip = "Show lengths in inches instead of mm.",
                    .run = [&settings] { settings.set("unit", ruler.inches ? "mm" : "in"); },
                    .checked = [] { return ruler.inches; }});
@@ -143,7 +143,7 @@ Ruler also lets the student pick its unit, and remembers the choice:
 
 - `ctx.settings()` is the plugin's own settings. `settings.text("unit", "in")` reads
   the saved unit, or `"in"` if there isn't one yet. SketchBillet keeps settings between runs.
-- The menu item has a `run` function instead of a command, because picking a unit
+- The item has a `run` function instead of a command, because picking a unit
   doesn't change a design. Its `checked` function puts a check mark next to it.
 - `settings.set(...)` sends a `sb.SettingChanged` event. Ruler listens for its own
   `unit` setting, changes the ruler, and tells everyone the new unit.
@@ -237,7 +237,7 @@ target_include_directories(example_ruler_api INTERFACE "${CMAKE_CURRENT_SOURCE_D
 sb_add_plugin(sb_example_tape_plugin MANIFEST tape/plugin.json SOURCES tape/tape.cpp DEPS example_ruler_api)
 ```
 
-Build SketchBillet, then list the plugins. Ruler offers its service and its View menu
+Build SketchBillet, then list the plugins. Ruler offers its service and its View tab
 item; Tape's log shows it heard the event and measured with the ruler:
 
 <!-- cli-example -->
@@ -247,7 +247,7 @@ $ sketchbillet_cli plugins --plugins build/dev/sketchbillet-plugins
 loaded   example.ruler 1.0.0  Ruler
            tier    foundation
            service example.ruler/1
-           action  View > Ruler shows inches  (check mark)
+           action  View/Display > Ruler shows inches  (check mark)
 loaded   example.tape 1.0.0  Tape
            tier    tools
            log: The ruler shows lengths in in.

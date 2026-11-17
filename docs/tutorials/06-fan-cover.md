@@ -161,7 +161,7 @@ cover and into the fan.
   All nine change.
 - A 4 × 4 grid instead: change `Grille`'s count and count2 to 4, and its spacing
   to 7 mm. Remember the first hole is at (−10, −10).
-- In the desktop app, pick `Air` and click **Circle**: a ring of air holes round
+- In the desktop app, pick `Air` and click **Around**: a ring of air holes round
   the middle instead of a grid.
 
 ## What you learned

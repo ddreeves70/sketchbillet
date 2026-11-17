@@ -144,7 +144,7 @@ void declares(plugin::PluginContext& ctx) {
 
 }  // namespace
 
-TEST_CASE("addOption gives each option its View menu items", "[viewoptions]") {
+TEST_CASE("addOption gives each option its items on the View tab", "[viewoptions]") {
     plugin::PluginHost host;
     host.addBuiltin(plugins::viewOptionsPlugin());
     host.addBuiltin(
@@ -163,9 +163,9 @@ TEST_CASE("addOption gives each option its View menu items", "[viewoptions]") {
     CHECK(ids == std::vector<std::string>{"test.views.on", "test.views.size.1", "test.views.size.2_5",
                                           "test.views.size.5", "test.views.size.10", "test.views.size.other",
                                           "test.views.style.a", "test.views.style.b"});
-    CHECK(menus[0] == "View");
-    CHECK(menus[1] == "View/Size");
-    CHECK(menus[6] == "View/Style");
+    CHECK(menus[0] == "View/Options");  // no group: the Options panel
+    CHECK(menus[1] == "View/Test/Size");
+    CHECK(menus[6] == "View/Options/Style");
 
     // (find_if and REQUIRE, not a loop then FAIL: see test_grid_plugin.cpp.)
     auto find = [&](const std::string& id) -> const plugin::ActionSpec& {

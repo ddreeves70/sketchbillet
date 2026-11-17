@@ -43,6 +43,7 @@
 #include "CrashReport.h"
 #include "Icons.h"
 #include "ImportIcon.h"
+#include "Ribbon.h"
 #include "Updates.h"
 #include "ViewOverlay.h"
 #include "sb/core/Version.h"
@@ -256,27 +257,21 @@ Shell::~Shell() {
 // ---------------------------------------------------------------------------
 
 void Shell::buildMenus() {
-    toolbar_ = addToolBar(tr("Tools"));
-    toolbar_->setObjectName(QStringLiteral("sb.shell.toolbar"));
-    toolbar_->setMovable(false);
-    toolbar_->setIconSize(QSize(24, 24));
-    toolbar_->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);  // pictures, with words for new users
-    addToolBarBreak();
-    toolbar2_ = addToolBar(tr("More tools"));
-    toolbar2_->setObjectName(QStringLiteral("sb.shell.toolbar2"));
-    toolbar2_->setMovable(false);
-    toolbar2_->setIconSize(QSize(24, 24));
-    toolbar2_->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-    toolbar2_->toggleViewAction()->setVisible(false);  // shown and hidden by SketchBillet, not the student
-    // While the row's buttons all wait for something to be picked, it says so.
-    auto* hint = new QLabel(tr("  Pick something in the view to see what you can add here."), toolbar2_);
-    hint->setObjectName(QStringLiteral("sb.shell.toolbar2.hint"));
-    hint->setEnabled(false);  // greyed, like a tip
-    toolbar2Hint_ = toolbar2_->addWidget(hint);
-    toolbar2_->hide();
+    // The toolbar: File and the quick buttons on top, then tabs of panels.
+    ribbon_ = new Ribbon(this);
+    setMenuWidget(ribbon_);
+    ribbon_->setTabOrder({tr("Model"), tr("Sketch"), tr("Inspect"), tr("View")});
+    // Most-used panels first, from left to right.
+    ribbon_->setPanelOrder(
+        tr("Model"), {tr("Sketch"), tr("Create"), tr("Modify"), tr("Combine"), tr("Pattern"), tr("Inspect"),
+                      tr("Select"), tr("Insert"), tr("Make"), tr("Steps")});
+    ribbon_->setPanelOrder(tr("Sketch"), {tr("Draw"), tr("Edit"), tr("Constrain"), tr("Dimension")});
+    ribbon_->setPanelOrder(tr("Inspect"), {tr("Measure"), tr("Design")});
+    ribbon_->setPanelOrder(tr("View"), {tr("Display"), tr("Grid"), tr("Axes"), tr("Panels"), tr("Layout")});
 
-    auto* file = menuBar()->addMenu(tr("&File"));
+    auto* file = ribbon_->fileMenu();
     auto* newAct = file->addAction(tr("&New"), this, [this] { newDesign(); });
+    newAct->setObjectName(QStringLiteral("sb.shell.new"));
     newAct->setShortcut(QKeySequence::New);
     auto* openAct = file->addAction(tr("&Open..."), this, [this] {
         if (!confirmLoseChanges()) return;
@@ -284,17 +279,20 @@ void Shell::buildMenus() {
                                                        tr("SketchBillet designs (*.sb)"));
         if (!path.isEmpty()) openDesign(path.toStdWString());
     });
+    openAct->setObjectName(QStringLiteral("sb.shell.open"));
     openAct->setShortcut(QKeySequence::Open);
     samplesMenu_ = file->addMenu(tr("Open Sa&mple"));
     samplesMenu_->setObjectName(QStringLiteral("sb.shell.samples"));
     setSamplesFolder({});
     save_ = file->addAction(tr("&Save"), this, [this] { save(); });
+    save_->setObjectName(QStringLiteral("sb.shell.save"));
     save_->setShortcut(QKeySequence::Save);
     auto* saveAs = file->addAction(tr("Save &as..."), this, [this] {
         const auto path =
             askSavePath(qs(host_.documents().find(activeDesign())->name()) + QStringLiteral(".sb"));
         if (!path.isEmpty()) saveDesign(path.toStdWString());
     });
+    saveAs->setObjectName(QStringLiteral("sb.shell.saveas"));
     saveAs->setShortcut(QKeySequence::SaveAs);
     file->addSeparator();
     auto* importAct = file->addAction(tr("&Import..."), this, [this] {
@@ -306,6 +304,7 @@ void Shell::buildMenus() {
     importAct->setIcon(svgIcon(icons::modeling::import_svg));
     importAct->setStatusTip(
         tr("Add a part from another program, from a STEP, STL or 3MF file, as a new body."));
+    importAct->setToolTip(importAct->statusTip());
     export_ = file->addAction(tr("&Export..."), this, [this] {
         const auto* doc = host_.documents().find(activeDesign());
         const auto path = askExportPath(qs(doc ? doc->name() : "Untitled") + QStringLiteral(".stl"));
@@ -313,30 +312,38 @@ void Shell::buildMenus() {
     });
     export_->setObjectName(QStringLiteral("sb.shell.export"));
     export_->setShortcut(QKeySequence(QStringLiteral("Ctrl+E")));
+    export_->setIcon(svgIcon(icons::app::export_svg));
     export_->setStatusTip(
         tr("Write the part as STL or 3MF (for 3D printing) or STEP (for other CAD programs)."));
+    export_->setToolTip(export_->statusTip());
     auto* check = file->addAction(tr("Check for &Printing..."), this, [this] { checkForPrinting(); });
     check->setObjectName(QStringLiteral("sb.shell.check_print"));
     check->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+P")));
+    check->setIcon(svgIcon(icons::app::check_print_svg));
+    check->setIconText(tr("Check print"));
     check->setStatusTip(tr("Check the part is closed all round and has no walls too thin to print."));
+    check->setToolTip(check->statusTip());
     file->addSeparator();
-    file->addAction(tr("&Quit"), this, [this] { close(); })->setShortcut(QKeySequence::Quit);
+    auto* quit = file->addAction(tr("&Quit"), this, [this] { close(); });
+    quit->setShortcut(QKeySequence::Quit);
 
-    auto* edit = menuBar()->addMenu(tr("&Edit"));
-    undo_ = edit->addAction(tr("Undo"), this, [this] { host_.documents().undo(activeDesign()); });
+    undo_ = new QAction(tr("Undo"), this);
+    connect(undo_, &QAction::triggered, this, [this] { host_.documents().undo(activeDesign()); });
     undo_->setObjectName(QStringLiteral("sb.shell.undo"));
     undo_->setShortcut(QKeySequence::Undo);
-    redo_ = edit->addAction(tr("Redo"), this, [this] { host_.documents().redo(activeDesign()); });
+    redo_ = new QAction(tr("Redo"), this);
+    connect(redo_, &QAction::triggered, this, [this] { host_.documents().redo(activeDesign()); });
     redo_->setObjectName(QStringLiteral("sb.shell.redo"));
     redo_->setShortcuts(
         {QKeySequence(QStringLiteral("Ctrl+Y")), QKeySequence(QStringLiteral("Ctrl+Shift+Z"))});
-    edit->addSeparator();
-    copy_ = edit->addAction(tr("Copy"), this, [this] { copySteps(); });
+    copy_ = new QAction(tr("Copy steps"), this);
+    connect(copy_, &QAction::triggered, this, [this] { copySteps(); });
     copy_->setObjectName(QStringLiteral("sb.shell.copy"));
     copy_->setShortcut(QKeySequence::Copy);
     copy_->setStatusTip(
         tr("Copy the picked steps, and the steps they use, so you can paste them into any design."));
-    paste_ = edit->addAction(tr("Paste"), this, [this] { pasteSteps(); });
+    paste_ = new QAction(tr("Paste steps"), this);
+    connect(paste_, &QAction::triggered, this, [this] { pasteSteps(); });
     paste_->setObjectName(QStringLiteral("sb.shell.paste"));
     paste_->setShortcut(QKeySequence::Paste);
     paste_->setStatusTip(tr("Add the copied steps to the end of this design."));
@@ -347,43 +354,22 @@ void Shell::buildMenus() {
     save_->setIcon(svgIcon(icons::app::save_svg));
     undo_->setIcon(svgIcon(icons::app::undo_svg));
     redo_->setIcon(svgIcon(icons::app::redo_svg));
-    toolbar_->addAction(newAct);
-    toolbar_->addAction(openAct);
-    toolbar_->addAction(save_);
-    toolbar_->addSeparator();
-    toolbar_->addAction(undo_);
-    toolbar_->addAction(redo_);
+    // Their tips follow their words, so Undo's says what it undoes ("Undo Add Box1").
+    for (auto* a : {newAct, openAct, save_, undo_, redo_}) ribbon_->addQuick(a);
 
-    // Plugin actions, in the menus they name (made in the order first named).
-    // View is made now, so plugins can add to it, and placed after their menus.
-    viewMenu_ = new QMenu(tr("&View"), this);
-    connect(viewMenu_, &QMenu::aboutToShow, this, [this] { refreshActions(); });
-    std::map<std::string, QMenu*> menus{{"File", file}, {"Edit", edit}, {"View", viewMenu_}};
-    // "View/Grid style" is the Grid style submenu of View.
-    auto menuFor = [&](const std::string& path) {
-        std::string sofar;
-        QMenu* parent = nullptr;
-        std::size_t from = 0;
-        for (;;) {
-            const auto slash = path.find('/', from);
-            const std::string part =
-                path.substr(from, slash == std::string::npos ? std::string::npos : slash - from);
-            sofar += (sofar.empty() ? "" : "/") + part;
-            QMenu*& m = menus[sofar];
-            if (!m) {
-                m = parent ? parent->addMenu(qs(part)) : menuBar()->addMenu(qs(part));
-                connect(m, &QMenu::aboutToShow, this, [this] { refreshActions(); });
-            }
-            parent = m;
-            if (slash == std::string::npos) return m;
-            from = slash + 1;
-        }
-    };
-    bool toolbarSeparator = false;
+    // SketchBillet's own tools, in the panels where students look for them.
+    ribbon_->panelMenu(tr("Model"), tr("Steps"))->addActions({copy_, paste_});
+    ribbon_->panelMenu(tr("Model"), tr("Insert"))->addAction(importAct);
+    ribbon_->addButton(tr("Model"), tr("Insert"), importAct);
+    ribbon_->panelMenu(tr("Model"), tr("Make"))->addActions({export_, check});
+    ribbon_->addButton(tr("Model"), tr("Make"), export_);
+    ribbon_->panelMenu(tr("Inspect"), tr("Measure"))->addAction(check);
+    ribbon_->addButton(tr("Inspect"), tr("Measure"), check);
+
+    // Plugin actions, in the tabs and panels they name ("Model/Create"), made in
+    // the order first named.
     for (const auto& spec : host_.actions()) {
-        QMenu* menu = menuFor(spec.menu);
-        if (menu == edit && edit->actions().size() == 2) edit->addSeparator();
-        auto* a = menu->addAction(qs(spec.text));
+        auto* a = new QAction(qs(spec.text), this);
         a->setObjectName(qs(spec.id));
         a->setToolTip(qs(spec.tip));
         a->setStatusTip(qs(spec.tip));
@@ -392,10 +378,8 @@ void Shell::buildMenus() {
         a->setIcon(svgIcon(spec.icon));
         connect(a, &QAction::triggered, this, [this, spec] { runAction(spec); });
         QAction* button = nullptr;
-        if (spec.toolbar) {
-            if (!toolbarSeparator) toolbar_->addSeparator();
-            toolbarSeparator = true;
-            button = toolbar_->addAction(qs(spec.buttonText.empty() ? spec.text : spec.buttonText));
+        if (spec.toolbar || spec.primary) {
+            button = new QAction(qs(spec.buttonText.empty() ? spec.text : spec.buttonText), this);
             button->setObjectName(qs(spec.id + ".button"));
             button->setToolTip(qs(spec.tip));
             button->setStatusTip(qs(spec.tip));
@@ -403,18 +387,47 @@ void Shell::buildMenus() {
             button->setIcon(a->icon());
             connect(button, &QAction::triggered, this, [this, spec] { runAction(spec); });
         }
+        for (const auto& place : qs(spec.menu).split(QLatin1Char(';'), Qt::SkipEmptyParts)) {
+            auto parts = place.trimmed().split(QLatin1Char('/'), Qt::SkipEmptyParts);
+            if (parts.isEmpty()) parts = {tr("Plugins")};
+            const QString tab = parts.takeFirst();
+            const QString panel = parts.isEmpty() ? tab : parts.takeFirst();
+            if (spec.primary) {
+                ribbon_->setPrimary(tab, button);
+                continue;
+            }
+            ribbon_->panelMenu(tab, panel, parts)->addAction(a);
+            if (button) ribbon_->addButton(tab, panel, button);
+        }
         actions_.push_back({spec, a, button});
     }
+    for (const auto& tab : host_.tabs()) ribbon_->setTabMode(qs(tab.name), tab.always, qs(tab.mode));
 
-    menuBar()->addMenu(viewMenu_);  // after the plugins' own menus
-    windowMenu_ = menuBar()->addMenu(tr("&Window"));
-    helpMenu_ = menuBar()->addMenu(tr("&Help"));
+    // View > Panels and View > Layout: show and hide panels, and saved layouts.
+    windowMenu_ = ribbon_->panelMenu(tr("View"), tr("Panels"));
+    layoutMenu_ = ribbon_->panelMenu(tr("View"), tr("Layout"));
+
+    helpMenu_ = ribbon_->helpMenu();
     helpMenu_->addAction(tr("&About SketchBillet"), this, [this] {
         const auto ver = sb::version();
         QMessageBox::about(this, tr("About SketchBillet"),
-                           tr("SketchBillet %1\nFree, open-source CAD.\nhttps://github.com/ddreeves70/khan")
+                           tr("SketchBillet %1\nFree, open-source CAD.\nhttps://sketchbillet.org")
                                .arg(QString::fromUtf8(ver.data(), static_cast<qsizetype>(ver.size()))));
     });
+
+    // Every dropdown asks what can be used when it opens, and every item's
+    // shortcut works wherever it is, even in a tab that isn't showing.
+    for (auto* m : ribbon_->findChildren<QMenu*>()) {
+        connect(m, &QMenu::aboutToShow, this, [this] { refreshActions(); });
+        m->setToolTipsVisible(true);
+    }
+    for (auto* a : ribbon_->findChildren<QAction*>()) {
+        if (!a->shortcut().isEmpty()) addAction(a);
+    }
+    for (auto* a :
+         {newAct, openAct, save_, saveAs, importAct, export_, check, quit, undo_, redo_, copy_, paste_})
+        addAction(a);
+    for (const auto& item : actions_) addAction(item.item);
 }
 
 void Shell::buildPanels() {
@@ -543,8 +556,6 @@ void Shell::buildPanels() {
         a->setObjectName(QStringLiteral("sb.shell.new.") + id);
         a->setStatusTip(tr("Open another %1 next to the others.").arg(spec->title.toLower()));
     }
-    windowMenu_->addSeparator();
-    layoutMenu_ = windowMenu_->addMenu(tr("&Layouts"));
 
     // Plugins' status-bar items, at the bottom right, before SketchBillet's own.
     int at = 1;  // after the problems label
@@ -650,103 +661,9 @@ void Shell::refreshActions() {
             button->setEnabled(ok);
             button->setChecked(a->isChecked());
             if (spec.currentText && spec.buttonText.empty()) button->setText(a->text());
-            button->setVisible(spec.toolbarMode == mode && (!spec.buttonWhenEnabled || ok));
         }
     }
-    wrapToolbar();
-}
-
-void Shell::resizeEvent(QResizeEvent* event) {
-    QMainWindow::resizeEvent(event);
-    wrapToolbar();
-}
-
-// Puts plugin buttons that don't fit across the window on a second row, and
-// takes the row away when everything fits.
-void Shell::wrapToolbar() {
-    if (!toolbar2_) return;
-    // How wide each button is, the way the toolbar draws it.
-    QToolButton probe;
-    probe.setToolButtonStyle(toolbar_->toolButtonStyle());
-    probe.setIconSize(toolbar_->iconSize());
-    auto widthOf = [&](QAction* a) {
-        if (a->isSeparator())
-            return style()->pixelMetric(QStyle::PM_ToolBarSeparatorExtent, nullptr, toolbar_);
-        probe.setDefaultAction(a);
-        return probe.sizeHint().width();
-    };
-    const int spacing = style()->pixelMetric(QStyle::PM_ToolBarItemSpacing, nullptr, toolbar_);
-    const int frame = 2 * (style()->pixelMetric(QStyle::PM_ToolBarFrameWidth, nullptr, toolbar_) +
-                           style()->pixelMetric(QStyle::PM_ToolBarItemMargin, nullptr, toolbar_)) +
-                      style()->pixelMetric(QStyle::PM_ToolBarHandleExtent, nullptr, toolbar_);
-    // SketchBillet's own buttons (and the separator before the plugins' ones) stay on the first row.
-    std::vector<QAction*> own;
-    for (auto* a : toolbar_->actions()) {
-        if (!std::any_of(actions_.begin(), actions_.end(),
-                         [a](const PluginItem& p) { return p.button == a; }))
-            own.push_back(a);
-    }
-    int used = frame;
-    for (auto* a : own) {
-        if (a->isVisible()) used += widthOf(a) + spacing;
-    }
-    const int room = width();
-    // Rows are worked out from every button the toolbar mode could show, even ones
-    // hidden until they fit what's picked, so picking never moves a button to the
-    // other row or makes the view jump; it only shows or hides buttons in place.
-    const auto& mode = host_.toolbarMode();
-    std::vector<QAction*> first, second;
-    for (const auto& item : actions_) {
-        if (!item.button) continue;
-        if (item.spec.toolbarMode != mode) {
-            first.push_back(item.button);  // not in this mode: hidden, takes no room
-            continue;
-        }
-        const int w = widthOf(item.button) + spacing;
-        if (second.empty() && used + w <= room) {
-            first.push_back(item.button);
-            used += w;
-        } else {
-            second.push_back(item.button);
-        }
-    }
-    for (auto* a : first) {
-        if (!toolbar_->actions().contains(a)) {
-            toolbar2_->removeAction(a);
-            toolbar_->addAction(a);
-        }
-    }
-    for (auto* a : second) {
-        if (!toolbar2_->actions().contains(a)) {
-            toolbar_->removeAction(a);
-            toolbar2_->addAction(a);
-        }
-    }
-    // Keep the plugin buttons in their own order on each row.
-    auto reorder = [&](QToolBar* bar, const std::vector<QAction*>& order) {
-        std::vector<QAction*> mine;
-        for (auto* a : bar->actions()) {
-            if (std::find(order.begin(), order.end(), a) != order.end()) mine.push_back(a);
-        }
-        std::vector<QAction*> sorted;
-        for (auto* a : order) {
-            if (std::find(mine.begin(), mine.end(), a) != mine.end()) sorted.push_back(a);
-        }
-        if (mine == sorted) return;
-        for (auto* a : sorted) bar->removeAction(a);
-        for (auto* a : sorted) bar->addAction(a);
-    };
-    std::vector<QAction*> all;
-    for (const auto& item : actions_) {
-        if (item.button) all.push_back(item.button);
-    }
-    reorder(toolbar_, all);
-    reorder(toolbar2_, all);
-    toolbar2_->setMinimumHeight(
-        second.empty() ? 0 : toolbar_->sizeHint().height());  // same height, whatever shows
-    toolbar2_->setVisible(!second.empty());
-    toolbar2Hint_->setVisible(
-        std::none_of(second.begin(), second.end(), [](QAction* a) { return a->isVisible(); }));
+    ribbon_->setMode(qs(mode));
 }
 
 void Shell::runAction(const plugin::ActionSpec& spec) {
@@ -1414,7 +1331,7 @@ void Shell::setOverView(const QString& id, bool over) {
     } else if (!over && o.frame->body()) {
         o.dock->setWidget(o.frame->takeBody(), ads::CDockWidget::ForceNoScrollArea);
     }
-    // While it floats, its dock stays closed, and Window > title shows or hides
+    // While it floats, its dock stays closed, and Panels > title (View tab) shows or hides
     // the floating frame instead.
     o.dock->toggleView(!over && o.shown);
     o.dock->toggleViewAction()->setVisible(!over);

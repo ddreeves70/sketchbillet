@@ -137,6 +137,15 @@ public:
         stagedActions_.push_back(std::move(action));
     }
 
+    void addTab(TabSpec tab) override {
+        if (!registering_) {
+            log("Ignored tab " + tab.name + ": tabs can only be described while the plugin starts.");
+            return;
+        }
+        tab.plugin = info_->manifest.id;
+        stagedTabs_.push_back(std::move(tab));
+    }
+
     void provide(std::string name, void* service, bool deprecated) override {
         if (!registering_) {
             log("Ignored service " + name + ": services can only be offered while the plugin starts.");
@@ -258,6 +267,7 @@ public:
     bool registering_ = true;
     model::CommandRegistry staged_;
     std::vector<ActionSpec> stagedActions_;
+    std::vector<TabSpec> stagedTabs_;
     std::vector<std::pair<std::string, Shared::Service>> stagedServices_;
     std::vector<std::function<void()>> starts_;
     std::vector<std::string> failures_;
@@ -696,6 +706,13 @@ void PluginHost::loadAll() {
             actions_.push_back(std::move(a));
         }
         hc->stagedActions_.clear();
+        for (auto& t : hc->stagedTabs_) {
+            // The first plugin to describe a tab decides.
+            const bool known = std::any_of(tabs_.begin(), tabs_.end(),
+                                           [&](const TabSpec& other) { return other.name == t.name; });
+            if (!known) tabs_.push_back(std::move(t));
+        }
+        hc->stagedTabs_.clear();
         if (slowStartLimit_.count() > 0 && hc->took > slowStartLimit_) {
             info.issues.push_back(
                 warning("plugin.slow_start",

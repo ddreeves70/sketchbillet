@@ -149,6 +149,10 @@ public:
     /// @return The actions, in the order the plugins loaded and added them.
     const std::vector<ActionSpec>& actions() const { return actions_; }
 
+    /// Gives what plugins said about when toolbar tabs show (PluginContext::addTab()).
+    /// @return The tabs described, one per name, in the order the plugins loaded.
+    const std::vector<TabSpec>& tabs() const { return tabs_; }
+
     /// Gives the shared selection.
     /// @return The selection.
     Selection& selection() { return selection_; }
@@ -188,6 +192,7 @@ private:
     Selection selection_;
     OverlayList overlays_{bus_};
     std::vector<ActionSpec> actions_;
+    std::vector<TabSpec> tabs_;
     std::unique_ptr<detail::HostShared> shared_;  // services and loading state, shared with contexts
     std::chrono::milliseconds slowStartLimit_{500};
     MemorySettings memorySettings_;

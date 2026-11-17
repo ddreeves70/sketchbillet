@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "ParametersIcons.h"
 #include "sb/model/Document.h"
 #include "sb/plugin/Events.h"
 #include "sb/ui/UiRegistry.h"
@@ -243,12 +244,14 @@ void registerParameters(plugin::PluginContext& ctx) {
     }
     ui::PanelSpec spec{kPanelId, QObject::tr("Parameters"), ui::PanelArea::Left,
                        [&ctx, ui] { return new ParametersPanel(ctx, *ui); }};
-    spec.startHidden = true;     // Modify > Parameters opens it
+    spec.startHidden = true;     // Design > Parameters (Inspect tab) opens it
     spec.floatsOverView = true;  // see-through over the view, under the feature tree, like the other panels
     ui->addPanel(std::move(spec));
     ctx.addAction(plugin::ActionSpec{.id = "sb.parameters.show",
                                      .text = "Parameters",
-                                     .menu = "Modify",
+                                     .menu = "Inspect/Design",
+                                     .toolbar = true,
+                                     .icon = std::string(icons::parameters::parameters_svg),
                                      .tip = "Open the Parameters panel: named values, like wall = 3 mm, that "
                                             "dimensions and steps can use.",
                                      .run = [ui] { ui->showPanel(kPanelId); }});

@@ -1731,7 +1731,7 @@ void registerProperties(plugin::PluginContext& ctx) {
     ui->addPanel(std::move(spec));
     ctx.addAction(plugin::ActionSpec{.id = "sb.properties.change_edges",
                                      .text = "Change edges",
-                                     .menu = "Modify",
+                                     .menu = "Model/Modify",
                                      .tip = "Pick the edges of the picked Fillet or Chamfer again, for when "
                                             "an earlier change took them away.",
                                      .run =

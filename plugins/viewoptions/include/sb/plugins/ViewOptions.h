@@ -18,7 +18,7 @@ namespace sb::plugins {
 
 /// Gives the sb.viewoptions plugin. It offers sb.viewoptions/1 to other
 /// plugins, remembers their options, and in the desktop app adds the View
-/// options panel (closed at first) and View > View options... to open it.
+/// options panel (closed at first) and Display > View options (View tab) to open it.
 /// @return Its manifest and register function, for PluginHost::addBuiltin().
 plugin::BuiltinPlugin viewOptionsPlugin();
 

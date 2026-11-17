@@ -124,12 +124,14 @@ void registerModeling(plugin::PluginContext& ctx) {
         ctx.addCommand(*info, *builtin.factory(info->name));
     }
 
-    // Menu items and toolbar buttons. New shapes start at a sensible size; the
+    // Toolbar buttons and dropdown items. New shapes start at a sensible size; the
     // student changes the numbers in the Properties panel.
+    // The Model tab is the usual one; it steps aside while a sketch is being edited.
+    ctx.addTab({.name = "Model", .always = false, .mode = ""});
     using plugin::ActionSpec;
     ctx.addAction(ActionSpec{.id = "sb.modeling.box",
                              .text = "Box",
-                             .menu = "Create",
+                             .menu = "Model/Create",
                              .command = "feature.add_box",
                              .args = {{"size", kernel::Vec3{20, 20, 20}}},
                              .shortcut = "Ctrl+Shift+B",
@@ -138,11 +140,10 @@ void registerModeling(plugin::PluginContext& ctx) {
                              .tip = "Add a 20 mm box. Change its size in Properties."});
     ctx.addAction(ActionSpec{.id = "sb.modeling.cylinder",
                              .text = "Cylinder",
-                             .menu = "Create",
+                             .menu = "Model/Create",
                              .command = "feature.add_cylinder",
                              .args = {{"radius", 10.0}, {"height", 20.0}},
                              .shortcut = "Ctrl+Shift+C",
-                             .toolbar = true,
                              .icon = std::string(icons::modeling::cylinder_svg),
                              .tip = "Add a cylinder 20 mm across and 20 mm tall. Change it in Properties."});
     struct Combine {
@@ -161,7 +162,7 @@ void registerModeling(plugin::PluginContext& ctx) {
                   "Keep only where the two selected bodies overlap.", icons::modeling::intersect_svg}}) {
         ctx.addAction(ActionSpec{.id = c.id,
                                  .text = c.text,
-                                 .menu = "Combine",
+                                 .menu = "Model/Combine",
                                  .command = "feature.add_boolean",
                                  .args = {{"operation", std::string(c.op)}},
                                  .fromSelection = {"a", "b"},
@@ -171,7 +172,7 @@ void registerModeling(plugin::PluginContext& ctx) {
     }
     ctx.addAction(ActionSpec{.id = "sb.modeling.move",
                              .text = "Move",
-                             .menu = "Modify",
+                             .menu = "Model/Modify",
                              .command = "feature.add_move",
                              .fromSelection = {"body"},
                              .shortcut = "Ctrl+M",
@@ -181,7 +182,7 @@ void registerModeling(plugin::PluginContext& ctx) {
     // A linked copy: a Move that keeps the original, slid 20 mm along x to start.
     ctx.addAction(ActionSpec{.id = "sb.modeling.linked_copy",
                              .text = "Linked Copy",
-                             .menu = "Modify",
+                             .menu = "Model/Modify",
                              .command = "feature.add_move",
                              .args = {{"copy", true}, {"by", kernel::Vec3{20, 0, 0}}},
                              .fromSelection = {"body"},
@@ -192,7 +193,7 @@ void registerModeling(plugin::PluginContext& ctx) {
     ctx.addAction(ActionSpec{
         .id = "sb.modeling.unlink",
         .text = "Unlink Copy",
-        .menu = "Modify",
+        .menu = "Model/Modify",
         .command = "feature.unlink",
         .fromSelection = {"feature"},
         .tip = "Make the picked linked copy a copy of its own: it stops changing when the original does, "
@@ -208,7 +209,7 @@ void registerModeling(plugin::PluginContext& ctx) {
     ctx.addAction(ActionSpec{
         .id = "sb.modeling.extrude",
         .text = "Extrude",
-        .menu = "Create",
+        .menu = "Model/Create",
         .command = "feature.add_extrude",
         .args = {{"distance", 10.0}},
         .fromSelection = {"sketch"},
@@ -228,7 +229,7 @@ void registerModeling(plugin::PluginContext& ctx) {
     ctx.addAction(ActionSpec{
         .id = "sb.modeling.revolve",
         .text = "Revolve",
-        .menu = "Create",
+        .menu = "Model/Create",
         .command = "feature.add_revolve",
         .fromSelection = {"sketch"},
         .toolbar = true,
@@ -246,7 +247,7 @@ void registerModeling(plugin::PluginContext& ctx) {
     ctx.addAction(ActionSpec{
         .id = "sb.modeling.hole",
         .text = "Hole",
-        .menu = "Create",
+        .menu = "Model/Create",
         .command = "feature.add_hole",
         .args = {{"size", std::string("M3")}},
         .fromSelection = {"sketch"},
@@ -264,7 +265,7 @@ void registerModeling(plugin::PluginContext& ctx) {
     ctx.addAction(ActionSpec{
         .id = "sb.modeling.hole_edges",
         .text = "Hole from two edges",
-        .menu = "Create",
+        .menu = "Model/Create",
         .command = "feature.add_hole",
         .args = {{"size", std::string("M3")}, {"distances", sketch::Point2{10, 10}}},
         .fromEdges = "edges",
@@ -287,7 +288,7 @@ void registerModeling(plugin::PluginContext& ctx) {
     ctx.addAction(ActionSpec{
         .id = "sb.modeling.pattern_linear",
         .text = "Linear pattern",
-        .menu = "Create",
+        .menu = "Model/Pattern",
         .command = "feature.add_pattern",
         .args = {{"kind", std::string("linear")}},
         .fromSelectionList = "steps",
@@ -301,12 +302,12 @@ void registerModeling(plugin::PluginContext& ctx) {
     ctx.addAction(ActionSpec{
         .id = "sb.modeling.pattern_circular",
         .text = "Circular pattern",
-        .menu = "Create",
+        .menu = "Model/Pattern",
         .command = "feature.add_pattern",
         .args = {{"kind", std::string("circular")}},
         .fromSelectionList = "steps",
         .toolbar = true,
-        .buttonText = "Circle",
+        .buttonText = "Around",
         .icon = std::string(icons::modeling::pattern_circular_svg),
         .tip =
             "Repeat the picked hole, join or cut 6 times round the z axis; or copy a picked body. Change how "
@@ -317,7 +318,7 @@ void registerModeling(plugin::PluginContext& ctx) {
     ctx.addAction(ActionSpec{
         .id = "sb.modeling.mirror",
         .text = "Mirror",
-        .menu = "Create",
+        .menu = "Model/Pattern",
         .command = "feature.add_mirror",
         .fromSelectionList = "steps",
         .toolbar = true,
@@ -330,7 +331,7 @@ void registerModeling(plugin::PluginContext& ctx) {
     ctx.addAction(ActionSpec{
         .id = "sb.modeling.shell",
         .text = "Shell",
-        .menu = "Modify",
+        .menu = "Model/Modify",
         .command = "feature.add_shell",
         .args = {{"thickness", 2.0}},
         .fromFaces = "faces",
@@ -345,7 +346,7 @@ void registerModeling(plugin::PluginContext& ctx) {
     ctx.addAction(ActionSpec{
         .id = "sb.modeling.fillet",
         .text = "Fillet",
-        .menu = "Modify",
+        .menu = "Model/Modify",
         .command = "feature.add_fillet",
         .args = {{"radius", 1.0}},
         .fromEdges = "edges",
@@ -357,7 +358,7 @@ void registerModeling(plugin::PluginContext& ctx) {
     ctx.addAction(ActionSpec{
         .id = "sb.modeling.chamfer",
         .text = "Chamfer",
-        .menu = "Modify",
+        .menu = "Model/Modify",
         .command = "feature.add_chamfer",
         .args = {{"distance", 1.0}},
         .fromEdges = "edges",
@@ -370,7 +371,9 @@ void registerModeling(plugin::PluginContext& ctx) {
     ctx.addAction(ActionSpec{
         .id = "sb.modeling.pick_edges",
         .text = "Pick edges",
-        .menu = "Edit",
+        .menu = "Model/Select",
+        .toolbar = true,
+        .icon = std::string(icons::modeling::pick_edges_svg),
         .tip = "Click edges of bodies instead of whole bodies, for a fillet or chamfer.",
         .run =
             [&ctx] {
@@ -381,34 +384,34 @@ void registerModeling(plugin::PluginContext& ctx) {
         .checked = [&ctx] { return ctx.selection().pickMode() == plugin::PickMode::Edges; }});
     ctx.addAction(ActionSpec{.id = "sb.modeling.duplicate",
                              .text = "Duplicate step",
-                             .menu = "Edit",
+                             .menu = "Model/Steps",
                              .command = "feature.duplicate",
                              .fromSelection = {"feature"},
                              .shortcut = "Ctrl+D",
                              .tip = "Copy the selected step, and the steps it uses, as new steps."});
     ctx.addAction(ActionSpec{.id = "sb.modeling.turn_off",
                              .text = "Turn off",
-                             .menu = "Edit",
+                             .menu = "Model/Steps",
                              .command = "feature.suppress",
                              .args = {{"off", true}},
                              .fromSelectionList = "steps",
                              .tip = "Turn the picked steps off, so they aren't built. Nothing is deleted."});
     ctx.addAction(ActionSpec{.id = "sb.modeling.turn_on",
                              .text = "Turn on",
-                             .menu = "Edit",
+                             .menu = "Model/Steps",
                              .command = "feature.suppress",
                              .args = {{"off", false}},
                              .fromSelectionList = "steps",
                              .tip = "Turn the picked steps back on."});
     ctx.addAction(ActionSpec{.id = "sb.modeling.new_folder",
                              .text = "New folder",
-                             .menu = "Edit",
+                             .menu = "Model/Steps",
                              .command = "folder.add",
                              .fromSelectionList = "steps",
                              .tip = "Put the picked steps in a folder, to keep the feature tree tidy."});
     ctx.addAction(ActionSpec{.id = "sb.modeling.delete",
                              .text = "Delete step",
-                             .menu = "Edit",
+                             .menu = "Model/Steps",
                              .command = "feature.delete",
                              .fromSelection = {"feature"},
                              .shortcut = "Delete",

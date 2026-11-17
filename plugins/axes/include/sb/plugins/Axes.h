@@ -15,7 +15,7 @@ namespace sb::plugins {
 
 /// Gives the sb.axes plugin. It draws the three axes on the view cube in every
 /// viewer (x red, y green, z blue), labeled X, Y and Z, with three view options:
-/// View > Show axes, Show axis labels and Show axes at the origin.
+/// Axes > Show axes, Show axis labels and Show axes at the origin, on the View tab.
 /// @return Its manifest and register function, for PluginHost::addBuiltin().
 plugin::BuiltinPlugin axesPlugin();
 

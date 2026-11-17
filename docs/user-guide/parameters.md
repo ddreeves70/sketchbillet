@@ -13,7 +13,7 @@ can use them. Add and change them in the desktop app's
 
 ## In the desktop app
 
-**Modify > Parameters** opens the Parameters panel. Like the feature tree and
+**Design > Parameters** opens the Parameters panel. Like the feature tree and
 Properties, it floats over the 3D view, see-through, under the feature tree,
 and is as tall as its rows. Its title bar folds it up or docks it beside the
 view, the same as theirs (see [Panels over the viewer](desktop-app.md#panels-over-the-viewer)):
@@ -28,7 +28,7 @@ view, the same as theirs (see [Panels over the viewer](desktop-app.md#panels-ove
 | **Note** | What it's for, in your own words |
 
 Double-click a cell (or pick it and start typing), then press Enter. Every
-change is one step of Edit > Undo, and everything that uses the parameter
+change is one step of Undo, and everything that uses the parameter
 changes with it. **Add** adds a parameter called `size1` (`size2`, ...), 10 mm,
 ready for you to type its name. **Delete** deletes the picked rows; one that
 something still uses can't be deleted. If SketchBillet can't make a change, the status
@@ -240,7 +240,7 @@ dimension's number).
 | A number with a unit, like `1 in` or `2.5 cm`, or sums like `10 mm + 1 in` | It's worked out once and kept as a number: handy for typing inches into a design in mm |
 | Something that can't be worked out, like `wall + 2` | Nothing changes, and the status bar says why (here: `wall` is a length and `2` is a plain number, so write `wall + 2 mm`) |
 
-Each change is one step of Edit > Undo. The other numbers of a step keep their
+Each change is one step of Undo. The other numbers of a step keep their
 own formulas. A formula in a length's box must give a length, and in an angle's
 box an angle, like `30 deg` or `lean * 2`.
 

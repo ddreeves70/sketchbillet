@@ -101,7 +101,7 @@ between two steps of a folder joins it.
 
 - The marker is saved with the design. If a design opens with faded steps, it was
   saved rolled back: click **⏭** to build everything.
-- Rolling back and moving steps are each one step of **Edit > Undo**.
+- Rolling back and moving steps are each one step of **Undo**.
 - Exporting STL or STEP saves what's built, so roll forward to the end first.
 - Rolled back, the part in the 3D view is the part as it was. Faces and edges you
   pick are on that part.

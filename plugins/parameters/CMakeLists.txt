@@ -8,3 +8,5 @@ sb_add_library(sb_plugin_parameters
     sb::plugin
     sb::model
 )
+sb_embed_files(sb_plugin_parameters HEADER ParametersIcons.h NAMESPACE sb::icons::parameters
+  FILES icons/parameters.svg)

@@ -4,13 +4,13 @@
 a hole is, how far apart two holes are, or whether two faces meet square. Pick
 one face, edge or point to get its size, or two to get the distance between them.
 
-In the desktop app, pick **Tools > Measure** (Ctrl+Shift+I), or **Measure** on
+In the desktop app, pick **Inspect > Measure** (Ctrl+Shift+I), or **Measure** on
 the toolbar, then click what to measure in the view. With `sketchbillet_cli`, use
 [`sketchbillet_cli measure`](../cli/measure.md).
 
 ## In the desktop app
 
-1. Pick **Tools > Measure**. The Measure panel opens, and clicks in the view now
+1. Pick **Inspect > Measure**. The Measure panel opens, and clicks in the view now
    pick a face, edge or point instead of a whole body.
 2. Click a face, an edge or a point (a corner). It turns orange, and the Measure
    panel shows its size.
