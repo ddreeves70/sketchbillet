@@ -9,6 +9,9 @@
 #include <vector>
 
 class QAction;
+class QCompleter;
+class QLineEdit;
+class QStandardItemModel;
 class QHBoxLayout;
 class QMenu;
 class QStackedWidget;
@@ -41,6 +44,17 @@ public:
     QMenu* helpMenu() const { return helpMenu_; }
     // Adds a small button to the top row, after File (New, Open, Save, Undo, Redo).
     void addQuick(QAction* action);
+
+    // Search tools: the box in the top row (and S, from anywhere in the window)
+    // finds any tool by its name or its tip, and runs it. Tools that can't be
+    // used right now are listed greyed out.
+    void focusSearch();
+    QLineEdit* searchBox() const { return search_; }
+    // Every tool search can find, as "words to match" -> the tool, for tests.
+    QStringList searchTerms() const;
+    // Runs what search finds first for `text`, as typing it and pressing Enter
+    // does. Returns the tool it ran, or nullptr.
+    QAction* runSearch(const QString& text);
 
     // Makes the tab if it isn't there yet. Tabs named in `order` come first, in
     // that order; others follow in the order first made.
@@ -128,6 +142,12 @@ private:
     const Tool* findTool(const QString& tab, const QString& panel, QAction* item) const;
     void showTools();  // each tool's button shown or hidden, as pinned
     void askPin(const QString& tab, const QString& panel, QAction* item, const QPoint& at);
+    struct Found {
+        QAction* action = nullptr;
+        QString where;  // "Model > Create", "File"
+    };
+    std::vector<Found> searchable() const;  // every tool, once each, in toolbar order
+    void fillSearch();                      // the list search picks from, as things are now
 
     QMenu* fileMenu_ = nullptr;
     QMenu* helpMenu_ = nullptr;
@@ -141,6 +161,9 @@ private:
     QString usualTab_;  // the tab picked before a mode's own tab took over
     bool placing_ = false;
     QStringList pinned_, unpinned_;
+    QLineEdit* search_ = nullptr;
+    QCompleter* completer_ = nullptr;
+    QStandardItemModel* found_ = nullptr;
 };
 
 }  // namespace sb::app

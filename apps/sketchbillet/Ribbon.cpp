@@ -1,11 +1,17 @@
 #include "Ribbon.h"
 
+#include <QAbstractItemView>
 #include <QAction>
+#include <QCompleter>
 #include <QContextMenuEvent>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QKeyEvent>
+#include <QLineEdit>
 #include <QMenu>
+#include <QShortcut>
 #include <QStackedWidget>
+#include <QStandardItemModel>
 #include <QTabBar>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -44,6 +50,43 @@ Ribbon::Ribbon(QWidget* parent) : QWidget(parent) {
     file->setMenu(fileMenu_);
     top_->addWidget(file);
     top_->addStretch(1);
+    // Search tools: type part of a tool's name (or what it does), then Enter.
+    search_ = new QLineEdit(top);
+    search_->setObjectName(QStringLiteral("sb.ribbon.search"));
+    search_->setPlaceholderText(tr("Search tools (S)"));
+    search_->setClearButtonEnabled(true);
+    search_->setFixedWidth(220);
+    search_->setToolTip(
+        tr("Find any tool by its name, or by what it does, like \"round\" for Fillet. "
+           "Press S to get here from anywhere."));
+    found_ = new QStandardItemModel(this);
+    completer_ = new QCompleter(found_, this);
+    completer_->setCaseSensitivity(Qt::CaseInsensitive);
+    completer_->setFilterMode(Qt::MatchContains);
+    completer_->setCompletionRole(Qt::UserRole + 1);  // its name, place and tip
+    completer_->setCompletionMode(QCompleter::PopupCompletion);
+    completer_->setMaxVisibleItems(12);
+    completer_->popup()->setObjectName(QStringLiteral("sb.ribbon.search.list"));
+    search_->setCompleter(completer_);
+    // The list is filled each time the box is clicked into (or S is pressed), so it
+    // shows what can be used now; Escape goes back to the view.
+    search_->installEventFilter(this);
+    connect(completer_, qOverload<const QModelIndex&>(&QCompleter::activated), this,
+            [this](const QModelIndex& index) {
+                auto* a = index.data(Qt::UserRole + 2).value<QAction*>();
+                QMetaObject::invokeMethod(
+                    this,
+                    [this, a] {
+                        search_->clear();
+                        search_->clearFocus();
+                        if (a && a->isEnabled()) a->trigger();
+                    },
+                    Qt::QueuedConnection);
+            });
+    connect(search_, &QLineEdit::returnPressed, this, [this] {
+        if (!completer_->popup()->isVisible()) runSearch(search_->text());
+    });
+    top_->addWidget(search_);
     auto* help = new QToolButton(top);
     help->setObjectName(QStringLiteral("sb.ribbon.help"));
     help->setText(tr("Help"));
@@ -69,6 +112,12 @@ Ribbon::Ribbon(QWidget* parent) : QWidget(parent) {
     line->setFrameShape(QFrame::HLine);
     line->setFrameShadow(QFrame::Sunken);
     layout->addWidget(line);
+
+    if (parent) {
+        auto* s = new QShortcut(QKeySequence(Qt::Key_S), parent);
+        s->setObjectName(QStringLiteral("sb.ribbon.search.shortcut"));
+        connect(s, &QShortcut::activated, this, [this] { focusSearch(); });
+    }
 
     connect(bar_, &QTabBar::currentChanged, this, [this](int index) {
         if (placing_ || index < 0) return;
@@ -356,6 +405,15 @@ void Ribbon::askPin(const QString& tabName, const QString& panelName, QAction* i
 
 // Right-clicking an item in a panel's dropdown pins it (or unpins it).
 bool Ribbon::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == search_) {
+        if (event->type() == QEvent::FocusIn) fillSearch();
+        if (event->type() == QEvent::KeyPress && static_cast<QKeyEvent*>(event)->key() == Qt::Key_Escape) {
+            search_->clear();
+            search_->clearFocus();
+            return true;
+        }
+        return QWidget::eventFilter(watched, event);
+    }
     if (event->type() == QEvent::ContextMenu) {
         auto* menu = qobject_cast<QMenu*>(watched);
         for (auto& t : tabs_) {
@@ -434,6 +492,96 @@ QStringList Ribbon::visibleTabs() const {
         if (bar_->isTabVisible(i)) names << bar_->tabData(i).toString();
     }
     return names;
+}
+
+// Every tool, once, with where it lives: the toolbar's tools in tab and panel
+// order (the tab that's showing first), then File and Help.
+std::vector<Ribbon::Found> Ribbon::searchable() const {
+    std::vector<Found> out;
+    auto add = [&](QAction* a, const QString& where) {
+        if (!a || a->isSeparator() || a->menu() || a->text().isEmpty() || a->objectName().isEmpty() ||
+            a->objectName().endsWith(QStringLiteral(".hint")))
+            return;
+        for (const auto& f : out) {
+            if (f.action == a) return;
+        }
+        out.push_back({a, where});
+    };
+    const QStringList tabsShown = visibleTabs();
+    for (const auto& name : tabsShown) {
+        for (const auto& t : tabs_) {
+            if (t.name != name) continue;
+            if (t.primary && t.primary->defaultAction()) add(t.primary->defaultAction(), t.name);
+            // In the order the panels show, left to right.
+            std::vector<const Panel*> panels;
+            for (const auto& n : t.order) {
+                for (const auto& p : t.panelList) {
+                    if (p.name == n) panels.push_back(&p);
+                }
+            }
+            for (const auto& p : t.panelList) {
+                if (!t.order.contains(p.name)) panels.push_back(&p);
+            }
+            for (const auto* p : panels) {
+                for (auto* a : p->menu->actions()) add(a, QStringLiteral("%1 > %2").arg(t.name, p->name));
+            }
+        }
+    }
+    for (auto* a : fileMenu_->actions()) add(a, tr("File"));
+    for (auto* a : helpMenu_->actions()) add(a, tr("Help"));
+    return out;
+}
+
+void Ribbon::fillSearch() {
+    found_->clear();
+    for (const auto& f : searchable()) {
+        const QString name = f.action->text().remove(QLatin1Char('&'));
+        auto* row = new QStandardItem(f.action->icon(), QStringLiteral("%1    %2").arg(name, f.where));
+        row->setData(QStringLiteral("%1 %2 %3").arg(name, f.where, f.action->toolTip()), Qt::UserRole + 1);
+        row->setData(QVariant::fromValue(f.action), Qt::UserRole + 2);
+        row->setToolTip(f.action->toolTip());
+        // Greyed out, and can't be picked, when it can't be used right now.
+        if (!f.action->isEnabled()) row->setFlags(row->flags() & ~Qt::ItemIsEnabled);
+        found_->appendRow(row);
+    }
+}
+
+void Ribbon::focusSearch() {
+    search_->setFocus(Qt::ShortcutFocusReason);
+    search_->selectAll();
+}
+
+QStringList Ribbon::searchTerms() const {
+    QStringList terms;
+    for (const auto& f : searchable()) terms << f.action->text().remove(QLatin1Char('&'));
+    return terms;
+}
+
+QAction* Ribbon::runSearch(const QString& text) {
+    const QString want = text.trimmed();
+    if (want.isEmpty()) return nullptr;
+    const auto all = searchable();
+    // A tool whose name starts with the words wins, then one whose name has
+    // them, then one whose tip does; and one that can be used beats one that can't.
+    QAction* best = nullptr;
+    int bestScore = 0;
+    for (const auto& f : all) {
+        const QString name = f.action->text().remove(QLatin1Char('&'));
+        int score = name.startsWith(want, Qt::CaseInsensitive)                ? 3
+                    : name.contains(want, Qt::CaseInsensitive)                ? 2
+                    : f.action->toolTip().contains(want, Qt::CaseInsensitive) ? 1
+                                                                              : 0;
+        if (score > 0 && f.action->isEnabled()) score += 10;
+        if (score > bestScore) {
+            best = f.action;
+            bestScore = score;
+        }
+    }
+    search_->clear();
+    search_->clearFocus();
+    if (!best || !best->isEnabled()) return nullptr;
+    best->trigger();
+    return best;
 }
 
 }  // namespace sb::app

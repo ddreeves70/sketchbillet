@@ -8,7 +8,7 @@ step's numbers in Properties. Everything you do can be undone.
 
 | # | Part | What it's for |
 | --- | --- | --- |
-| 1 | **Top row** | **File** (new, open, open a sample, save, import, export, check for printing, quit), then New, Open, Save, Undo and Redo, always there. **Help** is at the right |
+| 1 | **Top row** | **File** (new, open, open a sample, save, import, export, check for printing, quit), then New, Open, Save, Undo and Redo, always there. **Search tools** and **Help** are at the right |
 | 2 | **Tabs** | **Model** (making the part), **Inspect** (measuring, parameters, checking for printing) and **View** (the grid, the axes, panels and layouts). While you edit a sketch, the **Sketch** tab takes the Model tab's place |
 | 3 | **Panels** | Each tab's tools, in panels, with each panel's name underneath: **Create**, **Modify**, **Combine** and so on. The most-used tools are buttons, each with a picture and its name. Click a panel's name for everything in it. See [The toolbar](#the-toolbar) |
 | 4 | **Feature tree** | Every step of the design, in the order SketchBillet builds them, with how each one built. It floats over the viewer, see-through, and starts with the design's **Document settings** |
@@ -36,6 +36,11 @@ in **panels**.
   Right-click a button and pick **Unpin** to take it off (it stays in the
   dropdown). SketchBillet remembers your pins; **Layout > Reset toolbar buttons**
   on the View tab puts every panel back as it started.
+- **Search tools.** Press **S** (or click the box at the top right) and type part
+  of a tool's name, or what it does: "cyl" finds **Cylinder**, and "bevel" finds
+  **Chamfer**. Press **Enter** to run the first one, or click one in the list.
+  Tools that can't be used yet are listed greyed out. **Esc** goes back to the
+  view.
 - **Keyboard shortcuts** work whichever tab is showing, like Ctrl+Shift+B for a box.
 
 In these guides, **Create > Box** means the **Box** tool in the **Create**

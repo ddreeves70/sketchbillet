@@ -9,6 +9,7 @@
 #include <QCheckBox>
 #include <QClipboard>
 #include <QComboBox>
+#include <QCompleter>
 #include <QDoubleSpinBox>
 #include <QFile>
 #include <QGuiApplication>
@@ -23,6 +24,7 @@
 #include <QPixmap>
 #include <QPushButton>
 #include <QSettings>
+#include <QShortcut>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QTabBar>
@@ -378,6 +380,52 @@ TEST_CASE("a student can pin a tool to its panel, or unpin a button, and it's re
     CHECK_FALSE(onScreen(window, copy));
     CHECK(app.settings.value(QStringLiteral("toolbar/pinned")).toStringList().isEmpty());
     CHECK(app.settings.value(QStringLiteral("toolbar/unpinned")).toStringList().isEmpty());
+}
+
+TEST_CASE("Search tools finds a tool by its name or what it does, and runs it", "[app][ribbon]") {
+    App app;
+    auto* ribbon = app.shell->findChild<app::Ribbon*>();
+    REQUIRE(ribbon);
+    auto* box = ribbon->searchBox();
+    REQUIRE(box);
+    CHECK(box->placeholderText() == QStringLiteral("Search tools (S)"));
+    // S, from anywhere in the window, goes to the box.
+    auto* s = app.shell->findChild<QShortcut*>(QStringLiteral("sb.ribbon.search.shortcut"));
+    REQUIRE(s);
+    CHECK(s->key() == QKeySequence(Qt::Key_S));
+    emit s->activated();
+    settle();
+    CHECK(box->hasFocus());
+    // Every tool on the tabs that show, and File and Help; once each.
+    const auto terms = ribbon->searchTerms();
+    for (const char* name : {"Box", "Cylinder", "Fillet", "Export...", "Check for Printing...", "Show grid",
+                             "About SketchBillet"}) {
+        INFO(name << " in " << terms.join(QStringLiteral(", ")).toStdString());
+        CHECK(terms.contains(QString::fromLatin1(name)));
+    }
+    CHECK(terms.count(QStringLiteral("Check for Printing...")) == 1);  // on two tabs, listed once
+    CHECK_FALSE(terms.contains(QStringLiteral("Line")));               // the Sketch tab isn't showing
+    // What can't be used yet is listed greyed out.
+    auto* model = box->completer()->model();
+    bool unionGrey = false;
+    for (int r = 0; r < model->rowCount(); ++r) {
+        if (model->index(r, 0).data().toString().startsWith(QStringLiteral("Union ")))
+            unionGrey = !(model->flags(model->index(r, 0)) & Qt::ItemIsEnabled);
+    }
+    CHECK(unionGrey);
+
+    // Part of a name, then Enter, runs it.
+    CHECK(ribbon->runSearch(QStringLiteral("cyl")) == app.shell->action("sb.modeling.cylinder"));
+    settle();
+    REQUIRE(app.doc().featureCount() == 1);
+    CHECK(app.doc().featureAt(0).type() == model::FeatureType::Cylinder);
+    CHECK_FALSE(box->hasFocus());
+    // What a tool does finds it too: "bevel" is in Chamfer's tip.
+    CHECK(ribbon->searchTerms().contains(QStringLiteral("Chamfer")));
+    CHECK(ribbon->runSearch(QStringLiteral("bevel")) == app.shell->action("sb.modeling.chamfer"));
+    // Something that can't be used isn't run, and nothing at all for no match.
+    CHECK(ribbon->runSearch(QStringLiteral("Union")) == nullptr);
+    CHECK(ribbon->runSearch(QStringLiteral("xyzzy")) == nullptr);
 }
 
 TEST_CASE("an SVG icon follows the theme's text color, and greys out when disabled", "[app][icons]") {
