@@ -23,6 +23,10 @@ namespace sb::app {
 // of everything in it (Create ▾), like Fusion's toolbar. A tab can have one main
 // button at its right end (Finish sketch).
 //
+// Students can pin any tool in a panel's dropdown to the panel as a button, or
+// unpin a button, by right-clicking it; pins are kept as keys like
+// "Model/Create/sb.modeling.cylinder" (tab, panel, the tool's object name).
+//
 // Object names, for tests and screenshots: the tab bar "sb.ribbon.tabs", a
 // panel's dropdown button "sb.ribbon.<tab>.<panel>" in lower case without
 // spaces, like "sb.ribbon.model.create", and its menu the same plus ".menu".
@@ -52,8 +56,24 @@ public:
     // The dropdown of a panel (made, with its tab, if needed). `path` after the
     // panel names a submenu of it: {"Grid style"}.
     QMenu* panelMenu(const QString& tab, const QString& panel, const QStringList& path = {});
-    // Shows `action` as a button on the panel, as well as in its dropdown.
-    void addButton(const QString& tab, const QString& panel, QAction* action);
+    // Adds a tool to the panel: `item` in its dropdown, and a button that runs
+    // `button` (its shorter words; may be `item` itself), shown when `onPanel`
+    // unless the student unpinned it, or when they pinned it.
+    void addTool(const QString& tab, const QString& panel, QAction* item, QAction* button, bool onPanel);
+    // Adds "Right-click a tool to pin it" at the end of every dropdown with tools.
+    // Call once every tool is added.
+    void addPinHints();
+
+    // Pins: tools the student put on their panel, and ones they took off it.
+    void setPins(const QStringList& pinned, const QStringList& unpinned);
+    QStringList pinned() const { return pinned_; }
+    QStringList unpinned() const { return unpinned_; }
+    // Pins or unpins a tool (by its dropdown item), as right-clicking it does.
+    void pin(const QString& tab, const QString& panel, QAction* item, bool on);
+    // Whether a tool is a button on its panel now.
+    bool onPanel(const QString& tab, const QString& panel, QAction* item) const;
+    // Every tool back to the buttons it started with.
+    void resetPins();
     // The tab's main button, at its right end, in green.
     void setPrimary(const QString& tab, QAction* action);
 
@@ -65,7 +85,20 @@ public:
     QString currentTab() const;
     QStringList visibleTabs() const;
 
+signals:
+    // A tool was pinned or unpinned: save pinned() and unpinned().
+    void pinsChanged();
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
 private:
+    struct Tool {
+        QString key;  // "Model/Create/sb.modeling.cylinder"
+        QAction* item = nullptr;
+        QToolButton* button = nullptr;
+        bool byDefault = false;
+    };
     struct Panel {
         QString name;
         QWidget* box = nullptr;
@@ -73,6 +106,7 @@ private:
         QToolButton* drop = nullptr;
         QMenu* menu = nullptr;
         std::map<QString, QMenu*> submenus;
+        std::vector<Tool> tools;
     };
     struct Tab {
         QString name;
@@ -90,6 +124,10 @@ private:
     void placeTabs();
     void placePanels(Tab& t);
     bool shows(const Tab& t) const;
+    Tool* findTool(const QString& tab, const QString& panel, QAction* item);
+    const Tool* findTool(const QString& tab, const QString& panel, QAction* item) const;
+    void showTools();  // each tool's button shown or hidden, as pinned
+    void askPin(const QString& tab, const QString& panel, QAction* item, const QPoint& at);
 
     QMenu* fileMenu_ = nullptr;
     QMenu* helpMenu_ = nullptr;
@@ -102,6 +140,7 @@ private:
     QString mode_;
     QString usualTab_;  // the tab picked before a mode's own tab took over
     bool placing_ = false;
+    QStringList pinned_, unpinned_;
 };
 
 }  // namespace sb::app

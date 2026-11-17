@@ -358,13 +358,14 @@ void Shell::buildMenus() {
     for (auto* a : {newAct, openAct, save_, undo_, redo_}) ribbon_->addQuick(a);
 
     // SketchBillet's own tools, in the panels where students look for them.
-    ribbon_->panelMenu(tr("Model"), tr("Steps"))->addActions({copy_, paste_});
-    ribbon_->panelMenu(tr("Model"), tr("Insert"))->addAction(importAct);
-    ribbon_->addButton(tr("Model"), tr("Insert"), importAct);
-    ribbon_->panelMenu(tr("Model"), tr("Make"))->addActions({export_, check});
-    ribbon_->addButton(tr("Model"), tr("Make"), export_);
-    ribbon_->panelMenu(tr("Inspect"), tr("Measure"))->addAction(check);
-    ribbon_->addButton(tr("Inspect"), tr("Measure"), check);
+    copy_->setIcon(svgIcon(icons::app::copy_svg));
+    paste_->setIcon(svgIcon(icons::app::paste_svg));
+    ribbon_->addTool(tr("Model"), tr("Steps"), copy_, copy_, false);
+    ribbon_->addTool(tr("Model"), tr("Steps"), paste_, paste_, false);
+    ribbon_->addTool(tr("Model"), tr("Insert"), importAct, importAct, true);
+    ribbon_->addTool(tr("Model"), tr("Make"), export_, export_, true);
+    ribbon_->addTool(tr("Model"), tr("Make"), check, check, false);
+    ribbon_->addTool(tr("Inspect"), tr("Measure"), check, check, true);
 
     // Plugin actions, in the tabs and panels they name ("Model/Create"), made in
     // the order first named.
@@ -377,16 +378,16 @@ void Shell::buildMenus() {
         a->setCheckable(static_cast<bool>(spec.checked));
         a->setIcon(svgIcon(spec.icon));
         connect(a, &QAction::triggered, this, [this, spec] { runAction(spec); });
-        QAction* button = nullptr;
-        if (spec.toolbar || spec.primary) {
-            button = new QAction(qs(spec.buttonText.empty() ? spec.text : spec.buttonText), this);
-            button->setObjectName(qs(spec.id + ".button"));
-            button->setToolTip(qs(spec.tip));
-            button->setStatusTip(qs(spec.tip));
-            button->setCheckable(a->isCheckable());
-            button->setIcon(a->icon());
-            connect(button, &QAction::triggered, this, [this, spec] { runAction(spec); });
-        }
+        // Every tool has a button, shown when it's on its panel (`toolbar`, or pinned).
+        auto* button = new QAction(
+            spec.buttonText.empty() ? qs(spec.text).remove(QStringLiteral("...")) : qs(spec.buttonText),
+            this);
+        button->setObjectName(qs(spec.id + ".button"));
+        button->setToolTip(qs(spec.tip));
+        button->setStatusTip(qs(spec.tip));
+        button->setCheckable(a->isCheckable());
+        button->setIcon(a->icon());
+        connect(button, &QAction::triggered, this, [this, spec] { runAction(spec); });
         for (const auto& place : qs(spec.menu).split(QLatin1Char(';'), Qt::SkipEmptyParts)) {
             auto parts = place.trimmed().split(QLatin1Char('/'), Qt::SkipEmptyParts);
             if (parts.isEmpty()) parts = {tr("Plugins")};
@@ -396,12 +397,24 @@ void Shell::buildMenus() {
                 ribbon_->setPrimary(tab, button);
                 continue;
             }
-            ribbon_->panelMenu(tab, panel, parts)->addAction(a);
-            if (button) ribbon_->addButton(tab, panel, button);
+            if (!parts.isEmpty()) {
+                ribbon_->panelMenu(tab, panel, parts)->addAction(a);  // in a submenu: not a button
+                continue;
+            }
+            ribbon_->addTool(tab, panel, a, button, spec.toolbar);
         }
         actions_.push_back({spec, a, button});
     }
     for (const auto& tab : host_.tabs()) ribbon_->setTabMode(qs(tab.name), tab.always, qs(tab.mode));
+
+    // The tools each student pinned to their panels, or took off them.
+    ribbon_->addPinHints();
+    ribbon_->setPins(settings_.value(QStringLiteral("toolbar/pinned")).toStringList(),
+                     settings_.value(QStringLiteral("toolbar/unpinned")).toStringList());
+    connect(ribbon_, &Ribbon::pinsChanged, this, [this] {
+        settings_.setValue(QStringLiteral("toolbar/pinned"), ribbon_->pinned());
+        settings_.setValue(QStringLiteral("toolbar/unpinned"), ribbon_->unpinned());
+    });
 
     // View > Panels and View > Layout: show and hide panels, and saved layouts.
     windowMenu_ = ribbon_->panelMenu(tr("View"), tr("Panels"));
@@ -603,6 +616,10 @@ void Shell::rebuildLayoutMenu() {
         if (ok && !name.trimmed().isEmpty()) saveNamedLayout(name.trimmed());
     });
     layoutMenu_->addAction(tr("Reset layout"), this, [this] { resetLayout(); });
+    auto* resetTools =
+        layoutMenu_->addAction(tr("Reset toolbar buttons"), this, [this] { ribbon_->resetPins(); });
+    resetTools->setObjectName(QStringLiteral("sb.shell.reset_toolbar"));
+    resetTools->setStatusTip(tr("Put back the buttons each panel started with, undoing every pin."));
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 #include "Ribbon.h"
 
 #include <QAction>
+#include <QContextMenuEvent>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QMenu>
@@ -137,6 +138,7 @@ Ribbon::Panel& Ribbon::panel(Tab& t, const QString& name) {
     p.menu = new QMenu(name, p.drop);
     p.menu->setObjectName(p.drop->objectName() + QStringLiteral(".menu"));
     p.menu->setToolTipsVisible(true);
+    p.menu->installEventFilter(this);  // right-click an item to pin it
     p.drop->setMenu(p.menu);
     v->addWidget(p.drop, 0, Qt::AlignHCenter | Qt::AlignBottom);
     t.panelList.push_back(p);
@@ -251,15 +253,123 @@ QMenu* Ribbon::panelMenu(const QString& tabName, const QString& panelName, const
     return m;
 }
 
-void Ribbon::addButton(const QString& tabName, const QString& panelName, QAction* action) {
+void Ribbon::addTool(const QString& tabName, const QString& panelName, QAction* item, QAction* button,
+                     bool onPanel) {
     auto& p = panel(tab(tabName), panelName);
+    p.menu->addAction(item);
     auto* b = new QToolButton(p.box);
-    b->setDefaultAction(action);
+    b->setDefaultAction(button);
     b->setAutoRaise(true);
     b->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);  // pictures, with words for new users
     b->setIconSize(QSize(24, 24));
-    if (!action->objectName().isEmpty()) b->setObjectName(action->objectName() + QStringLiteral(".tool"));
+    if (!button->objectName().isEmpty()) b->setObjectName(button->objectName() + QStringLiteral(".tool"));
+    // Right-click a button to take it off the panel.
+    b->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(b, &QToolButton::customContextMenuRequested, this,
+            [this, tabName, panelName, item, b](const QPoint& at) {
+                askPin(tabName, panelName, item, b->mapToGlobal(at));
+            });
     p.buttons->addWidget(b);
+    p.tools.push_back(
+        {QStringLiteral("%1/%2/%3").arg(tabName, panelName, item->objectName()), item, b, onPanel});
+    showTools();
+}
+
+void Ribbon::addPinHints() {
+    for (auto& t : tabs_) {
+        for (auto& p : t.panelList) {
+            if (p.tools.empty()) continue;
+            p.menu->addSeparator();
+            auto* hint = p.menu->addAction(tr("Right-click a tool to pin it to the panel"));
+            hint->setObjectName(p.menu->objectName() + QStringLiteral(".hint"));
+            hint->setEnabled(false);
+        }
+    }
+}
+
+Ribbon::Tool* Ribbon::findTool(const QString& tabName, const QString& panelName, QAction* item) {
+    for (auto& t : tabs_) {
+        if (t.name != tabName) continue;
+        for (auto& p : t.panelList) {
+            if (p.name != panelName) continue;
+            for (auto& tool : p.tools) {
+                if (tool.item == item) return &tool;
+            }
+        }
+    }
+    return nullptr;
+}
+
+const Ribbon::Tool* Ribbon::findTool(const QString& tabName, const QString& panelName, QAction* item) const {
+    return const_cast<Ribbon*>(this)->findTool(tabName, panelName, item);
+}
+
+bool Ribbon::onPanel(const QString& tabName, const QString& panelName, QAction* item) const {
+    const auto* tool = findTool(tabName, panelName, item);
+    if (!tool) return false;
+    return pinned_.contains(tool->key) || (tool->byDefault && !unpinned_.contains(tool->key));
+}
+
+void Ribbon::showTools() {
+    for (auto& t : tabs_) {
+        for (auto& p : t.panelList) {
+            for (auto& tool : p.tools) tool.button->setVisible(onPanel(t.name, p.name, tool.item));
+        }
+    }
+}
+
+void Ribbon::setPins(const QStringList& pinned, const QStringList& unpinned) {
+    pinned_ = pinned;
+    unpinned_ = unpinned;
+    showTools();
+}
+
+void Ribbon::pin(const QString& tabName, const QString& panelName, QAction* item, bool on) {
+    const auto* tool = findTool(tabName, panelName, item);
+    if (!tool) return;
+    pinned_.removeAll(tool->key);
+    unpinned_.removeAll(tool->key);
+    // Only what differs from how the tool started is kept.
+    if (on && !tool->byDefault) pinned_ << tool->key;
+    if (!on && tool->byDefault) unpinned_ << tool->key;
+    showTools();
+    emit pinsChanged();
+}
+
+void Ribbon::resetPins() {
+    pinned_.clear();
+    unpinned_.clear();
+    showTools();
+    emit pinsChanged();
+}
+
+// The small menu for right-clicking a tool: pin it to its panel, or unpin it.
+void Ribbon::askPin(const QString& tabName, const QString& panelName, QAction* item, const QPoint& at) {
+    const bool on = onPanel(tabName, panelName, item);
+    QMenu m(this);
+    const QString name = item->text().remove(QLatin1Char('&')).remove(QStringLiteral("..."));
+    auto* a = m.addAction(on ? tr("Unpin %1 from %2").arg(name, panelName)
+                             : tr("Pin %1 to %2").arg(name, panelName));
+    a->setObjectName(on ? QStringLiteral("sb.ribbon.unpin") : QStringLiteral("sb.ribbon.pin"));
+    if (m.exec(at) == a) pin(tabName, panelName, item, !on);
+}
+
+// Right-clicking an item in a panel's dropdown pins it (or unpins it).
+bool Ribbon::eventFilter(QObject* watched, QEvent* event) {
+    if (event->type() == QEvent::ContextMenu) {
+        auto* menu = qobject_cast<QMenu*>(watched);
+        for (auto& t : tabs_) {
+            for (auto& p : t.panelList) {
+                if (p.menu != menu) continue;
+                auto* e = static_cast<QContextMenuEvent*>(event);
+                if (auto* item = menu->actionAt(e->pos()); item && findTool(t.name, p.name, item)) {
+                    askPin(t.name, p.name, item, e->globalPos());
+                    return true;
+                }
+            }
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void Ribbon::setPrimary(const QString& tabName, QAction* action) {
