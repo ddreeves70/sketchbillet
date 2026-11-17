@@ -325,6 +325,7 @@ void Shell::buildMenus() {
     check->setToolTip(check->statusTip());
     file->addSeparator();
     auto* quit = file->addAction(tr("&Quit"), this, [this] { close(); });
+    quit->setObjectName(QStringLiteral("sb.shell.quit"));
     quit->setShortcut(QKeySequence::Quit);
 
     undo_ = new QAction(tr("Undo"), this);
@@ -421,12 +422,13 @@ void Shell::buildMenus() {
     layoutMenu_ = ribbon_->panelMenu(tr("View"), tr("Layout"));
 
     helpMenu_ = ribbon_->helpMenu();
-    helpMenu_->addAction(tr("&About SketchBillet"), this, [this] {
+    auto* about = helpMenu_->addAction(tr("&About SketchBillet"), this, [this] {
         const auto ver = sb::version();
         QMessageBox::about(this, tr("About SketchBillet"),
                            tr("SketchBillet %1\nFree, open-source CAD.\nhttps://sketchbillet.org")
                                .arg(QString::fromUtf8(ver.data(), static_cast<qsizetype>(ver.size()))));
     });
+    about->setObjectName(QStringLiteral("sb.shell.about"));
 
     // Every dropdown asks what can be used when it opens, and every item's
     // shortcut works wherever it is, even in a tab that isn't showing.
