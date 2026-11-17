@@ -40,6 +40,7 @@
 #include "AppSettings.h"
 #include "AppUi.h"
 #include "Icons.h"
+#include "Ribbon.h"
 #include "Shell.h"
 #include "sb/grid/Grid.h"
 #include "sb/kernel_occt/OcctKernel.h"
@@ -260,6 +261,7 @@ TEST_CASE("every toolbar button has a picture", "[app][icons]") {
     for (auto* b : ribbon->findChildren<QToolButton*>()) {
         auto* a = b->defaultAction();
         if (!a || a->objectName().startsWith(QStringLiteral("test."))) continue;  // SketchBillet's own only
+        if (b->isHidden()) continue;  // a tool not on its panel (until a student pins it)
         ++buttons;
         INFO(a->text().toStdString());
         CHECK_FALSE(a->icon().isNull());
@@ -311,7 +313,8 @@ TEST_CASE("the toolbar has tabs of panels, each with a dropdown of everything in
     CHECK(create->actions().contains(app.shell->action("sb.modeling.box")));
     CHECK(create->actions().contains(app.shell->action("sb.modeling.cylinder")));
     CHECK(onScreen(app.shell.get(), app.shell->button("sb.modeling.box")));
-    CHECK(app.shell->button("sb.modeling.cylinder") == nullptr);  // only in the dropdown
+    CHECK_FALSE(
+        onScreen(app.shell.get(), app.shell->button("sb.modeling.cylinder")));  // only in the dropdown
     // A submenu of a dropdown: View > Grid > Grid style.
     auto* grid = app.shell->findChild<QMenu*>(QStringLiteral("sb.ribbon.view.grid.menu"));
     REQUIRE(grid);
@@ -326,6 +329,55 @@ TEST_CASE("the toolbar has tabs of panels, each with a dropdown of everything in
               ->actions()
               .contains(app.shell->findChild<QAction*>(QStringLiteral("sb.shell.export"))));
     REQUIRE(app.shell->findChild<QMenu*>(QStringLiteral("sb.ribbon.help.menu")));
+}
+
+TEST_CASE("a student can pin a tool to its panel, or unpin a button, and it's remembered", "[app][ribbon]") {
+    App app;
+    auto* window = app.shell.get();
+    auto* ribbon = app.shell->findChild<app::Ribbon*>();
+    REQUIRE(ribbon);
+    auto* cylinder = app.shell->action("sb.modeling.cylinder");
+    auto* box = app.shell->action("sb.modeling.box");
+    CHECK_FALSE(onScreen(window, app.shell->button("sb.modeling.cylinder")));
+    // Every dropdown with tools says how.
+    auto* create = app.shell->findChild<QMenu*>(QStringLiteral("sb.ribbon.model.create.menu"));
+    REQUIRE(create);
+    CHECK(create->actions().back()->text() == QStringLiteral("Right-click a tool to pin it to the panel"));
+    CHECK_FALSE(create->actions().back()->isEnabled());
+
+    ribbon->pin(QStringLiteral("Model"), QStringLiteral("Create"), cylinder, true);
+    settle();
+    CHECK(onScreen(window, app.shell->button("sb.modeling.cylinder")));
+    ribbon->pin(QStringLiteral("Model"), QStringLiteral("Create"), box, false);
+    settle();
+    CHECK_FALSE(onScreen(window, app.shell->button("sb.modeling.box")));
+    CHECK(box->isEnabled());  // still in the dropdown, and its shortcut still works
+    // Only what's different from the start is kept, in the settings.
+    CHECK(app.settings.value(QStringLiteral("toolbar/pinned")).toStringList() ==
+          QStringList{QStringLiteral("Model/Create/sb.modeling.cylinder")});
+    CHECK(app.settings.value(QStringLiteral("toolbar/unpinned")).toStringList() ==
+          QStringList{QStringLiteral("Model/Create/sb.modeling.box")});
+
+    app.open();  // a new window, as on the next run
+    window = app.shell.get();
+    CHECK(onScreen(window, app.shell->button("sb.modeling.cylinder")));
+    CHECK_FALSE(onScreen(window, app.shell->button("sb.modeling.box")));
+
+    // Pinning one of SketchBillet's own tools works the same way.
+    ribbon = app.shell->findChild<app::Ribbon*>();
+    auto* copy = app.shell->findChild<QAction*>(QStringLiteral("sb.shell.copy"));
+    ribbon->pin(QStringLiteral("Model"), QStringLiteral("Steps"), copy, true);
+    settle();
+    CHECK(onScreen(window, copy));
+
+    // Layout > Reset toolbar buttons puts every panel back as it started.
+    app.shell->findChild<QAction*>(QStringLiteral("sb.shell.reset_toolbar"))->trigger();
+    settle();
+    CHECK_FALSE(onScreen(window, app.shell->button("sb.modeling.cylinder")));
+    CHECK(onScreen(window, app.shell->button("sb.modeling.box")));
+    CHECK_FALSE(onScreen(window, copy));
+    CHECK(app.settings.value(QStringLiteral("toolbar/pinned")).toStringList().isEmpty());
+    CHECK(app.settings.value(QStringLiteral("toolbar/unpinned")).toStringList().isEmpty());
 }
 
 TEST_CASE("an SVG icon follows the theme's text color, and greys out when disabled", "[app][icons]") {
@@ -1128,8 +1180,8 @@ TEST_CASE("constraints are greyed out until they fit what's picked", "[app][sket
     // rest in Constrain's and Dimension's dropdowns are enabled when they fit.
     auto shown = [&](const char* id) { return d.app.shell->action(id)->isEnabled(); };
     CHECK(onScreen(d.app.shell.get(), d.app.shell->button("sb.sketcher.horizontal")));
-    CHECK(d.app.shell->button("sb.sketcher.parallel") == nullptr);  // in the dropdown
-    CHECK_FALSE(shown("sb.sketcher.horizontal"));                   // nothing picked: no constraint buttons
+    CHECK_FALSE(onScreen(d.app.shell.get(), d.app.shell->button("sb.sketcher.parallel")));  // in the dropdown
+    CHECK_FALSE(shown("sb.sketcher.horizontal"));  // nothing picked: no constraint buttons
     CHECK_FALSE(shown("sb.sketcher.dimension"));
     clickAt(d.flat, {30, 0, 0});  // Line1
     CHECK(shown("sb.sketcher.horizontal"));
@@ -1487,7 +1539,7 @@ TEST_CASE("the Sketch tab shows while editing, and the Model tab otherwise", "[a
     for (const char* id : usualButtons) CHECK(shown(id));
     for (const char* id : sketchButtons) CHECK_FALSE(shown(id));
     CHECK(app.shell->button("sb.sketcher.new_xy")->text() == QStringLiteral("New sketch"));
-    CHECK(app.shell->button("sb.sketcher.new_xz") == nullptr);  // in the Sketch panel's dropdown
+    CHECK_FALSE(shown("sb.sketcher.new_xz"));  // in the Sketch panel's dropdown
 
     app.click("sb.sketcher.new_xy");
     CHECK(current() == QStringLiteral("Sketch"));  // picked by itself

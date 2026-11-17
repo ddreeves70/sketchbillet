@@ -31,6 +31,11 @@ in **panels**.
 - **A panel's name** opens a dropdown of everything in the panel, buttons
   included. Tools you'll use less, like **Cylinder** and **Hole from two edges**,
   are only there.
+- **Pin the tools you use.** Right-click a tool in a panel's dropdown and pick
+  **Pin** to make it a button on the panel, like **Cylinder** on **Create**.
+  Right-click a button and pick **Unpin** to take it off (it stays in the
+  dropdown). SketchBillet remembers your pins; **Layout > Reset toolbar buttons**
+  on the View tab puts every panel back as it started.
 - **Keyboard shortcuts** work whichever tab is showing, like Ctrl+Shift+B for a box.
 
 In these guides, **Create > Box** means the **Box** tool in the **Create**
@@ -520,6 +525,8 @@ was on a monitor that's no longer plugged in, it comes back onto your main scree
 - Pick a saved name to switch to it.
 - **Reset layout** puts every panel back where it started, with the floating
   panels over the viewer again.
+- **Reset toolbar buttons** takes away your [pins](#the-toolbar), so each panel
+  has the buttons it started with.
 
 ## Plugins in the app
 
