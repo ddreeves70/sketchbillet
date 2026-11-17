@@ -1,5 +1,5 @@
 // The Ruler plugin: shares a ruler that shows lengths in inches or mm. The
-// student picks with View > Ruler shows inches, and SketchBillet remembers it.
+// student picks with Display > Ruler shows inches, and SketchBillet remembers it.
 #include <string>
 
 #include "example/ruler/Ruler.h"
@@ -28,10 +28,10 @@ void registerRuler(sb::plugin::PluginContext& ctx) {
     // Step 1, registering: offer the ruler to every other plugin.
     ctx.provide<IRuler>(ruler);
 
-    // A View menu item with a check mark. Clicking it changes the setting.
+    // An item on the View tab with a check mark. Clicking it changes the setting.
     ctx.addAction({.id = "example.ruler.inches",
                    .text = "Ruler shows inches",
-                   .menu = "View",
+                   .menu = "View/Display",
                    .tip = "Show lengths in inches instead of mm.",
                    .run = [&settings] { settings.set("unit", ruler.inches ? "mm" : "in"); },
                    .checked = [] { return ruler.inches; }});

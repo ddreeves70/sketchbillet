@@ -1,21 +1,49 @@
 # The desktop app
 
-`sketchbillet` is SketchBillet's desktop app. You build a part by adding steps from the menus,
-see it in 3D as it grows, see every step in the feature tree, and change any
+`sketchbillet` is SketchBillet's desktop app. You build a part by adding steps from the
+toolbar, see it in 3D as it grows, see every step in the feature tree, and change any
 step's numbers in Properties. Everything you do can be undone.
 
 ![The SketchBillet window with the desk organizer open](images/app-main.png)
 
 | # | Part | What it's for |
 | --- | --- | --- |
-| 1 | **Menus** | File (new, open, open a sample, save, import, export, check for printing), Edit (undo, redo, copy, paste, duplicate, turn off and on, folders, delete, pick edges), Create (shapes), Combine (union, cut, intersect), Modify (move, linked copy, unlink copy, fillet, chamfer, parameters), Tools (measure), Sketch (new, on a face, edit, draw, move to a face), View (the grid), Window (panels, layouts) |
-| 2 | **Toolbar** | The most-used menu items, one click away, each with a picture and its name. While you edit a sketch it shows the sketch tools instead, plus the constraint buttons that fit what you picked. If they don't all fit across the window, the rest go on a second row |
-| 3 | **Feature tree** | Every step of the design, in the order SketchBillet builds them, with how each one built. It floats over the viewer, see-through, and starts with the design's **Document settings** |
-| 4 | **Viewer** | Your part in 3D, on the grid. Turn it with the mouse, the view cube or the **view bar** at its bottom, and click a body to pick it |
-| 5 | **Properties** | The selected step's name and numbers. Change them here. It floats over the viewer's top right, under the view cube |
-| 6 | **Status bar** | Messages, and what went wrong when something does |
-| 7 | **Grid status** | The grid's spacing and style, and whether snapping is on |
-| 8 | **Timeline** | The steps in order, left to right, and the blue rollback marker. Drag the marker to go back in time, or drag a step to change the order. See [The timeline](#the-timeline) |
+| 1 | **Top row** | **File** (new, open, open a sample, save, import, export, check for printing, quit), then New, Open, Save, Undo and Redo, always there. **Help** is at the right |
+| 2 | **Tabs** | **Model** (making the part), **Inspect** (measuring, parameters, checking for printing) and **View** (the grid, the axes, panels and layouts). While you edit a sketch, the **Sketch** tab takes the Model tab's place |
+| 3 | **Panels** | Each tab's tools, in panels, with each panel's name underneath: **Create**, **Modify**, **Combine** and so on. The most-used tools are buttons, each with a picture and its name. Click a panel's name for everything in it. See [The toolbar](#the-toolbar) |
+| 4 | **Feature tree** | Every step of the design, in the order SketchBillet builds them, with how each one built. It floats over the viewer, see-through, and starts with the design's **Document settings** |
+| 5 | **Viewer** | Your part in 3D, on the grid. Turn it with the mouse, the view cube or the **view bar** at its bottom, and click a body to pick it |
+| 6 | **Properties** | The selected step's name and numbers. Change them here. It floats over the viewer's top right, under the view cube |
+| 7 | **Status bar** | Messages, and what went wrong when something does |
+| 8 | **Grid status** | The grid's spacing and style, and whether snapping is on |
+| 9 | **Timeline** | The steps in order, left to right, and the blue rollback marker. Drag the marker to go back in time, or drag a step to change the order. See [The timeline](#the-timeline) |
+
+## The toolbar
+
+The toolbar works like Fusion's: **tabs** across the top, and each tab's tools
+in **panels**.
+
+![The toolbar: File and the quick buttons, the Model, Inspect and View tabs, and the Model tab's panels](images/app-toolbar.png)
+
+- **Buttons** are the tools you'll use most, like **Box**, **Extrude** and
+  **Fillet**. A button is grey when it can't be used yet: **Cut** needs two
+  bodies picked first, and its tip says so.
+- **A panel's name** opens a dropdown of everything in the panel, buttons
+  included. Tools you'll use less, like **Cylinder** and **Hole from two edges**,
+  are only there.
+- **Keyboard shortcuts** work whichever tab is showing, like Ctrl+Shift+B for a box.
+
+In these guides, **Create > Box** means the **Box** tool in the **Create**
+panel: click its button, or click **Create** under the panel and pick **Box**.
+The guides name the tab too when it isn't the Model tab, like **Grid > Snap to
+grid** on the View tab.
+
+| Tab | Panels |
+| --- | --- |
+| **Model** | **Sketch** (new sketch, edit sketch, planes), **Create** (box, extrude, revolve, hole, cylinder), **Modify** (move, shell, fillet, chamfer, linked copy, change edges), **Combine** (union, cut, intersect), **Pattern** (row, around, mirror), **Inspect** (measure), **Select** (pick edges), **Insert** (import), **Make** (export, check for printing), **Steps** (copy, paste, duplicate, turn off and on, folders, delete) |
+| **Sketch** | **Draw** (line, rectangle, circle, arc, spline, point), **Edit** (select, trim, round corner, delete), **Constrain** (coincident, horizontal, vertical, equal and the rest), **Dimension**, and the green **Finish sketch** at the right. It only shows while you edit a sketch |
+| **Inspect** | **Measure** (measure, check for printing), **Design** (parameters) |
+| **View** | **Display** (view options), **Grid** (show, snap, style, spacing), **Axes**, **Panels** (show and hide panels, a new viewer), **Layout** (saved layouts) |
 
 ## Starting it
 
@@ -120,7 +148,7 @@ all** fits every pane.
 
 ![Four panes: Top, Iso, Front and Right](images/app-viewer-panes.png)
 
-**More viewers.** **Window > New viewer** opens another viewer next to the first,
+**More viewers.** **Panels > New viewer** opens another viewer next to the first,
 with its own panes and cameras, for example to keep a close-up and the whole part
 on screen at once. Drag its tab to move it, even onto another monitor. Extra
 viewers close with their tab's x, and aren't reopened next time.
@@ -151,9 +179,9 @@ Properties is at the top right, under the view cube, with the Sketch panel
 - **Make it bigger or smaller** by dragging its inner side edge or its bottom
   edge.
 - **Dock it** beside the viewer as an ordinary panel with the button at the right
-  of its title bar (or untick **Window > *panel* over the view**). Tick that menu
-  item again to float it over the viewer once more.
-- **Window > *panel*** hides it and shows it again.
+  of its title bar (or untick **Panels > *panel* over the view** on the View
+  tab). Tick it again to float it over the viewer once more.
+- **Panels > *panel*** hides it and shows it again.
 
 SketchBillet remembers all of this next time it starts.
 
@@ -179,12 +207,12 @@ Under them, each row is one step: its name, its kind, and its status.
 - **Delete** a step with the Delete key, or right-click > Delete step. A step that
   another step uses can't be deleted until that step is.
 
-- **Turn off** steps with Edit > Turn off, or right-click > Turn off. A step
+- **Turn off** steps with Steps > Turn off, or right-click > Turn off. A step
   that's off isn't built, but it isn't deleted: its numbers are kept, and Edit >
   Turn on (or right-click > Turn on) brings it back. Every picked step changes
   at once, as one Undo. A step that uses a step that's off shows `blocked`.
-- **Put steps in a folder** with Edit > New folder. See [Folders](#folders).
-- **Duplicate** a step with Edit > Duplicate step (Ctrl+D). See
+- **Put steps in a folder** with Steps > New folder. See [Folders](#folders).
+- **Duplicate** a step with Steps > Duplicate step (Ctrl+D). See
   [Copying steps](#copying-steps).
 
 Picking two steps turns on **Combine**: union, cut or intersect. For a cut, pick
@@ -223,7 +251,7 @@ The grid's spacing is a View option, not part of the design: it stays in mm.
 
 ## Parameters
 
-**Modify > Parameters** opens the Parameters panel, floating over the view under
+**Design > Parameters** opens the Parameters panel, floating over the view under
 the feature tree: the design's named values,
 like `wall = 3 mm`, that sketch dimensions and steps can use in formulas. Type
 in it to add, change, rename or delete them. See
@@ -244,7 +272,7 @@ STL or 3MF file, as an **Import** step. Properties shows the file it came from,
 
 ## Measuring
 
-**Tools > Measure** (Ctrl+Shift+I, or **Measure** on the toolbar) measures your
+**Inspect > Measure** (Ctrl+Shift+I) measures your
 part. Click a face, edge or point in the view to see its size, then another to
 see the distance between them; a line shows where the distance is measured. Click
 **Done** to go back to picking bodies. See [Measuring](measuring.md).
@@ -258,7 +286,7 @@ unit, mm unless you picked another one in
 ![Properties for a cylinder](images/app-properties.png)
 
 - Type a number and press Enter, or click elsewhere: the step changes and the
-  design rebuilds. Edit > Undo puts it back.
+  design rebuilds. Undo puts it back.
 - Holding an arrow key or rolling the mouse wheel changes a number in small
   steps. Quick changes to the same number undo as one step.
 - **Base** and **Corner** are positions: x goes right, y goes back, z goes up
@@ -275,20 +303,22 @@ When a step doesn't build, Properties says why in red, and how to fix it:
 
 The grid is a pattern of dots or lines on the ground (the x-y plane) that helps
 you judge sizes and line things up. It starts **on**, every **10 mm**, drawn as
-**lines**, with **snapping off**. Change it in the **View** menu:
+**lines**, with **snapping off**. Change it with the **Grid** panel on the **View**
+tab: **Show grid** and **Snap to grid** are buttons, and **Grid** under the panel
+has the rest.
 
-| Menu item | Keys | What it does |
+| Tool | Keys | What it does |
 | --- | --- | --- |
-| View > Show grid | Ctrl+G | Shows or hides the grid |
-| View > Snap to grid | Ctrl+Shift+G | Points you pick with the mouse jump to the nearest grid crossing |
-| View > Grid style > Lines or Dots | | Lines look like graph paper; dots are lighter and keep your part easy to see |
-| View > Grid spacing | | 1, 2, 5, 10, 20 or 50 mm, or **Other...** for any size from 0.01 mm to 1000 mm |
+| Grid > Show grid | Ctrl+G | Shows or hides the grid |
+| Grid > Snap to grid | Ctrl+Shift+G | Points you pick with the mouse jump to the nearest grid crossing |
+| Grid > Grid style > Lines or Dots | | Lines look like graph paper; dots are lighter and keep your part easy to see |
+| Grid > Grid spacing | | 1, 2, 5, 10, 20 or 50 mm, or **Other...** for any size from 0.01 mm to 1000 mm |
 
 | Lines, 10 mm (the start) | Dots, 5 mm |
 | --- | --- |
 | ![The grid as lines, 10 mm apart](images/app-grid-lines.png) | ![The grid as dots, 5 mm apart](images/app-grid-dots.png) |
 
-The status bar (7 in the picture at the top) always shows the
+The status bar (8 in the picture at the top) always shows the
 grid's settings, like "Grid 10 mm, lines, snap off". SketchBillet remembers your grid
 settings for next time, and they're also in the [View options](#view-options)
 panel, where Grid spacing takes any size.
@@ -316,9 +346,9 @@ edge of a real box. Turn the view (try the cube's **Top** face) and it shows.
 
 | Menu item | What it does | Starts |
 | --- | --- | --- |
-| View > Show axes | Shows or hides the axes on the view cube (and their letters) | on |
-| View > Show axis labels | Shows or hides just the letters X, Y and Z | on |
-| View > Show axes at the origin | Also draws the axes at the origin (0, 0, 0), 25 mm long, in your design. Handy when you sketch around the origin | off |
+| Axes > Show axes | Shows or hides the axes on the view cube (and their letters) | on |
+| Axes > Show axis labels | Shows or hides just the letters X, Y and Z | on |
+| Axes > Show axes at the origin | Also draws the axes at the origin (0, 0, 0), 25 mm long, in your design. Handy when you sketch around the origin | off |
 
 SketchBillet remembers all three for next time, and they're also in the
 [View options](#view-options) panel. The letters always face you and stay the
@@ -327,15 +357,15 @@ same size as you zoom. The axes are a plugin too, `sb.axes`, built into SketchBi
 ## View options
 
 Everything the viewer can show, the grid and the axes so far, is also in one
-place: **View > View options...** opens the **View options** panel. It lists every
-option, grouped, and changing one there is the same as using the View menu: the
-menu's check marks follow, and SketchBillet remembers it.
+place: **Display > View options...** opens the **View options** panel. It lists every
+option, grouped, and changing one there is the same as using the View tab: its
+check marks and buttons follow, and SketchBillet remembers it.
 
 ![The View options panel](images/app-view-options.png)
 
 - The panel starts closed. Close it again with its **x**, or open and close it from
-  the **Window** menu. Like any panel, you can dock it anywhere.
-- **Grid spacing** takes any size from 0.01 mm to 1000 mm, not just the menu's
+  **Panels** on the View tab. Like any panel, you can dock it anywhere.
+- **Grid spacing** takes any size from 0.01 mm to 1000 mm, not just the listed
   sizes. Type it and press Enter.
 
 ### One pane only
@@ -357,7 +387,7 @@ letters in the top view.
 
 Things to know:
 
-- **A change for all panes wins.** Changing an option from the View menu, or with
+- **A change for all panes wins.** Changing an option from the View tab, or with
   **All panes** in the panel, applies to every pane, including one that had its
   own value for that option.
 - **New panes start like all the others.** Switching from 1 to 4 panes gives the
@@ -374,18 +404,18 @@ built.
 
 ![The Tag parts folder is picked, so Plate and Hole are picked too; the Spare folder's steps are all off](images/app-folders.png)
 
-- **Make one:** pick the steps (Ctrl-click or Shift-click), then Edit > New folder,
+- **Make one:** pick the steps (Ctrl-click or Shift-click), then Steps > New folder,
   or right-click > New folder. It's called `Folder1`, `Folder2`, ...
 - **Rename it:** double-click its name, or press F2.
 - **Open and close it** with the arrow next to its name.
-- **Pick the folder** to pick all its steps. Then Edit > Turn off turns them all off.
+- **Pick the folder** to pick all its steps. Then Steps > Turn off turns them all off.
 - **Right-click a folder** for Rename folder, Turn off (or Turn on), and Remove
   folder. Removing a folder keeps its steps.
 
 The **Status** of a folder is a problem inside it (`failed` or `blocked`), or
 `off` if all its steps are off.
 
-Example: in the keychain tag, pick `Plate` and `Hole`, then Edit > New folder, and
+Example: in the keychain tag, pick `Plate` and `Hole`, then Steps > New folder, and
 rename it `Tag parts`. `Tag` stays outside, under the folder.
 
 Tips:
@@ -402,9 +432,9 @@ Copying a step also copies every step it uses, so a copied cut still has its
 hole: copying `Tag` (which cuts `Hole` out of `Plate`) gives `Plate1`, `Hole1`
 and `Tag1`. The copies are separate: changing one never changes the other.
 
-- **Edit > Duplicate step** (Ctrl+D) copies the picked step into the same design,
+- **Steps > Duplicate step** (Ctrl+D) copies the picked step into the same design,
   at the end of the feature tree.
-- **Edit > Copy** (Ctrl+C) copies the picked steps. **Edit > Paste** (Ctrl+V) adds
+- **Steps > Copy steps** (Ctrl+C) copies the picked steps. **Steps > Paste steps** (Ctrl+V) adds
   them to the end of the design that's open, which can be a different design, or
   the same one. Paste works as often as you like, and every paste is one Undo.
 - A copied name that's taken gets the next free number: `Plate` becomes `Plate1`.
@@ -424,9 +454,9 @@ Tips:
 
 ## Undo and redo
 
-**Edit > Undo** (Ctrl+Z) takes back the last change, whatever made it: a menu
-item, a renamed step, or a number typed in Properties. The menu item says what it
-will undo, like "Undo Add Box1". **Edit > Redo** (Ctrl+Y or Ctrl+Shift+Z) puts it
+**Undo** (Ctrl+Z, or the curved arrow in the top row) takes back the last change,
+whatever made it: a tool, a renamed step, or a number typed in Properties. Its tip
+says what it will undo, like "Undo Add Box1". **Redo** (Ctrl+Y or Ctrl+Shift+Z) puts it
 back.
 
 Opening a design starts a fresh undo history.
@@ -476,14 +506,15 @@ Every panel can be moved:
   share its space as a tab.
 - **Drag it out** of the window to make it a window of its own, for example on a
   second monitor.
-- **Window** lists every panel: tick one to show it again after closing it.
+- **Panels** on the View tab lists every panel: tick one to show it again after
+  closing it.
 - The feature tree, Properties, the Sketch panel and View options float over the
   viewer until you dock them; see [Panels over the viewer](#panels-over-the-viewer).
 
 SketchBillet remembers where your panels were and puts them back next time. If a panel
 was on a monitor that's no longer plugged in, it comes back onto your main screen.
 
-**Window > Layouts** keeps named layouts:
+**Layout** keeps named layouts:
 
 - **Save layout as...** saves the current arrangement under a name.
 - Pick a saved name to switch to it.
@@ -492,9 +523,9 @@ was on a monitor that's no longer plugged in, it comes back onto your main scree
 
 ## Plugins in the app
 
-The viewer, the feature tree, Properties, and the Create and Combine menus all
+The viewer, the feature tree, Properties, and the Create and Combine panels all
 come from plugins that ship with SketchBillet. Plugins you add (see [Plugins](plugins.md)) can add
-menu items and panels too. Put plugin folders in a `plugins` folder next to
+tabs, tools and panels too. Put plugin folders in a `plugins` folder next to
 `sketchbillet`, or in SketchBillet's folder in your user data:
 
 | System | Folder |

@@ -47,7 +47,7 @@ tells you to check; if two pieces look alike, it asks you to pick again.
 
 **Chamfer** works the same way, with a **Distance** instead of a radius.
 
-**Edit > Pick edges** turns picking edges on or off by itself, to pick the edges
+**Select > Pick edges** turns picking edges on or off by itself, to pick the edges
 first and then click Fillet or Chamfer. Each new fillet or chamfer is one undo
 step, and so is each change of its radius or distance.
 

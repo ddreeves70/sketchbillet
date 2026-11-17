@@ -23,7 +23,6 @@ class QAction;
 class QLabel;
 class QMenu;
 class QSettings;
-class QToolBar;
 
 namespace ads {
 class CDockAreaWidget;
@@ -34,6 +33,7 @@ class CDockWidget;
 namespace sb::app {
 
 class AppUi;
+class Ribbon;
 class UpdateChecker;
 struct UpdateResult;
 class ViewOverlay;
@@ -117,7 +117,7 @@ public:
 
     // Picks edges (or faces) of one body, by their numbers (from 1) in the order
     // `sketchbillet_cli open --edges` (or --faces) lists them, as clicking them
-    // would (for screenshots). While measuring (Tools > Measure), they're what's
+    // would (for screenshots). While measuring (Inspect > Measure), they're what's
     // measured. Returns false, with nothing picked, if the body or a number isn't there.
     bool selectElements(const QString& body, kernel::TopoKind kind, const QList<int>& numbers);
 
@@ -145,7 +145,7 @@ public:
     void setOverView(const QString& id, bool over);
     bool overView(const QString& id) const;
     QWidget* overlay(const QString& id) const;  // its floating frame (shown or not)
-    // Opens another copy of a panel that allows it (Window > New viewer).
+    // Opens another copy of a panel that allows it (Panels > New viewer, on the View tab).
     // Returns the new panel's id, e.g. "sb.viewer.main.2", or empty if it can't.
     QString openAnotherPanel(const QString& id);
     QByteArray saveLayout() const;
@@ -163,7 +163,6 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* event) override;
-    void resizeEvent(QResizeEvent* event) override;
 
 private:
     std::optional<std::pair<std::string, QString>> bodyToUse(const model::RebuildReport& report,
@@ -194,22 +193,17 @@ private:
     struct Overlay {
         ads::CDockWidget* dock = nullptr;
         ViewOverlay* frame = nullptr;
-        QAction* show = nullptr;  // Window > Feature tree, while it floats
-        QAction* over = nullptr;  // Window > Feature tree over the view
+        QAction* show = nullptr;  // View > Panels > Feature tree, while it floats
+        QAction* over = nullptr;  // View > Panels > Feature tree over the view
         bool shown = true;        // open (floating or docked), as opposed to closed
     };
     std::map<QString, Overlay> overlays_;
     std::vector<QString> overlayOrder_;  // as the plugins added them: the order they stack in  // panel id ->
                                          // how many copies were opened
     QLabel* problemLabel_ = nullptr;
-    QToolBar* toolbar_ = nullptr;
-    // The second row: plugin buttons that don't fit on the first (hidden when empty).
-    QToolBar* toolbar2_ = nullptr;
-    QAction* toolbar2Hint_ = nullptr;  // "Pick something ..." while the second row has no buttons showing
-    void wrapToolbar();
-    QMenu* windowMenu_ = nullptr;
-    QMenu* viewMenu_ = nullptr;
-    QMenu* layoutMenu_ = nullptr;
+    Ribbon* ribbon_ = nullptr;     // the toolbar: tabs of panels (Ribbon.h)
+    QMenu* windowMenu_ = nullptr;  // View > Panels: show and hide panels
+    QMenu* layoutMenu_ = nullptr;  // View > Layout: saved layouts
     QAction* undo_ = nullptr;
     QAction* redo_ = nullptr;
     QAction* copy_ = nullptr;
@@ -218,8 +212,8 @@ private:
     QAction* export_ = nullptr;
     struct PluginItem {
         plugin::ActionSpec spec;
-        QAction* item = nullptr;    // in its menu
-        QAction* button = nullptr;  // on the toolbar; separate so it can hide in other toolbar modes
+        QAction* item = nullptr;    // in its panel's dropdown
+        QAction* button = nullptr;  // on its panel (with its shorter words), or the tab's main button
     };
     std::vector<PluginItem> actions_;
     std::map<DocId, std::filesystem::path> paths_;

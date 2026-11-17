@@ -98,10 +98,10 @@ void registerHello(plugin::PluginContext& ctx) {
          {{"size", model::ArgType::Number, "Length of each side, in mm. Default 20 mm.", false, {}}}},
         &makeAddCube);
 
-    // 2. A menu item in the desktop app that runs the command.
+    // 2. A dropdown item in the desktop app that runs the command.
     ctx.addAction({.id = "example.hello.cube",
                    .text = "Cube (Hello)",
-                   .menu = "Create",
+                   .menu = "Model/Create",
                    .command = "example.hello.add_cube",
                    .tip = "Add a 20 mm cube from the Hello plugin."});
 
@@ -135,12 +135,14 @@ code.
 The command's name must start with your plugin's id and a dot. SketchBillet refuses a
 plugin that breaks this rule, so two plugins can never pick the same name.
 
-### The menu item
+### The toolbar item
 
-`ctx.addAction(...)` adds a menu item to the desktop app: **Create > Cube (Hello)**.
-Clicking it runs the command `example.hello.add_cube` on the open design, with
-no settings, so the cube is 20 mm. An action is plain data: an id, the words to
-show, which menu, the command to run and a tip. It has no Qt code, so the same
+`ctx.addAction(...)` adds an item to the desktop app's toolbar: `.menu =
+"Model/Create"` puts it in the dropdown of the **Create** panel on the **Model**
+tab, as **Create > Cube (Hello)**. Clicking it runs the command
+`example.hello.add_cube` on the open design, with no settings, so the cube is
+20 mm. An action is plain data: an id, the words to show, which tab and panel,
+the command to run and a tip. It has no Qt code, so the same
 plugin still works in `sketchbillet_cli`, which lists the action instead of showing it.
 
 Like command names, action ids must start with your plugin's id and a dot.

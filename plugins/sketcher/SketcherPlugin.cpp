@@ -1729,7 +1729,7 @@ void registerSketcher(plugin::PluginContext& ctx) {
     ctx.addAction(
         ActionSpec{.id = "sb.sketcher.new_xy",
                    .text = "New sketch on XY (the ground)",
-                   .menu = "Sketch",
+                   .menu = "Model/Sketch",
                    .shortcut = "Ctrl+Shift+K",
                    .toolbar = true,
                    .buttonText = "New sketch",
@@ -1745,9 +1745,7 @@ void registerSketcher(plugin::PluginContext& ctx) {
     ctx.addAction(ActionSpec{
         .id = "sb.sketcher.new_plane",
         .text = "New plane",
-        .menu = "Sketch",
-        .toolbar = true,
-        .buttonText = "Plane",
+        .menu = "Model/Sketch",
         .icon = std::string(icons::sketcher::new_plane_svg),
         .tip =
             "Add a construction plane to sketch on: 10 mm off the picked face or plane, or 20 mm above the "
@@ -1777,7 +1775,7 @@ void registerSketcher(plugin::PluginContext& ctx) {
     ctx.addAction(ActionSpec{
         .id = "sb.sketcher.new_face",
         .text = "New sketch on a face",
-        .menu = "Sketch",
+        .menu = "Model/Sketch",
         .tip = "Start a sketch on a flat face of a body, like the top of a block, and draw in it. The sketch "
                "stays "
                "on the face when the body changes.",
@@ -1795,12 +1793,12 @@ void registerSketcher(plugin::PluginContext& ctx) {
         .enabled = [&ctx] { return ctx.documents().find(ctx.documents().active()) != nullptr; }});
     ctx.addAction(ActionSpec{.id = "sb.sketcher.new_xz",
                              .text = "New sketch on XZ (standing, from the front)",
-                             .menu = "Sketch",
+                             .menu = "Model/Sketch",
                              .tip = "Start a sketch standing up, seen from the front, and draw in it.",
                              .run = [newSketch] { newSketch("xz", std::nullopt); }});
     ctx.addAction(ActionSpec{.id = "sb.sketcher.new_yz",
                              .text = "New sketch on YZ (standing, from the right)",
-                             .menu = "Sketch",
+                             .menu = "Model/Sketch",
                              .tip = "Start a sketch standing up, seen from the right, and draw in it.",
                              .run = [newSketch] { newSketch("yz", std::nullopt); }});
     // The one sketch picked in the active design, if that's what's picked.
@@ -1816,7 +1814,7 @@ void registerSketcher(plugin::PluginContext& ctx) {
     ctx.addAction(ActionSpec{
         .id = "sb.sketcher.edit",
         .text = "Edit sketch",
-        .menu = "Sketch",
+        .menu = "Model/Sketch",
         .shortcut = "Ctrl+K",
         .toolbar = true,
         .icon = std::string(icons::sketcher::edit_sketch_svg),
@@ -1840,7 +1838,7 @@ void registerSketcher(plugin::PluginContext& ctx) {
     ctx.addAction(ActionSpec{
         .id = "sb.sketcher.move_to_face",
         .text = "Move to a face",
-        .menu = "Sketch",
+        .menu = "Model/Sketch",
         .tip =
             "Put the picked sketch on a flat face of a body, or pick its face again when it can't find it.",
         .run =
@@ -1873,11 +1871,13 @@ void registerSketcher(plugin::PluginContext& ctx) {
             [pickedSketch, pickedFace, moving] {
                 return pickedSketch().has_value() || (!moving->isNil() && pickedFace().has_value());
             }});
+    // The Sketch tab shows while a sketch is being edited, and is picked then.
+    ctx.addTab({.name = "Sketch", .always = false, .mode = std::string(kEditingMode)});
     ctx.addAction(ActionSpec{.id = "sb.sketcher.finish",
                              .text = "Finish sketch",
                              .menu = "Sketch",
-                             .toolbar = true,
                              .toolbarMode = std::string(kEditingMode),
+                             .primary = true,
                              .icon = std::string(icons::sketcher::finish_sketch_svg),
                              .tip = "Stop drawing. Clicks in the viewer pick and turn the view again.",
                              .run = [sketcher] { sketcher->finish(); },
@@ -1885,7 +1885,7 @@ void registerSketcher(plugin::PluginContext& ctx) {
     ctx.addAction(
         ActionSpec{.id = "sb.sketcher.select",
                    .text = "Select",
-                   .menu = "Sketch/Draw",
+                   .menu = "Sketch/Edit",
                    .toolbar = true,
                    .toolbarMode = std::string(kEditingMode),
                    .icon = std::string(icons::sketcher::select_svg),
@@ -1896,7 +1896,7 @@ void registerSketcher(plugin::PluginContext& ctx) {
     ctx.addAction(
         ActionSpec{.id = "sb.sketcher.delete",
                    .text = "Delete picked",
-                   .menu = "Sketch",
+                   .menu = "Sketch/Edit",
                    .shortcut = "Delete",
                    .toolbarMode = std::string(kEditingMode),  // while editing, Delete is this
                    .tip = "Delete the picked lines, circles, arcs and points, and their constraints.",
@@ -1909,6 +1909,14 @@ void registerSketcher(plugin::PluginContext& ctx) {
         const char* tip;
         std::string_view icon;
         const char* button = "";  // a shorter word for its button, if it needs one
+    };
+    // Which panel of the Sketch tab each tool is in, and whether it's a button
+    // there or only in the panel's dropdown.
+    auto panelOf = [](std::string_view id) {
+        return id == "sb.sketcher.trim" || id == "sb.sketcher.round_corner" ? "Sketch/Edit" : "Sketch/Draw";
+    };
+    auto onPanel = [](std::string_view id) {
+        return id != "sb.sketcher.point" && id != "sb.sketcher.spline_through";
     };
     for (const auto& t :
          {ToolItem{"sb.sketcher.line", "Line", Tool::Line,
@@ -1949,8 +1957,8 @@ void registerSketcher(plugin::PluginContext& ctx) {
         ctx.addAction(ActionSpec{
             .id = t.id,
             .text = t.text,
-            .menu = "Sketch/Draw",
-            .toolbar = true,
+            .menu = panelOf(t.id),
+            .toolbar = onPanel(t.id),
             .buttonText = t.button,
             .toolbarMode = std::string(kEditingMode),
             .icon = std::string(t.icon),
@@ -1964,14 +1972,14 @@ void registerSketcher(plugin::PluginContext& ctx) {
     ctx.addAction(
         ActionSpec{.id = "sb.sketcher.import_through",
                    .text = "Import spline through points...",
-                   .menu = "Sketch",
+                   .menu = "Sketch/Draw",
                    .tip = "Make a spline that goes through every point in a file (one x, y per line; a "
                           "spreadsheet's CSV works), in the design's unit.",
                    .run = [sketcher] { sketcher->importSpline(true); },
                    .enabled = [sketcher] { return sketcher->editing(); }});
     ctx.addAction(ActionSpec{.id = "sb.sketcher.import_poles",
                              .text = "Import spline with control points...",
-                             .menu = "Sketch",
+                             .menu = "Sketch/Draw",
                              .tip =
                                  "Make a spline whose control points are the points in a file (one x, y per "
                                  "line), in the design's unit.",
@@ -1981,7 +1989,7 @@ void registerSketcher(plugin::PluginContext& ctx) {
     // Constraints added while drawing (On, Horizontal, Vertical, Tangent): on by default.
     ctx.addAction(ActionSpec{.id = "sb.sketcher.auto",
                              .text = "Add constraints while drawing",
-                             .menu = "Sketch",
+                             .menu = "Sketch/Constrain",
                              .tip = "Snap onto lines and keep lines level or upright as you draw, adding the "
                                     "constraints that keep them that way. Turn it off to draw freely.",
                              .run =
@@ -2056,12 +2064,13 @@ void registerSketcher(plugin::PluginContext& ctx) {
             ActionSpec{.id = std::string("sb.sketcher.") + info.id,
                        .text = info.text,
                        .menu = dimension ? "Sketch/Dimension" : "Sketch/Constrain",
-                       .toolbar = true,
+                       // The most-used ones are buttons; the rest are in the dropdown.
+                       .toolbar = rule == Rule::Coincident || rule == Rule::Horizontal ||
+                                  rule == Rule::Vertical || rule == Rule::Equal || rule == Rule::Dimension,
                        .buttonText = rule == Rule::HorizontalDimension ? "Width"
                                      : rule == Rule::VerticalDimension ? "Height"
                                                                        : "",
                        .toolbarMode = std::string(kEditingMode),
-                       .buttonWhenEnabled = true,
                        .icon = std::string(iconFor(rule)),
                        .tip = info.tip,
                        .run = [sketcher, rule] { sketcher->constrain(rule); },

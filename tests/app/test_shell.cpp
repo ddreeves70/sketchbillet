@@ -25,6 +25,7 @@
 #include <QSettings>
 #include <QSpinBox>
 #include <QStatusBar>
+#include <QTabBar>
 #include <QTableWidget>
 #include <QTemporaryDir>
 #include <QToolBar>
@@ -99,7 +100,6 @@ void units(plugin::PluginContext& ctx) {
                    .text = "Measure",
                    .menu = "View/Units",
                    .toolbar = true,
-                   .buttonWhenEnabled = true,  // on the toolbar only while it can be used
                    .run = [] {},
                    .enabled = [] { return tapeReady; }});
     ctx.addAction({.id = "test.units.broken_rule",
@@ -143,6 +143,16 @@ int countShape(const view::FlatView* v, view::OverlayShape shape) {
     int n = 0;
     for (const auto& o : v->overlays()) n += o.shape == shape ? 1 : 0;
     return n;
+}
+
+// Whether a button is on screen: some toolbar button runs it, in the tab that's
+// showing (a QAction stays "visible" while its tab is hidden).
+bool onScreen(QWidget* window, QAction* button) {
+    if (!button) return false;
+    for (auto* b : window->findChildren<QToolButton*>()) {
+        if (b->defaultAction() == button && b->isVisible()) return true;
+    }
+    return false;
 }
 
 struct App {
@@ -244,54 +254,78 @@ TEST_CASE("SketchBillet's own plugins follow the rules: no warnings, and each ha
 
 TEST_CASE("every toolbar button has a picture", "[app][icons]") {
     App app;
-    auto* toolbar = app.shell->findChild<QToolBar*>(QStringLiteral("sb.shell.toolbar"));
-    REQUIRE(toolbar);
-    CHECK(toolbar->toolButtonStyle() == Qt::ToolButtonTextUnderIcon);  // words too, for new users
+    auto* ribbon = app.shell->findChild<QWidget*>(QStringLiteral("sb.ribbon"));
+    REQUIRE(ribbon);
     int buttons = 0;
-    auto rows = toolbar->actions();
-    rows += app.shell->findChild<QToolBar*>(QStringLiteral("sb.shell.toolbar2"))->actions();
-    for (auto* a : rows) {
-        if (a->isSeparator() || a->objectName().startsWith(QStringLiteral("test.")))
-            continue;                                   // SketchBillet's own only
-        if (qobject_cast<QWidgetAction*>(a)) continue;  // the second row's hint, not a button
+    for (auto* b : ribbon->findChildren<QToolButton*>()) {
+        auto* a = b->defaultAction();
+        if (!a || a->objectName().startsWith(QStringLiteral("test."))) continue;  // SketchBillet's own only
         ++buttons;
         INFO(a->text().toStdString());
         CHECK_FALSE(a->icon().isNull());
         CHECK_FALSE(a->icon().pixmap(24, 24).isNull());
+        // Words under the pictures, for new users (the top row's and the main button's are their own).
+        if (b->parent() != ribbon->findChild<QWidget*>(QStringLiteral("sb.ribbon.top")) &&
+            !b->objectName().endsWith(QStringLiteral(".primary")))
+            CHECK(b->toolButtonStyle() == Qt::ToolButtonTextUnderIcon);
     }
-    CHECK(buttons ==
-          5 + 15 + 3 + 11 + 15);  // SketchBillet's own, sb.modeling, sb.sketcher, sketch tools, constraints
-    // The menu item shows the same picture as its button.
+    // The top row (5), Import, Export and Check print (3), sb.modeling (15),
+    // sb.sketcher (2 on Model, 1 main, 5 drawing, 3 editing, 5 constraints), View
+    // options (1) and the grid (2).
+    CHECK(buttons == 5 + 3 + 15 + 16 + 1 + 2);
+    // The dropdown item shows the same picture as its button.
     CHECK_FALSE(app.shell->action("sb.modeling.box")->icon().isNull());
 }
 
-TEST_CASE("buttons that don't fit go on a second row, which goes away when they fit", "[app][icons]") {
+TEST_CASE("the toolbar has tabs of panels, each with a dropdown of everything in it", "[app][ribbon]") {
     App app;
-    auto* row1 = app.shell->findChild<QToolBar*>(QStringLiteral("sb.shell.toolbar"));
-    auto* row2 = app.shell->findChild<QToolBar*>(QStringLiteral("sb.shell.toolbar2"));
-    REQUIRE(row2);
-    app.shell->resize(4000, 800);  // wide enough for every button, in any system font
-    settle();
-    CHECK(row2->isHidden());
-    CHECK(row1->actions().contains(app.shell->button("sb.sketcher.edit")));
-    app.shell->resize(520, 800);  // too narrow for every button
-    settle();
-    CHECK_FALSE(row2->isHidden());
-    CHECK(row2->actions().contains(app.shell->button("sb.sketcher.edit")));  // the last one wraps
-    CHECK(row1->actions().contains(app.shell->undoAction()));                // SketchBillet's own stay first
-    // Still in order: the first row ends where the second starts.
-    QStringList order;
-    for (auto* bar : {row1, row2}) {
-        for (auto* a : bar->actions()) {
-            if (!a->objectName().isEmpty() && a->objectName().endsWith(QStringLiteral(".button")))
-                order << a->objectName();
-        }
+    auto* tabs = app.shell->findChild<QTabBar*>(QStringLiteral("sb.ribbon.tabs"));
+    REQUIRE(tabs);
+    QStringList shown;
+    for (int i = 0; i < tabs->count(); ++i) {
+        if (tabs->isTabVisible(i)) shown << tabs->tabText(i);
     }
-    CHECK(order.indexOf(QStringLiteral("sb.modeling.box.button")) <
-          order.indexOf(QStringLiteral("sb.sketcher.edit.button")));
-    app.shell->resize(4000, 800);
-    settle();
-    CHECK(row2->isHidden());
+    CHECK(shown == QStringList{QStringLiteral("Model"), QStringLiteral("Inspect"), QStringLiteral("View")});
+    CHECK(tabs->tabText(tabs->currentIndex()) == QStringLiteral("Model"));
+    // The Model tab's panels, most-used first.
+    auto* model = app.shell->findChild<QWidget*>(QStringLiteral("sb.ribbon.model"));
+    REQUIRE(model);
+    QStringList panels;
+    for (auto* b : model->findChildren<QToolButton*>()) {
+        if (b->menu()) panels << b->text();
+    }
+    std::sort(panels.begin(), panels.end(), [&](const QString& x, const QString& y) {
+        auto left = [&](const QString& name) {
+            auto* b = model->findChild<QToolButton*>(QStringLiteral("sb.ribbon.model.") + name.toLower());
+            return b->mapTo(model, QPoint(0, 0)).x();
+        };
+        return left(x) < left(y);
+    });
+    CHECK(panels == QStringList{QStringLiteral("Sketch"), QStringLiteral("Create"), QStringLiteral("Modify"),
+                                QStringLiteral("Combine"), QStringLiteral("Pattern"),
+                                QStringLiteral("Select"), QStringLiteral("Insert"), QStringLiteral("Make"),
+                                QStringLiteral("Steps")});
+    // Every tool is in its panel's dropdown; the most-used are buttons too.
+    auto* create = app.shell->findChild<QMenu*>(QStringLiteral("sb.ribbon.model.create.menu"));
+    REQUIRE(create);
+    CHECK(create->actions().contains(app.shell->action("sb.modeling.box")));
+    CHECK(create->actions().contains(app.shell->action("sb.modeling.cylinder")));
+    CHECK(onScreen(app.shell.get(), app.shell->button("sb.modeling.box")));
+    CHECK(app.shell->button("sb.modeling.cylinder") == nullptr);  // only in the dropdown
+    // A submenu of a dropdown: View > Grid > Grid style.
+    auto* grid = app.shell->findChild<QMenu*>(QStringLiteral("sb.ribbon.view.grid.menu"));
+    REQUIRE(grid);
+    const auto subs = grid->findChildren<QMenu*>(QString(), Qt::FindDirectChildrenOnly);
+    CHECK(std::any_of(subs.begin(), subs.end(),
+                      [](QMenu* m) { return m->title() == QStringLiteral("Grid style"); }));
+    // Shortcuts work for items in tabs that aren't showing, and only in dropdowns.
+    CHECK(app.shell->actions().contains(app.shell->action("sb.modeling.cylinder")));
+    // File and Help are dropdowns in the top row.
+    REQUIRE(app.shell->findChild<QMenu*>(QStringLiteral("sb.ribbon.file.menu")));
+    CHECK(app.shell->findChild<QMenu*>(QStringLiteral("sb.ribbon.file.menu"))
+              ->actions()
+              .contains(app.shell->findChild<QAction*>(QStringLiteral("sb.shell.export"))));
+    REQUIRE(app.shell->findChild<QMenu*>(QStringLiteral("sb.ribbon.help.menu")));
 }
 
 TEST_CASE("an SVG icon follows the theme's text color, and greys out when disabled", "[app][icons]") {
@@ -1088,54 +1122,27 @@ void typeNumber(QDoubleSpinBox* box, double value) {
 
 }  // namespace
 
-TEST_CASE("constraint buttons show only when they fit what's picked", "[app][sketcher][constrain]") {
+TEST_CASE("constraints are greyed out until they fit what's picked", "[app][sketcher][constrain]") {
     Drawn d;
-    auto shown = [&](const char* id) { return d.app.shell->button(id)->isVisible(); };
-    CHECK_FALSE(shown("sb.sketcher.horizontal"));  // nothing picked: no constraint buttons
+    // The buttons (Coincident, Horizontal, Vertical, Equal, Dimension) and the
+    // rest in Constrain's and Dimension's dropdowns are enabled when they fit.
+    auto shown = [&](const char* id) { return d.app.shell->action(id)->isEnabled(); };
+    CHECK(onScreen(d.app.shell.get(), d.app.shell->button("sb.sketcher.horizontal")));
+    CHECK(d.app.shell->button("sb.sketcher.parallel") == nullptr);  // in the dropdown
+    CHECK_FALSE(shown("sb.sketcher.horizontal"));                   // nothing picked: no constraint buttons
     CHECK_FALSE(shown("sb.sketcher.dimension"));
     clickAt(d.flat, {30, 0, 0});  // Line1
     CHECK(shown("sb.sketcher.horizontal"));
     CHECK(shown("sb.sketcher.dimension"));
     CHECK(shown("sb.sketcher.horizontal_dimension"));
-    CHECK(d.app.shell->button("sb.sketcher.horizontal_dimension")->text() == QStringLiteral("Width"));
+    CHECK(d.app.shell->action("sb.sketcher.horizontal_dimension")->text() ==
+          QStringLiteral("Width (horizontal dimension)"));
     CHECK_FALSE(shown("sb.sketcher.parallel"));
     ctrlClickAt(d.flat, {30, 40, 0});  // and Line3
     CHECK(shown("sb.sketcher.parallel"));
     CHECK_FALSE(shown("sb.sketcher.coincident"));
-    // The menu always has them all, greyed out when they don't fit.
-    CHECK_FALSE(d.app.shell->action("sb.sketcher.coincident")->isEnabled());
     d.app.click("sb.sketcher.finish");
     CHECK_FALSE(shown("sb.sketcher.parallel"));
-}
-
-TEST_CASE("picking in a narrow window doesn't move the view (the rows stay put)",
-          "[app][sketcher][constrain]") {
-    Drawn d;
-    d.app.shell->resize(760, 700);  // too narrow for every sketch button on one row
-    settle();
-    auto* row2 = d.app.shell->findChild<QToolBar*>(QStringLiteral("sb.shell.toolbar2"));
-    CHECK_FALSE(row2->isHidden());  // the second row is there while editing, even with nothing picked
-    auto* hint = row2->findChild<QLabel*>(QStringLiteral("sb.shell.toolbar2.hint"));
-    REQUIRE(hint);
-    // The hint shows exactly when none of the row's buttons do. (Which buttons
-    // wrap depends on the system font, so this checks the rule, not a count.)
-    auto buttonsShowing = [&] {
-        const auto all = row2->actions();
-        return std::any_of(all.begin(), all.end(),
-                           [](QAction* a) { return a->isVisible() && !qobject_cast<QWidgetAction*>(a); });
-    };
-    CHECK(hint->isVisibleTo(row2) == !buttonsShowing());
-    const QRect before(d.flat->mapTo(d.app.shell.get(), QPoint(0, 0)), d.flat->size());
-    clickAt(d.flat, {30, 0, 0});  // Line1: its constraint buttons appear
-    CHECK(d.app.shell->button("sb.sketcher.horizontal")->isVisible());
-    CHECK(buttonsShowing());  // constraint buttons there now
-    CHECK_FALSE(hint->isVisibleTo(row2));
-    const QRect after(d.flat->mapTo(d.app.shell.get(), QPoint(0, 0)), d.flat->size());
-    CHECK(before == after);
-    // And a drag that picks something lands where the mouse went (this failed on
-    // Windows when the second row appeared mid-drag).
-    dragAt(d.flat, {30, 20, 0}, {32, 20, 0});  // Circle1's edge
-    CHECK(std::get<sketch::CircleShape>(d.sketch().entities[4].shape).radius == Approx(12).margin(0.1));
 }
 
 TEST_CASE("Horizontal adds a constraint labeled H, as one undo step, and only once",
@@ -1450,37 +1457,69 @@ TEST_CASE("Sketch menu items are grey when they can't be used", "[app][sketcher]
     CHECK_FALSE(enabled("sb.sketcher.edit"));
 }
 
-TEST_CASE("the toolbar shows sketch buttons while editing, and 3D buttons otherwise", "[app][sketcher]") {
+TEST_CASE("picking in a sketch doesn't move the view (the toolbar keeps its height)",
+          "[app][sketcher][constrain]") {
+    Drawn d;
+    d.app.shell->resize(760, 700);
+    settle();
+    const QRect before(d.flat->mapTo(d.app.shell.get(), QPoint(0, 0)), d.flat->size());
+    clickAt(d.flat, {30, 0, 0});  // Line1: its constraints can be used now
+    CHECK(d.app.shell->button("sb.sketcher.horizontal")->isEnabled());
+    const QRect after(d.flat->mapTo(d.app.shell.get(), QPoint(0, 0)), d.flat->size());
+    CHECK(before == after);
+    // And a drag that picks something lands where the mouse went (this failed on
+    // Windows when the old second toolbar row appeared mid-drag).
+    dragAt(d.flat, {30, 20, 0}, {32, 20, 0});  // Circle1's edge
+    CHECK(std::get<sketch::CircleShape>(d.sketch().entities[4].shape).radius == Approx(12).margin(0.1));
+}
+
+TEST_CASE("the Sketch tab shows while editing, and the Model tab otherwise", "[app][sketcher]") {
     App app;
-    auto shown = [&](const char* id) {
-        auto* b = app.shell->button(id);
-        REQUIRE(b);
-        return b->isVisible();
-    };
+    auto shown = [&](const char* id) { return onScreen(app.shell.get(), app.shell->button(id)); };
+    auto* tabs = app.shell->findChild<QTabBar*>(QStringLiteral("sb.ribbon.tabs"));
+    REQUIRE(tabs);
+    auto current = [&] { return tabs->tabText(tabs->currentIndex()); };
     const char* sketchButtons[] = {"sb.sketcher.finish", "sb.sketcher.select", "sb.sketcher.line",
-                                   "sb.sketcher.circle", "sb.sketcher.arc",    "sb.sketcher.point"};
-    const char* usualButtons[] = {"sb.modeling.box", "sb.modeling.cylinder", "sb.modeling.move",
-                                  "sb.sketcher.new_xy", "sb.sketcher.edit"};
+                                   "sb.sketcher.circle", "sb.sketcher.arc",    "sb.sketcher.trim"};
+    const char* usualButtons[] = {"sb.modeling.box", "sb.modeling.move", "sb.sketcher.new_xy",
+                                  "sb.sketcher.edit"};
+    CHECK(current() == QStringLiteral("Model"));
     for (const char* id : usualButtons) CHECK(shown(id));
     for (const char* id : sketchButtons) CHECK_FALSE(shown(id));
     CHECK(app.shell->button("sb.sketcher.new_xy")->text() == QStringLiteral("New sketch"));
-    CHECK(app.shell->button("sb.sketcher.new_xz") == nullptr);  // menu only
+    CHECK(app.shell->button("sb.sketcher.new_xz") == nullptr);  // in the Sketch panel's dropdown
 
     app.click("sb.sketcher.new_xy");
+    CHECK(current() == QStringLiteral("Sketch"));  // picked by itself
+    for (int i = 0; i < tabs->count(); ++i) {
+        if (tabs->tabText(i) == QStringLiteral("Model")) CHECK_FALSE(tabs->isTabVisible(i));
+    }
     for (const char* id : usualButtons) CHECK_FALSE(shown(id));
     for (const char* id : sketchButtons) CHECK(shown(id));
-    CHECK(app.shell->undoAction()->isVisible());               // SketchBillet's own buttons stay
-    CHECK(app.shell->action("sb.modeling.box")->isVisible());  // and the menus keep every item
+    CHECK(onScreen(app.shell.get(), app.shell->undoAction()));  // the top row stays
+    // Finish sketch is the Sketch tab's main button, at its right end.
+    auto* finish = app.shell->findChild<QToolButton*>(QStringLiteral("sb.ribbon.sketch.primary"));
+    REQUIRE(finish);
+    CHECK(finish->defaultAction() == app.shell->button("sb.sketcher.finish"));
 
-    // A button does what its menu item does, and shows the same check mark.
+    // A button does what its dropdown item does, and shows the same check mark.
     app.shell->button("sb.sketcher.circle")->trigger();
     settle();
     CHECK(app.shell->button("sb.sketcher.circle")->isChecked());
     CHECK(app.shell->action("sb.sketcher.circle")->isChecked());
     CHECK_FALSE(app.shell->button("sb.sketcher.line")->isChecked());
 
+    // The View tab can be used while drawing (to snap to the grid), and back.
+    tabs->setCurrentIndex([&] {
+        for (int i = 0; i < tabs->count(); ++i) {
+            if (tabs->tabText(i) == QStringLiteral("View")) return i;
+        }
+        return -1;
+    }());
+    CHECK(current() == QStringLiteral("View"));
     app.shell->button("sb.sketcher.finish")->trigger();
     settle();
+    CHECK(current() == QStringLiteral("Model"));  // the tab the student had before the sketch
     for (const char* id : usualButtons) CHECK(shown(id));
     for (const char* id : sketchButtons) CHECK_FALSE(shown(id));
     CHECK(app.host.find("sb.sketcher")->issues.empty());  // sending ActionsChanged is allowed
@@ -3389,16 +3428,10 @@ TEST_CASE("a plugin's check-mark item in a View submenu changes its setting", "[
     CHECK(a->isCheckable());
     CHECK_FALSE(a->isChecked());
     CHECK(a->isEnabled());
-    // It's in View > Units.
-    QMenu* units = nullptr;
-    for (auto* m : app.shell->findChildren<QMenu*>()) {
-        if (m->title() == QStringLiteral("Units")) units = m;
-    }
+    // It's in the View tab's Units panel ("View/Units").
+    auto* units = app.shell->findChild<QMenu*>(QStringLiteral("sb.ribbon.view.units.menu"));
     REQUIRE(units);
     CHECK(units->actions().contains(a));
-    auto* view = qobject_cast<QMenu*>(units->parent());
-    REQUIRE(view);
-    CHECK(view->title() == QStringLiteral("&View"));
 
     a->trigger();
     settle();
@@ -3434,11 +3467,11 @@ TEST_CASE("a plugin item is enabled by its own rule, and updates on ActionsChang
     auto* a = app.shell->action("test.units.measure");
     REQUIRE(a);
     CHECK_FALSE(a->isEnabled());
-    CHECK_FALSE(app.shell->button("test.units.measure")->isVisible());
+    CHECK_FALSE(app.shell->button("test.units.measure")->isEnabled());
     tapeReady = true;
     app.host.events().publish(plugin::ActionsChanged{});
     CHECK(a->isEnabled());
-    CHECK(app.shell->button("test.units.measure")->isVisible());  // the button comes and goes with it
+    CHECK(app.shell->button("test.units.measure")->isEnabled());  // the button follows it
     tapeReady = false;
     app.host.events().publish(plugin::ActionsChanged{});
     CHECK_FALSE(a->isEnabled());

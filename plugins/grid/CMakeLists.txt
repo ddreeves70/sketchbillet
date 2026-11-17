@@ -1,4 +1,4 @@
-# sb.grid: the grid's settings, View menu items, status-bar text, drawing (as a
+# sb.grid: the grid's settings, View tab items, status-bar text, drawing (as a
 # view overlay) and snapping. Qt for its status-bar label and spacing dialog,
 # so it's built only with the desktop app.
 sb_add_library(sb_plugin_grid
@@ -10,3 +10,5 @@ sb_add_library(sb_plugin_grid
     sb::plugin
     sb::kernel
 )
+sb_embed_files(sb_plugin_grid HEADER GridIcons.h NAMESPACE sb::icons::grid
+  FILES icons/grid.svg icons/snap.svg)

@@ -33,8 +33,8 @@ The first copy is always the original, where it is.
    that cuts), or a body.
 2. Pick it in the feature tree (Ctrl-click to pick several steps, like a hole and
    a slot, to repeat both).
-3. Click **Row** (**Create > Linear pattern**) or **Circle** (**Create > Circular
-   pattern**) on the toolbar. A row starts as 3 along x, 10 mm apart; a circle as 6
+3. Click **Row** (**Pattern > Linear pattern**) or **Around** (**Pattern >
+   Circular pattern**) on the toolbar. A row starts as 3 along x, 10 mm apart; a circle as 6
    round the z axis.
 4. Pick the pattern and change it in **Properties**:
 

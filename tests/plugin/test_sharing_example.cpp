@@ -50,7 +50,7 @@ TEST_CASE("the guide's Ruler remembers its unit, and its View item switches it",
         if (a.id == "example.ruler.inches") inches = &a;
     }
     REQUIRE(inches);
-    CHECK(inches->menu == "View");
+    CHECK(inches->menu == "View/Display");  // the View tab's Display panel
     CHECK_FALSE(inches->checked());
     inches->run();  // the student clicks it
     CHECK(inches->checked());

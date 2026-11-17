@@ -11,6 +11,8 @@ qt_add_library(sb_app_core STATIC
   Icons.h
   Shell.cpp
   Shell.h
+  Ribbon.cpp
+  Ribbon.h
   Updates.cpp
   Updates.h
   ViewOverlay.cpp
@@ -35,7 +37,7 @@ if(SB_UPDATE_CHANNEL)
 endif()
 sb_embed_files(sb_app_core HEADER AppIcons.h NAMESPACE sb::icons::app
   FILES icons/new.svg icons/open.svg icons/save.svg icons/undo.svg icons/redo.svg
-        icons/dock.svg)
+        icons/dock.svg icons/export.svg icons/check_print.svg)
 sb_embed_files(sb_app_core HEADER ImportIcon.h NAMESPACE sb::icons::modeling
   FILES ../../plugins/modeling/icons/import.svg)
 

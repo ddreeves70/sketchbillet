@@ -68,7 +68,7 @@ pick it: three arrows and a small square appear in its middle.
 The arrow under the mouse turns yellow, so you can see which one you'll grab.
 Arrows are drawn over the body, so you can always grab them, even from inside.
 The body moves as you drag, in steps of 1 mm (0.1 in in a design shown in
-inches or feet), and the whole drag is one step of Edit > Undo. Press **Escape**
+inches or feet), and the whole drag is one step of Undo. Press **Escape**
 before you let go to put it back.
 
 What a drag changes depends on the body:
@@ -93,7 +93,7 @@ in the viewer the same way.
    picked; it doesn't move anything yet.
 3. In Properties, type how far in **Move (mm)**, and how far to **Turn**.
 
-Change the numbers whenever you like: the design rebuilds, and Edit > Undo takes
+Change the numbers whenever you like: the design rebuilds, and Undo takes
 a change back.
 
 ## Linked copies
@@ -186,7 +186,7 @@ Demo tag: 7 steps
 ```
 
 In the desktop app, pick the linked copy in the feature tree, then **Modify >
-Unlink Copy**. **Edit > Undo** links it again.
+Unlink Copy**. **Undo** links it again.
 
 Unlinking isn't the same as unticking **Keep the original (linked copy)**: that
 moves the original itself, so there's only one body left. Unlinking keeps both.
@@ -198,6 +198,6 @@ moves the original itself, so there's only one body left. Unlinking keeps both.
   material for the Move step.
 - To keep the original and move a copy, make a [linked copy](#linked-copies).
   To make a copy that doesn't follow the original, duplicate it first
-  (Edit > Duplicate step), then move the duplicate.
+  (Steps > Duplicate step), then move the duplicate.
 - Turning about an axis of `0,0,0` doesn't work: there's no line to turn about.
   Give the axis a direction, like `0,0,1`.

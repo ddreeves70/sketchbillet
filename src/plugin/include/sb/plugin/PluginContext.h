@@ -48,13 +48,18 @@ public:
     /// @param factory Builds the command once its arguments have been checked.
     virtual void addCommand(model::CommandInfo info, model::CommandFactory factory) = 0;
 
-    /// Adds a menu item or toolbar button that runs a command by name.
+    /// Adds a toolbar button or dropdown item that runs a command by name.
     ///
     /// Like addCommand(), only works while the register function runs. The
     /// command may be the plugin's own or one from a plugin it requires. An
     /// outside plugin's action ids must start with its id and a dot.
     /// @param action What it shows and which command it runs.
     virtual void addAction(ActionSpec action) = 0;
+
+    /// Says when a toolbar tab shows (see TabSpec), for a tab that comes and goes
+    /// with a toolbar mode. The first plugin to describe a tab decides.
+    /// @param tab The tab and when it shows.
+    virtual void addTab(TabSpec tab) = 0;
 
     /// Gives every command of every loaded plugin, for looking them up.
     /// @return The shared command registry.
@@ -85,10 +90,10 @@ public:
     /// @return The selection.
     virtual Selection& selection() = 0;
 
-    /// Switches the toolbar to a mode, so only the buttons for what the student is
+    /// Switches the toolbar to a mode, so only the tabs for what the student is
     /// doing show: while a sketch is being edited, the sketcher turns on
-    /// "sb.sketcher.editing", and only buttons with that `toolbarMode` show (plus
-    /// SketchBillet's own New, Open, Save, Undo and Redo). Sends ToolbarModeChanged.
+    /// "sb.sketcher.editing", the Sketch tab (TabSpec::mode) shows and is picked,
+    /// and the Model tab hides. Sends ToolbarModeChanged.
     ///
     /// The name should start with the plugin's id and a dot; otherwise SketchBillet adds
     /// a warning (and still switches).

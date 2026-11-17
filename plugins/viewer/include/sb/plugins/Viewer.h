@@ -17,7 +17,7 @@ namespace sb::plugins {
 ///
 /// The viewer shows the active design's finished bodies, split into 1, 2 or 4
 /// panes with their own cameras, and the student can open more viewers
-/// (Window > New viewer). Clicking a body selects its step everywhere, and
+/// (Panels > New viewer, on the View tab). Clicking a body selects its step everywhere, and
 /// selected steps are highlighted. It also draws every plugin's overlays (the
 /// grid comes from sb.grid this way). Without 3D graphics it draws them flat,
 /// seen from above, and says why.

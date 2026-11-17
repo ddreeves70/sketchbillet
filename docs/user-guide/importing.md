@@ -49,7 +49,7 @@ you add in SketchBillet are exact.
 
 Changed the part in the other program? Export it again over the same file,
 then click **Reload from file** in Properties. The steps built on it follow
-the new part. **Edit > Undo** puts the old one back.
+the new part. **Undo** puts the old one back.
 
 ## An example
 

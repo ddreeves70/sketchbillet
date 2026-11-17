@@ -23,7 +23,7 @@ constexpr const char* kManifest = R"({
   "id": "sb.measure",
   "name": "Measure",
   "version": "0.1.0",
-  "description": "Tools > Measure: click a face, edge or point to see its size, or two to see the distance and angle between them.",
+  "description": "Inspect > Measure: click a face, edge or point to see its size, or two to see the distance and angle between them.",
   "uses": ["sb.viewer"],
   "tier": "ui"
 })";
@@ -128,7 +128,7 @@ void registerMeasure(plugin::PluginContext& ctx) {
     }
     ui::PanelSpec spec{kPanelId, QObject::tr("Measure"), ui::PanelArea::Right,
                        [&ctx] { return new MeasurePanel(ctx); }};
-    spec.startHidden = true;     // Tools > Measure opens it
+    spec.startHidden = true;     // Inspect > Measure opens it
     spec.floatsOverView = true;  // over the view, under the view cube
     ui->addPanel(std::move(spec));
 
@@ -136,7 +136,7 @@ void registerMeasure(plugin::PluginContext& ctx) {
     ctx.addAction(plugin::ActionSpec{
         .id = "sb.measure.measure",
         .text = "Measure",
-        .menu = "Tools",
+        .menu = "Model/Inspect;Inspect/Measure",
         .shortcut = "Ctrl+Shift+I",
         .toolbar = true,
         .icon = std::string(icons::measure::measure_svg),

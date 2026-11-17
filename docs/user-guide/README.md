@@ -10,7 +10,7 @@ pictures. It grows with SketchBillet: every new feature is added here when it's 
 
 SketchBillet is early. [Install it](install.md) on Windows, macOS or Linux, then
 design parts in the [desktop app](desktop-app.md), with
-menus, a 3D viewer, a feature tree and a Properties panel, or with `sketchbillet_cli`,
+a toolbar, a 3D viewer, a feature tree and a Properties panel, or with `sketchbillet_cli`,
 SketchBillet's command-line tool. Both run the same commands, so everything in this guide
 works in either.
 
@@ -36,7 +36,7 @@ works in either.
 | Save and open `.sb` designs | |
 | Export STL and 3MF (3D printing) and STEP (other CAD programs), from the app's File menu or `sketchbillet_cli` | |
 | Check a part is ready to print: closed all round, no walls too thin | Overhang checks |
-| Measure a face, edge or point, or between two: sizes, distances, angles, hole spacing, in the app (Tools > Measure) or with `sketchbillet_cli` | |
+| Measure a face, edge or point, or between two: sizes, distances, angles, hole spacing, in the app (Inspect > Measure) or with `sketchbillet_cli` | |
 | Import parts from other programs: STEP, STL and 3MF files, kept inside the design, with Reload from file | |
 | Add plugins | |
 

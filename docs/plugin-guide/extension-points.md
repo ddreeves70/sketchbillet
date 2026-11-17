@@ -7,7 +7,7 @@ example of each. The API reference (`sb::plugin::PluginContext`) has every detai
 ## Add commands
 
 A command is anything a student can do to a design: add a step, change a number,
-delete a step. Menus, scripts and the AI assistant all run commands by name, so a
+delete a step. The toolbar, scripts and the AI assistant all run commands by name, so a
 command you add is usable everywhere.
 
 ```cpp
@@ -46,20 +46,26 @@ when its command runs.
 
 Commands can only be added while the register function runs.
 
-## Add menu items and toolbar buttons
+## Add toolbar buttons and dropdown items
 
-An **action** is a menu item, and optionally a toolbar button, that runs a
-command by name. Actions are plain data with no Qt code, so a plugin that adds
-them still works in `sketchbillet_cli`.
+An **action** is a tool on SketchBillet's toolbar that runs a command by name.
+Actions are plain data with no Qt code, so a plugin that adds them still works
+in `sketchbillet_cli`.
+
+The toolbar has **tabs** (Model, Sketch, Inspect, View), and each tab has
+**panels** (Create, Modify, Combine...). Every panel has its name underneath,
+with a dropdown of everything in it (**Create ▾**). `menu` says where your
+action goes: the tab, a `/`, then the panel. Both are made if they don't exist
+yet.
 
 ```cpp
 ctx.addAction({.id = "sam.cube.cube",           // starts with your plugin id
                .text = "Cube",                  // the words on the item
-               .menu = "Create",                // made if it doesn't exist
+               .menu = "Model/Create",          // the Create panel of the Model tab
                .command = "sam.cube.add_cube",  // the command it runs
                .args = {{"size", 30.0}},        // fixed settings for the command
                .shortcut = "Ctrl+Shift+U",
-               .toolbar = true,
+               .toolbar = true,                 // a button on the panel, too
                .tip = "Add a 30 mm cube."});
 ```
 
@@ -69,7 +75,7 @@ item is only enabled when exactly that many steps are selected. This is how
 `sb.modeling`'s **Combine > Cut** works:
 
 ```cpp
-ctx.addAction({.id = "sb.modeling.cut", .text = "Cut", .menu = "Combine",
+ctx.addAction({.id = "sb.modeling.cut", .text = "Cut", .menu = "Model/Combine",
                .command = "feature.add_boolean",
                .args = {{"operation", std::string("cut")}},
                .fromSelection = {"a", "b"},
@@ -79,10 +85,10 @@ ctx.addAction({.id = "sb.modeling.cut", .text = "Cut", .menu = "Combine",
 **All the selected steps.** For a command that works on any number of steps,
 give a `FeatureList` argument's name in `fromSelectionList`. SketchBillet fills it with
 every selected step, in the order they were picked, and enables the item when one
-or more steps are selected. This is how **Edit > Turn off** works:
+or more steps are selected. This is how **Steps > Turn off** works:
 
 ```cpp
-ctx.addAction({.id = "sb.modeling.turn_off", .text = "Turn off", .menu = "Edit",
+ctx.addAction({.id = "sb.modeling.turn_off", .text = "Turn off", .menu = "Model/Steps",
                .command = "feature.suppress",
                .args = {{"off", true}},
                .fromSelectionList = "steps",
@@ -99,7 +105,7 @@ picking edges and tells the student to click the edges, then click it again. Thi
 is how **Modify > Fillet** works:
 
 ```cpp
-ctx.addAction({.id = "sb.modeling.fillet", .text = "Fillet", .menu = "Modify",
+ctx.addAction({.id = "sb.modeling.fillet", .text = "Fillet", .menu = "Model/Modify",
                .command = "feature.add_fillet",
                .args = {{"radius", 1.0}},
                .fromEdges = "edges",
@@ -107,28 +113,29 @@ ctx.addAction({.id = "sb.modeling.fillet", .text = "Fillet", .menu = "Modify",
                .tip = "Round the picked edges by 1 mm."});
 ```
 
-**Toolbar buttons.** `.toolbar = true` also puts the item on the toolbar. If its
-words are too long for a button, give shorter ones in `buttonText`: the
-sketcher's **New sketch on XY (the ground)** is just **New sketch** on the
-toolbar.
+**Buttons.** Every action is in its panel's dropdown. `.toolbar = true` also
+makes it a button on the panel: give that to the tools students use most, and
+leave the rest in the dropdown, so the toolbar stays short. If its words are too
+long for a button, give shorter ones in `buttonText`: the sketcher's **New
+sketch on XY (the ground)** is just **New sketch** on its button.
 
-- **Only when it can be used.** With `.buttonWhenEnabled = true`, the button shows
-  only while the item is enabled (see `enabled` below), so the toolbar offers just
-  what fits right now. The sketcher's constraint buttons work this way: pick two
-  lines and **Parallel** appears. The menu item is always there, greyed out when
-  it can't be used.
-- **A second row.** When the buttons don't fit across the window, the ones at the
-  end go on a second row, which goes away again when they fit. SketchBillet's own New,
-  Open, Save, Undo and Redo stay on the first row.
+- **Greyed out when it can't be used.** A button that can't be used right now
+  (see `enabled` below) is greyed out, like its dropdown item. The sketcher's
+  constraint buttons work this way: pick two lines and **Parallel** can be used.
+- **In more than one place.** Several places, split by `;`, put it in each:
+  `.menu = "Model/Inspect;Inspect/Measure"` puts Measure on the Model tab and the
+  Inspect tab.
+- **A tab's main button.** `.primary = true` makes it the one big green button at
+  the right end of its tab, like **Finish sketch**. Then `menu` is just the tab.
 
 **Icons.** Give a button a picture with `icon`: SVG text drawn in a 24 by 24
-box. SketchBillet shows it on the button (with the words under it) and next to the menu
-item, and greys it out with the item. Write `currentColor` for lines that should
+box. SketchBillet shows it on the button (with the words under it) and next to the
+dropdown item, and greys it out with the item. Write `currentColor` for lines that should
 be dark on a light theme and light on a dark one. Text that isn't SVG SketchBillet can draw
 just leaves the button with words.
 
 ```cpp
-ctx.addAction({.id = "sam.cube.cube", .text = "Cube", .menu = "Create",
+ctx.addAction({.id = "sam.cube.cube", .text = "Cube", .menu = "Model/Create",
                .command = "sam.cube.add_cube", .args = {{"size", 30.0}},
                .toolbar = true,
                .icon = R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
@@ -145,36 +152,40 @@ lines in `#1e6fe0`; green `#2e9e4f` for adding or finishing. SketchBillet's own 
 each icon in its own `.svg` file and builds it in with `sb_embed_files()` (see
 `cmake/SbEmbed.cmake`).
 
-**Toolbar modes.** Some work needs its own buttons, and the usual ones only get in
-the way. While a sketch is being edited, the toolbar shows only Line, Circle,
-Arc, Point and Finish sketch. To do this, give your buttons a `toolbarMode`, and
-switch to that mode with `ctx.setToolbarMode()` while the work goes on:
+**Tabs that come and go.** Some work needs its own tab, and the usual one only
+gets in the way. While a sketch is being edited, the **Sketch** tab shows and is
+picked, and the **Model** tab hides. To do this, describe your tab with
+`ctx.addTab()`, saying which **toolbar mode** it shows in, and switch to that mode
+with `ctx.setToolbarMode()` while the work goes on:
 
 ```cpp
-ctx.addAction({.id = "sam.paint.brush", .text = "Brush", .menu = "Paint",
+ctx.addTab({.name = "Paint", .always = false, .mode = "sam.paint.painting"});
+ctx.addAction({.id = "sam.paint.brush", .text = "Brush", .menu = "Paint/Brushes",
                .toolbar = true,
-               .toolbarMode = "sam.paint.painting",  // shown only in this mode
+               .toolbarMode = "sam.paint.painting",
                .run = [] { /* pick the brush */ }});
-// When painting starts:
+// When painting starts: the Paint tab shows, and is picked.
 ctx.setToolbarMode("sam.paint.painting");
-// When it stops:
-ctx.setToolbarMode("");  // back to the usual toolbar
+// When it stops: back to the tab the student had before.
+ctx.setToolbarMode("");
 ```
 
-- Buttons without a `toolbarMode` show only when no mode is on. SketchBillet's own New,
-  Open, Save, Undo and Redo always show.
+- A tab no plugin describes always shows, like **Inspect** and **View**. The
+  Model tab is described with an empty `mode`: it shows only when no mode is on.
 - Only one mode is on at a time. SketchBillet sends `ToolbarModeChanged` when it switches.
 - Mode names start with your plugin id and a dot, like event names; otherwise
   SketchBillet warns.
-- The menus don't change: every item stays in its menu, in every mode.
+- The first plugin to describe a tab decides when it shows.
 - An item with a `toolbarMode` wins any shortcut it shares with another item
   while its mode is on. The sketcher's **Delete picked** has the Delete key, so
   while a sketch is edited, Delete deletes the picked lines, not the step. The
-  other item gets its keys back when the mode ends. (The item doesn't need to be
-  on the toolbar for this.)
+  other item gets its keys back when the mode ends.
+- Every item's shortcut works whichever tab is showing.
 
-**Submenus.** A `/` in `menu` makes a submenu: `.menu = "View/Grid style"` puts
-the item in the **Grid style** submenu of **View**.
+**Submenus.** More `/`s in `menu` make a submenu of the panel's dropdown:
+`.menu = "View/Grid/Grid style"` puts the item in the **Grid style** submenu of
+the View tab's **Grid** panel. A single name, like `.menu = "Paint"`, is a panel
+of that name on a tab of that name.
 
 SketchBillet refuses a plugin whose action has a badly formed id, an id another action
 already has, or a command no loaded plugin has. Like commands, actions can only
@@ -182,7 +193,7 @@ be added while the register function runs.
 
 ## Check-mark items, and items that run your own code
 
-Some menu items don't change a design: they turn something on or off, or open a
+Some items don't change a design: they turn something on or off, or open a
 dialog. Give them a `run` function instead of a command. Add `checked` and the
 item gets a check mark whenever it returns `true`. (For things the viewer shows,
 use view options instead, described below: they make these items for you.)
@@ -191,19 +202,19 @@ use view options instead, described below: they make these items for you.)
 auto& settings = ctx.settings();
 ctx.addAction({.id = "sam.notes.show_dates",
                .text = "Show dates on notes",
-               .menu = "View",
+               .menu = "View/Notes",
                .tip = "Write the date next to every note.",
                .run = [&settings] { settings.set("dates", !settings.flag("dates")); },
                .checked = [&settings] { return settings.flag("dates"); }});
 ```
 
-- SketchBillet asks `checked` when the menu opens, after every change to a design, and
+- SketchBillet asks `checked` when the dropdown opens, after every change to a design, and
   whenever a setting changes, so the check mark is always right.
 - `currentText` (optional) gives the item's words the same way, for items like
   **Other (12.5 mm)...** whose words change.
 - `enabled` (optional) greys the item out whenever it returns `false`, so a
-  student can't pick something that can't work right now. Its toolbar button
-  greys out too. SketchBillet asks it at the
+  student can't pick something that can't work right now. Its button greys out
+  too. SketchBillet asks it at the
   same times as `checked`. If it depends on something only your plugin knows
   (like "a sketch is being edited"), send `plugin::ActionsChanged{}` with
   `ctx.publish` when that changes, and SketchBillet asks again:
@@ -212,7 +223,7 @@ ctx.addAction({.id = "sam.notes.show_dates",
 static bool recording = false;  // something only this plugin knows
 ctx.addAction({.id = "sam.notes.stop",
                .text = "Stop recording",
-               .menu = "View",
+               .menu = "View/Notes",
                .run = [&ctx] {
                    recording = false;
                    ctx.publish(plugin::ActionsChanged{});
@@ -292,7 +303,7 @@ if (sel.designPicked()) { /* show the design's settings, not a step's */ }
 with `set()` un-picks the design.
 
 Edges or faces can be picked instead of steps. While `pickMode()` is
-`PickMode::Edges` (**Edit > Pick edges**), clicking a body in the viewer picks
+`PickMode::Edges` (**Select > Pick edges**), clicking a body in the viewer picks
 the edge under the mouse; while it's `PickMode::Faces` (**Sketch > New sketch on a
 face**), the face, one at a time; while it's `PickMode::Measure` (**Tools >
 Measure**), the face, edge or point (vertex) under the mouse, up to two at a time:
@@ -326,9 +337,9 @@ sel.setPickOnly(fillet.body());  // the body before the fillet, alone
 
 If your plugin draws something in the viewer that the student may want to turn on
 or off or adjust, make it a **view option**. The `sb.viewoptions` plugin then
-remembers it, checks it, adds its View menu items, and shows it in the **View
-options** panel next to the grid and the axes. You don't write any menu or settings
-code.
+remembers it, checks it, adds its items to the View tab, and shows it in the **View
+options** panel next to the grid and the axes. You don't write any toolbar or
+settings code.
 
 List `sb.viewoptions` in `requires` in your `plugin.json` (`"requires":
 ["sb.viewoptions"]`). Because it's required, SketchBillet loads it first, so you can look
@@ -356,17 +367,20 @@ void registerNotes(sb::plugin::PluginContext& ctx) {
 }
 ```
 
-| Kind | Holds | In the View menu |
+| Kind | Holds | On the View tab (in the panel named after its `group`) |
 | --- | --- | --- |
 | `Flag` | On or off (`bool`) | A check-mark item (with `shortcut`, if you give one) |
 | `Choice` | One of `choices` (each a `value` that's stored and a `text` that's shown) | A submenu named after the option, one item each |
 | `Length` | A length in mm between `min` and `max` | A submenu of `presets` ("5 mm") and **Other...**, which asks for any value |
 | `Number` | A number between `min` and `max` | Like Length, without "mm" |
 
+- A Flag with `.button = true` (and an `icon`) is also a button on its panel, like
+  the grid's **Show grid** and **Snap to grid**. An option with no `group` goes in
+  the View tab's **Options** panel.
 - Read values with `options->flag(id)`, `number(id)` or `choice(id)`; change them
   with `options->set(id, value)`. A value outside the limits, or not one of the
   choices, is refused with a plain message, and nothing changes.
-- Option ids start with your plugin's id and a dot. The menu items `addOption`
+- Option ids start with your plugin's id and a dot. The items `addOption`
   makes are yours too, with ids built from the option's: `sam.notes.show`,
   `sam.notes.size.5`, `sam.notes.size.other`.
 - Every change sends `sb.viewoptions.changed` (`ViewOptionChanged`) with the
@@ -408,7 +422,7 @@ Length) plugins.
 The grid is a plugin too: `sb.grid`. It offers the grid to other plugins as the
 `sb.grid/2` service, described by its contract header `sb/grid/Grid.h`. A tool
 that lets the student place points with the mouse snaps them through it, so it
-obeys **View > Snap to grid** like everything else.
+obeys **Grid > Snap to grid** like everything else.
 
 List `sb.grid` in `uses` in your `plugin.json` (`"uses": ["sb.grid"]`), then look
 the grid up when your plugin starts:
@@ -427,7 +441,7 @@ ctx.listen<sb::grid::GridChanged>([](const sb::grid::GridChanged& e) { /* e.grid
 ```
 
 `sketchbillet_cli` doesn't load `sb.grid`, so the service is `nullptr` there. The student
-changes the grid with the View menu and the View options panel; other plugins only
+changes the grid with the View tab and the View options panel; other plugins only
 read it. A pane's key comes from the view options (`options->activePane()` is the
 pane the student is working in). `GridChanged` has a `pane` too: empty when the
 all-panes grid changed.
@@ -443,7 +457,7 @@ you can draw a preview with an overlay. Panning and zooming still work, and Esca
 calls `cancelled()`.
 
 List `sb.viewer` in `uses` (or `requires`), then start your tool when the student
-asks for it, for example from a menu item:
+asks for it, for example from a toolbar item:
 
 ```cpp
 #include "sb/viewer/Viewer.h"
@@ -464,7 +478,7 @@ struct DotTool final : sb::viewer::IViewTool {
 };
 
 auto tool = std::make_shared<DotTool>(ctx);
-ctx.addAction({.id = "sam.dots.place", .text = "Place a dot", .menu = "Tools",
+ctx.addAction({.id = "sam.dots.place", .text = "Place a dot", .menu = "Model/Dots",
                .run = [&ctx, tool] {
                    auto* viewer = ctx.service<sb::viewer::IViewer>();
                    if (!viewer) return;
@@ -581,8 +595,8 @@ ctx.overlays().set("guides", guide);  // its id is "sam.notes.guides"
 - If your plugin fails to start, SketchBillet removes its overlays.
 
 **Worked example:** the built-in [grid plugin](../../plugins/grid/GridPlugin.cpp)
-draws the grid with one Lattice overlay, and also uses settings, check-mark menu
-items, submenus, a status-bar item and a service. It uses only the public plugin
+draws the grid with one Lattice overlay, and also uses settings, check-mark
+items, buttons, submenus, a status-bar item and a service. It uses only the public plugin
 API, so an outside plugin could replace it. SketchBillet's app tests click through it.
 The built-in [axes plugin](../../plugins/axes/AxesPlugin.cpp) is a smaller
 example: Lines and Labels overlays on the view cube (and at the origin, if the
@@ -614,7 +628,7 @@ ctx.listen<plugin::RebuildFinished>([&ctx](const plugin::RebuildFinished& e) {
 | `OverlaysChanged` | An overlay is added, changed or removed | `id` |
 | `SettingChanged` | A plugin's setting changes | `plugin` (its id), `key` (the setting's name) |
 | `ToolbarModeChanged` | A plugin switches the toolbar mode (see Toolbar modes, above) | `mode` (empty for the usual toolbar) |
-| `ActionsChanged` | A plugin says its menu items' `enabled`, `checked` or words may have changed | nothing |
+| `ActionsChanged` | A plugin says its toolbar items' `enabled`, `checked` or words may have changed | nothing |
 
 Things to know:
 
@@ -729,7 +743,7 @@ void registerNotes(sb::plugin::PluginContext& ctx) {
   ui->addStatusItem({"sam.notes.count",  // starts with your plugin id
                      [&ctx] { return new NoteCountLabel(ctx); }});
   ```
-- **More than one?** Set `allowMultiple` and the **Window** menu gets
+- **More than one?** Set `allowMultiple` and **Panels** on the View tab gets
   **New** *your panel's title*. Each one is made by its own call to your function,
   so keep its state in the widget, not in the plugin. Copies aren't reopened when
   SketchBillet restarts.
@@ -737,7 +751,7 @@ void registerNotes(sb::plugin::PluginContext& ctx) {
   ```cpp
   sb::ui::PanelSpec spec{"sam.notes.panel", QObject::tr("Notes"), sb::ui::PanelArea::Right,
                          [&ctx] { return new NotesPanel(ctx); }};
-  spec.allowMultiple = true;  // Window > New notes
+  spec.allowMultiple = true;  // Panels > New notes
   ui->addPanel(std::move(spec));
   ```
 
@@ -753,7 +767,7 @@ void registerNotes(sb::plugin::PluginContext& ctx) {
   ```cpp
   sb::ui::PanelSpec spec{"sam.notes.panel", QObject::tr("Notes"), sb::ui::PanelArea::Left,
                          [&ctx] { return new NotesPanel(ctx); }};
-  spec.floatsOverView = true;  // Window > Notes over the view docks it
+  spec.floatsOverView = true;  // Panels > Notes over the view docks it
   ui->addPanel(std::move(spec));
   ```
 

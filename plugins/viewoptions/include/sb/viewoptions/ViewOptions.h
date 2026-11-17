@@ -63,6 +63,11 @@ struct OptionSpec {
     std::vector<double> presets{};        ///< Length and Number: values offered in the menu.
     std::vector<OptionChoice> choices{};  ///< Choice: the items, in menu order.
     std::string shortcut{};               ///< Flag: a keyboard shortcut for its menu item, e.g. "Ctrl+G".
+    /// Flag: true to also show it as a button on its panel of the View tab (the
+    /// panel named after `group`), not only in the panel's dropdown.
+    bool button = false;
+    /// Flag with `button`: the button's picture, SVG text as for plugin::ActionSpec::icon.
+    std::string icon{};
 };
 
 /// Sent when an option's value changes.
@@ -95,7 +100,7 @@ public:
     /// Destroys the service.
     virtual ~IViewOptions() = default;
 
-    /// Declares an option. Use addOption(), which also adds its menu items.
+    /// Declares an option. Use addOption(), which also adds its items to the View tab.
     /// @param option What it is.
     /// @return Problems (an id already used, a value of the wrong kind); nothing if it was added.
     virtual Diagnostics add(OptionSpec option) = 0;
@@ -226,9 +231,10 @@ inline std::string numberText(double value) {
     return out.str();
 }
 
-/// Declares an option and adds its View menu items, which belong to your plugin:
-/// a check mark for a Flag, a submenu for a Choice, and a submenu of presets
-/// plus "Other..." for a Length or Number. Call it while registering.
+/// Declares an option and adds its items to the View tab, in the panel named after
+/// its group (View/Grid, or View/Options with no group), which belong to your plugin: a check mark for a Flag
+/// (and a button, with OptionSpec::button), a submenu for a Choice, and a submenu of presets plus "Other..."
+/// for a Length or Number. Call it while registering.
 /// @param ctx Your plugin's context.
 /// @param options The view options service.
 /// @param option The option; its id must start with your plugin's id and a dot.
@@ -241,13 +247,17 @@ inline Diagnostics addOption(plugin::PluginContext& ctx, IViewOptions& options, 
     }
     if (auto problems = options.add(option); !problems.empty()) return problems;
     IViewOptions* o = &options;
+    // Its panel on the View tab is named after its group.
+    const std::string panel = "View/" + (option.group.empty() ? std::string("Options") : option.group);
     const std::string id = option.id;
     switch (option.kind) {
         case OptionKind::Flag:
             ctx.addAction({.id = id,
                            .text = option.text,
-                           .menu = "View",
+                           .menu = panel,
                            .shortcut = option.shortcut,
+                           .toolbar = option.button,
+                           .icon = option.icon,
                            .tip = option.tip,
                            .run = [o, id] { o->set(id, !o->flag(id)); },
                            .checked = [o, id] { return o->flag(id); }});
@@ -257,7 +267,7 @@ inline Diagnostics addOption(plugin::PluginContext& ctx, IViewOptions& options, 
                 const std::string value = c.value;
                 ctx.addAction({.id = id + "." + value,
                                .text = c.text,
-                               .menu = "View/" + option.text,
+                               .menu = panel + "/" + option.text,
                                .tip = option.tip,
                                .run = [o, id, value] { o->set(id, value); },
                                .checked = [o, id, value] { return o->choice(id) == value; }});
@@ -273,7 +283,7 @@ inline Diagnostics addOption(plugin::PluginContext& ctx, IViewOptions& options, 
                 }
                 ctx.addAction({.id = id + "." + name,
                                .text = numberText(p) + unit,
-                               .menu = "View/" + option.text,
+                               .menu = panel + "/" + option.text,
                                .tip = option.tip,
                                .run = [o, id, p] { o->set(id, p); },
                                .checked = [o, id, p] { return o->number(id) == p; }});
@@ -281,7 +291,7 @@ inline Diagnostics addOption(plugin::PluginContext& ctx, IViewOptions& options, 
             const auto presets = option.presets;
             ctx.addAction({.id = id + ".other",
                            .text = "Other...",
-                           .menu = "View/" + option.text,
+                           .menu = panel + "/" + option.text,
                            .tip = option.tip,
                            .run = [o, id] { o->ask(id, {}); },
                            .currentText =
