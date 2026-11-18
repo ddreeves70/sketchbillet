@@ -450,7 +450,7 @@ all-panes grid changed.
 
 A **view tool** lets the student draw with the mouse on a plane, the way the
 sketcher's Line and Circle tools do. The viewer (`sb.viewer`) offers it as the
-`sb.viewer/3` service, described by its contract header `sb/viewer/Viewer.h`.
+`sb.viewer/4` service, described by its contract header `sb/viewer/Viewer.h`.
 While your tool runs, a left click in any pane tells you the point on the plane
 (in mm) instead of turning the view or picking; moving the mouse tells you too, so
 you can draw a preview with an overlay. Panning and zooming still work, and Escape
@@ -522,7 +522,7 @@ to drag, like the arrows SketchBillet's own `sb.movehandles` plugin puts on a pi
 body. The viewer draws handles over the design, so they can always be grabbed,
 lights up the one under the mouse, and tells you how far it's been dragged (in
 mm): along an arrow, or across a square's flat plane. It changes nothing itself:
-you decide what a drag does. Handles use the same `sb.viewer/3` service as
+you decide what a drag does. Handles use the same `sb.viewer/4` service as
 tools, and aren't shown while a tool runs.
 
 ```cpp
@@ -552,6 +552,42 @@ button went down, so moving the handles with the body doesn't upset it.
 plane square to `direction`, with sides `length` mm long). Commands like
 `model::SlideBodyCommand` take `continuesPrevious`, so each part of a drag joins
 the one before into one undo step.
+
+## Squares to click (desktop app only)
+
+A **choice** is a flat, see-through square in every viewer for the student to
+click, like the three planes SketchBillet's **New sketch** shows (XY, XZ and YZ).
+The one under the mouse lights up, and the viewer tells you which was clicked,
+by its id. Clicking anywhere else picks as usual, and a drag still turns the
+view, so the student can turn round to see a plane before clicking it. Choices
+use the same `sb.viewer/4` service.
+
+```cpp
+#include "sb/viewer/Viewer.h"
+
+struct Picker final : sb::viewer::IChoiceUser {
+    sb::plugin::PluginContext& ctx;
+    explicit Picker(sb::plugin::PluginContext& c) : ctx(c) {}
+    void chosen(const std::string& id) override {
+        ctx.service<sb::viewer::IViewer>()->clearChoices(*this);  // the squares stay until you do
+        // id is "floor" or "wall": do what was chosen.
+    }
+    void cancelled() override { ctx.service<sb::viewer::IViewer>()->clearChoices(*this); }  // Escape
+};
+
+auto picker = std::make_shared<Picker>(ctx);
+if (auto* viewer = ctx.service<sb::viewer::IViewer>()) {
+    viewer->offerChoices(*picker, {{.id = "floor", .label = "Floor", .xAxis = {1, 0, 0}, .yAxis = {0, 1, 0}, .b = 220},
+                                   {.id = "wall", .label = "Wall", .xAxis = {1, 0, 0}, .yAxis = {0, 0, 1}, .g = 160}});
+}
+```
+
+Each square starts at `origin` and reaches from `from` to `to` **screen pixels**
+along `xAxis` and `yAxis`, so it stays the same size however far the view zooms.
+Squares that meet at one point (like the three planes) leave a gap along the
+lines where they meet, which keeps each one easy to click. `offerChoices()`
+replaces the choices shown, even another plugin's; `clearChoices()` takes yours
+away.
 
 ## Draw in the viewer
 

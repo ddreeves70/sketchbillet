@@ -1659,6 +1659,88 @@ private:
     bool dragCancelled_ = false;                           // Escape during a drag: ignore its drop
 };
 
+// New sketch: shows the three base planes in the viewers for the student to
+// click, like Fusion's Create Sketch. Clicking a flat face of a body works too.
+class PlanePicker final : public viewer::IChoiceUser {
+public:
+    // Starts the sketch: on a base plane ("xy", "xz", "yz"), or on a face.
+    using Start = std::function<void(const std::string& plane, std::optional<plugin::PickedElement> face)>;
+
+    explicit PlanePicker(plugin::PluginContext& ctx) : ctx_(ctx) {}
+
+    void begin(Start start, std::function<void(const std::string&)> say) {
+        start_ = std::move(start);
+        say_ = std::move(say);
+        auto* viewer = ctx_.service<viewer::IViewer>();
+        if (!viewer) return;
+        active_ = true;
+        // The planes meet at the origin; each is colored like the axis it faces.
+        viewer->offerChoices(*this, {{.id = "xy",
+                                      .label = "XY (ground)",
+                                      .xAxis = {1, 0, 0},
+                                      .yAxis = {0, 1, 0},
+                                      .r = 52,
+                                      .g = 110,
+                                      .b = 214},
+                                     {.id = "xz",
+                                      .label = "XZ (front)",
+                                      .xAxis = {1, 0, 0},
+                                      .yAxis = {0, 0, 1},
+                                      .r = 46,
+                                      .g = 158,
+                                      .b = 79},
+                                     {.id = "yz",
+                                      .label = "YZ (side)",
+                                      .xAxis = {0, 1, 0},
+                                      .yAxis = {0, 0, 1},
+                                      .r = 214,
+                                      .g = 64,
+                                      .b = 52}});
+        // A flat face of a body can be clicked too.
+        ctx_.selection().setPickMode(plugin::PickMode::Faces);
+        say_(
+            "Click a plane to sketch on: XY (the ground), XZ (the front) or YZ (the side). Or click a "
+            "flat face of a body. Esc to stop.");
+        ctx_.events().publish(plugin::ActionsChanged{});
+    }
+
+    // Takes the planes away, and stops picking faces.
+    void end() {
+        if (!active_) return;
+        active_ = false;
+        if (auto* viewer = ctx_.service<viewer::IViewer>()) viewer->clearChoices(*this);
+        if (ctx_.selection().pickMode() == plugin::PickMode::Faces)
+            ctx_.selection().setPickMode(plugin::PickMode::Bodies);
+        ctx_.events().publish(plugin::ActionsChanged{});
+    }
+
+    bool active() const { return active_; }
+
+    void chosen(const std::string& id) override {
+        const std::string plane = id;  // a copy: end() takes the choices away, and `id` may be one of theirs
+        end();
+        if (start_) start_(plane, std::nullopt);
+    }
+
+    void cancelled() override {
+        end();
+        if (say_) say_("No new sketch.");
+    }
+
+    // A face was picked while the planes were shown: a flat one gets the sketch.
+    void picked(const plugin::PickedElement& face) {
+        if (!active_ || face.ref.kind != kernel::TopoKind::Face) return;
+        end();
+        if (start_) start_("xy", face);
+    }
+
+private:
+    plugin::PluginContext& ctx_;
+    Start start_;
+    std::function<void(const std::string&)> say_;
+    bool active_ = false;
+};
+
 void registerSketcher(plugin::PluginContext& ctx) {
     if (!ctx.service<viewer::IViewer>()) {
         ctx.fail(
@@ -1726,14 +1808,56 @@ void registerSketcher(plugin::PluginContext& ctx) {
         ctx.selection().set(doc, {id});
         sketcher->begin(id, Tool::Line);  // a new sketch starts with lines
     };
+    // New sketch: with a flat face or a plane picked, it goes there; otherwise the
+    // three base planes show in the viewers, to click one (or a flat face).
+    auto planes = std::make_shared<PlanePicker>(ctx);
+    ctx.addAction(ActionSpec{
+        .id = "sb.sketcher.new",
+        .text = "New sketch...",
+        .menu = "Model/Sketch",
+        .shortcut = "Ctrl+Shift+K",
+        .toolbar = true,
+        .buttonText = "New sketch",
+        .icon = std::string(icons::sketcher::new_sketch_svg),
+        .tip =
+            "Start a sketch: click a plane to draw on, XY (the ground), XZ (the front) or YZ (the side), or "
+            "a flat face of a body. With a flat face or a plane picked first, the sketch goes there.",
+        .run =
+            [planes, newSketch, pickedFace, flatFace, pickedPlane, say] {
+                if (planes->active()) {  // clicked again: stop
+                    planes->end();
+                    return;
+                }
+                if (const auto face = pickedFace()) {
+                    if (flatFace(*face)) newSketch("xy", face);
+                    return;
+                }
+                if (const auto on = pickedPlane()) {
+                    newSketch("xy", std::nullopt, on);
+                    return;
+                }
+                planes->begin(
+                    [newSketch, flatFace](const std::string& plane,
+                                          std::optional<plugin::PickedElement> face) {
+                        if (face && !flatFace(*face)) return;
+                        newSketch(plane == "xz" ? "xz" : plane == "yz" ? "yz" : "xy", face);
+                    },
+                    say);
+            },
+        .checked = [planes] { return planes->active(); },
+        .enabled = [&ctx] { return ctx.documents().find(ctx.documents().active()) != nullptr; }});
+    // A face clicked while the planes show gets the sketch; anything else stops showing them.
+    ctx.listen<plugin::SelectionChanged>([&ctx, planes](const plugin::SelectionChanged&) {
+        if (!planes->active()) return;
+        const auto& sel = ctx.selection();
+        if (sel.elements().size() == 1) planes->picked(sel.elements().front());
+    });
+    ctx.listen<plugin::ActiveDocumentChanged>(
+        [planes](const plugin::ActiveDocumentChanged&) { planes->end(); });
     ctx.addAction(
         ActionSpec{.id = "sb.sketcher.new_xy",
                    .text = "New sketch on XY (the ground)",
                    .menu = "Model/Sketch",
-                   .shortcut = "Ctrl+Shift+K",
-                   .toolbar = true,
-                   .buttonText = "New sketch",
-                   .icon = std::string(icons::sketcher::new_sketch_svg),
                    .tip = "Start a sketch lying flat, seen from the top, and draw in it. With a flat "
                           "face picked, the sketch goes on that face; with a plane picked, on the plane.",
                    .run = [newSketch, pickedFace, flatFace, pickedPlane] {

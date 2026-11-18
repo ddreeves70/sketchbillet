@@ -5,6 +5,7 @@ sb_add_library(sb_view
   SOURCES
     FlatView.cpp
     Graphics.cpp
+    Choices.cpp
     Handles.cpp
     Layout.cpp
     OcctGl.cpp

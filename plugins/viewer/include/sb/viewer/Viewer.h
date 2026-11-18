@@ -127,13 +127,44 @@ public:
     virtual void cancelled() = 0;
 };
 
+/// A flat square for the student to click in every viewer, like one of the three
+/// base planes offered when starting a sketch (see IViewer::offerChoices()). It
+/// reaches from `from` to `to` pixels along both of its directions from `origin`,
+/// so it stays the same size on the screen however far the view zooms, and
+/// squares that meet at one point leave a gap along the lines where they meet.
+struct Choice {
+    std::string id{};             ///< Says which was clicked, like "xy".
+    std::string label{};          ///< The words written on it, like "XY (the ground)".
+    kernel::Vec3 origin{};        ///< Where its directions start, in mm.
+    kernel::Vec3 xAxis{1, 0, 0};  ///< One direction along it (a unit vector).
+    kernel::Vec3 yAxis{0, 1, 0};  ///< The other (a unit vector, square to xAxis).
+    double from = 16;             ///< Where it starts along both directions, in screen pixels.
+    double to = 170;              ///< Where it ends along both directions, in screen pixels.
+    int r = 0;                    ///< Its color: red, 0 to 255.
+    int g = 0;                    ///< Green, 0 to 255.
+    int b = 0;                    ///< Blue, 0 to 255.
+};
+
+/// Whoever offered choices. The viewer calls it when one is clicked.
+class IChoiceUser {
+public:
+    /// Destroys it.
+    virtual ~IChoiceUser() = default;
+    /// The student clicked a choice. The choices stay until clearChoices().
+    /// @param id The choice's id.
+    virtual void chosen(const std::string& id) = 0;
+    /// The student pressed Escape in a view.
+    virtual void cancelled() = 0;
+};
+
 /// The viewers, as other plugins see them.
 class IViewer {
 public:
     /// The service's name and version.
     /// Version 2 added dragged(), dropped() and ToolPoint::add. Version 3 added
-    /// handles (setHandles(), clearHandles()).
-    static constexpr const char* kServiceName = "sb.viewer/3";
+    /// handles (setHandles(), clearHandles()). Version 4 added choices
+    /// (offerChoices(), clearChoices()).
+    static constexpr const char* kServiceName = "sb.viewer/4";
 
     /// Destroys the service.
     virtual ~IViewer() = default;
@@ -175,6 +206,22 @@ public:
     /// Gives who put the handles there.
     /// @return It, or nullptr if none are shown.
     virtual IHandleUser* handleUser() const = 0;
+    /// Shows squares to click in every pane of every viewer, in place of the
+    /// ones shown (yours or another plugin's). The one under the mouse lights up.
+    /// Clicks anywhere else pick as usual, and a drag still turns the view.
+    /// @param user Told which is clicked. It must stay alive until clearChoices()
+    ///        or another offerChoices().
+    /// @param choices The squares; empty to show none.
+    virtual void offerChoices(IChoiceUser& user, std::vector<Choice> choices) = 0;
+    /// Takes away a user's choices, if they're the ones shown.
+    /// @param user The user.
+    virtual void clearChoices(const IChoiceUser& user) = 0;
+    /// Gives the choices shown.
+    /// @return The choices last given to offerChoices(), or none.
+    virtual std::vector<Choice> choices() const = 0;
+    /// Gives who offered the choices.
+    /// @return It, or nullptr if none are shown.
+    virtual IChoiceUser* choiceUser() const = 0;
 };
 
 }  // namespace sb::viewer

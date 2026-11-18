@@ -1113,6 +1113,12 @@
       }
     },
     {
+      "out": "docs/user-guide/images/app-new-sketch-planes.png",
+      "size": "1280x800",
+      "app": {"trigger": ["sb.sketcher.new"]},
+      "crop": [520, 230, 380, 340]
+    },
+    {
       "out": "docs/user-guide/images/app-sketch-edit.png",
       "size": "1280x800",
       "script": "plate-sketch",

@@ -9,6 +9,7 @@
 
 #include <vector>
 
+#include "sb/view/Choices.h"
 #include "sb/view/Scene.h"
 
 namespace sb::view {
@@ -55,6 +56,15 @@ public:
     /// @param plane The plane to draw on, or nothing to stop drawing.
     void setDrawingPlane(std::optional<DrawingPlane> plane);
 
+    /// Shows flat squares to click, as ViewWidget::setChoices() does. Seen from
+    /// above, a square standing up is a line: clicking near it chooses it.
+    /// @param choices The squares; empty to show none.
+    void setChoices(const std::vector<ViewChoice>& choices);
+
+    /// Gives the squares shown to click.
+    /// @return The choices last given to setChoices().
+    const std::vector<ViewChoice>& choices() const { return choices_; }
+
     /// Gives the screen position of a point, for tests that click on it.
     /// @param point A point in mm (z is ignored: the view is seen from above).
     /// @return Where it is drawn, in widget coordinates.
@@ -83,6 +93,13 @@ signals:
     /// While drawing: the student pressed Escape.
     void planeCancelled();
 
+    /// The student clicked one of the squares to choose (see setChoices()).
+    /// @param id The choice's id.
+    void choiceClicked(const std::string& id);
+
+    /// The student pressed Escape while squares to choose were shown.
+    void choicesCancelled();
+
 protected:
     /// Draws the overlays and the card.
     /// @param event Which part to draw (it draws everything).
@@ -102,6 +119,9 @@ protected:
 
 private:
     std::optional<PlanePoint> planePoint(QPointF at) const;
+    std::vector<ViewChoice> shownChoices() const;  // with sizes in mm
+    std::optional<std::size_t> choiceUnder(QPointF at) const;
+    void updateTracking();
 
     QString text_;
     std::optional<DrawingPlane> drawing_;
@@ -111,6 +131,9 @@ private:
     bool leftDown_ = false;
     bool dragging_ = false;
     std::vector<ViewOverlay> overlays_;
+    std::vector<ViewChoice> choices_;
+    std::optional<std::size_t> hoveredChoice_;
+    std::optional<std::size_t> pressedChoice_;
 };
 
 }  // namespace sb::view
