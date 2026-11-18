@@ -3993,6 +3993,27 @@ TEST_CASE("New sketch shows the three planes to click, or takes a flat face", "[
     CHECK(static_cast<const model::SketchFeature&>(app.doc().featureAt(1)).plane() == model::SketchPlane::XZ);
     app.click("sb.sketcher.finish");
 
+    // Whoever hears a click may change the choices straight away (New sketch takes
+    // them away): the id it hears must still be the one clicked. (On Windows, the
+    // XZ click above once started an XY sketch, from an id that was gone.)
+    {
+        view::FlatView probe;
+        probe.resize(400, 400);
+        probe.setChoices({{"xz", "", {0, 0, 0}, {1, 0, 0}, {0, 0, 1}, 16, 170, true, {}}});
+        std::string heard;
+        QObject::connect(&probe, &view::FlatView::choiceClicked, [&](const std::string& id) {
+            probe.setChoices({{"other", "", {0, 0, 0}, {1, 0, 0}, {0, 1, 0}, 16, 170, true, {}}});
+            heard = id;
+        });
+        const QPointF at = probe.toScreen({0, 0, 0}) + QPointF(90, 0);
+        for (auto type : {QEvent::MouseButtonPress, QEvent::MouseButtonRelease}) {
+            QMouseEvent e(type, at, probe.mapToGlobal(at), Qt::LeftButton,
+                          type == QEvent::MouseButtonPress ? Qt::LeftButton : Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(&probe, &e);
+        }
+        CHECK(heard == "xz");
+    }
+
     // Clicking away from every plane picks as usual, and the planes stay.
     newSketch();
     clickScreen(origin + QPointF(-120, 120));

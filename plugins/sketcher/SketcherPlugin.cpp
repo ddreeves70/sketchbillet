@@ -1717,8 +1717,9 @@ public:
     bool active() const { return active_; }
 
     void chosen(const std::string& id) override {
+        const std::string plane = id;  // a copy: end() takes the choices away, and `id` may be one of theirs
         end();
-        if (start_) start_(id, std::nullopt);
+        if (start_) start_(plane, std::nullopt);
     }
 
     void cancelled() override {

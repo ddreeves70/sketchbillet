@@ -148,7 +148,9 @@ void FlatView::mouseReleaseEvent(QMouseEvent* event) {
         pressedChoice_.reset();
         if ((event->position().toPoint() - leftPress_).manhattanLength() < kDragPixels &&
             choiceUnder(event->position()) == pressed && pressed < choices_.size()) {
-            emit choiceClicked(choices_[pressed].id);
+            // A copy: whoever hears it may take the choices away (and their ids with them).
+            const std::string id = choices_[pressed].id;
+            emit choiceClicked(id);
             return;
         }
     }
