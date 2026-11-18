@@ -15,10 +15,19 @@ dimensions, and the solver makes it exact.
 
 ![Editing a sketch: the view looks straight at it, and the status bar says what to click](images/app-sketch-edit.png)
 
-1. **Sketch > New sketch on XY (the ground)** (Ctrl+Shift+K), or on XZ or YZ, or
-   [on a face of a body](sketch-on-face.md). SketchBillet
-   adds `Sketch1`, turns the view to look straight at its plane, and starts
-   drawing lines. To work on a sketch you already have, pick it in the feature
+1. Click **New sketch** (Ctrl+Shift+K). The three planes show in the 3D view:
+   **XY** (the ground, blue), **XZ** (the front, green) and **YZ** (the side,
+   red). The one under the mouse lights up. Click the one to draw on, or click a
+   flat face of a body to [sketch on the face](sketch-on-face.md). **Esc** (or
+   **New sketch** again) stops. SketchBillet adds `Sketch1`, turns the view to
+   look straight at its plane, and starts drawing lines.
+
+   ![New sketch: the XY, XZ and YZ planes, see-through, to click one](images/app-new-sketch-planes.png)
+
+   To skip choosing, **Sketch > New sketch on XY (the ground)**, **on XZ** and
+   **on YZ** go straight to that plane. With a flat face or a
+   [construction plane](planes.md) picked first, **New sketch** goes straight
+   onto it. To work on a sketch you already have, pick it in the feature
    tree and use **Sketch > Edit sketch** (Ctrl+K); it starts with **Select**, for
    picking and dragging (see below). Edit sketch is grey unless exactly one
    sketch is picked, and while you're already editing one.

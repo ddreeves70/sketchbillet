@@ -16,6 +16,8 @@
 #include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_Copy.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
+#include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepBuilderAPI_MakePolygon.hxx>
 #include <BRep_Builder.hxx>
 #include <Bnd_Box.hxx>
 #include <Font_NameOfFont.hxx>
@@ -54,6 +56,7 @@
 
 #include "OcctGl.h"
 #include "sb/kernel_occt/OcctShape.h"
+#include "sb/view/Choices.h"
 #include "sb/view/Graphics.h"
 
 namespace sb::view {
@@ -291,6 +294,13 @@ struct ViewWidget::Impl {
     std::vector<ViewHandle> shownHandles;  // the same, lengths in mm, as last drawn
     double handleScale = 0;                // mm per pixel where they were last drawn
     std::vector<Handle(OverlayObject)> handleObjects;
+    std::vector<ViewChoice> choices;       // as given (sizes may be in pixels)
+    std::vector<ViewChoice> shownChoices;  // the same, sizes in mm, as last drawn
+    double choiceScale = 0;                // mm per pixel where they were last drawn
+    std::vector<Handle(AIS_InteractiveObject)> choiceObjects;
+    std::optional<std::size_t> hoveredChoice;   // the choice under the mouse
+    std::optional<std::size_t> pressedChoice;   // the choice the left button went down on
+    QPoint choicePress;                         // where it went down
     std::optional<std::size_t> hovered;         // the handle under the mouse
     std::optional<std::size_t> draggingHandle;  // the handle being dragged
     ViewHandle dragHandle;                      // the handle as it was when pressed (it may follow the body)
@@ -420,6 +430,80 @@ struct ViewWidget::Impl {
             context->Display(obj, 0, -1, false);         // -1: never picked by OCCT (the view picks it)
             handleObjects.push_back(obj);
         }
+    }
+
+    // How many mm a pixel covers where the choices are, for choices sized in pixels.
+    double currentChoiceScale() const {
+        for (const auto& c : choices) {
+            if (c.pixels) return pixelSizeAt(c.origin);
+        }
+        return 0;
+    }
+
+    // Draws the choices again: see-through squares with a line round them and
+    // their words, the one under the mouse more solid.
+    void showChoices(double ratio) {
+        if (!context) return;
+        for (auto& o : choiceObjects) context->Remove(o, false);
+        choiceObjects.clear();
+        shownChoices.clear();
+        if (drawing) return;
+        choiceScale = view && !view->Window().IsNull() ? currentChoiceScale() : 0;
+        for (const auto& given : choices) {
+            ViewChoice c = given;
+            if (c.pixels) {
+                c.from *= choiceScale * ratio;  // pixels (before high-DPI scaling) to mm
+                c.to *= choiceScale * ratio;
+                c.pixels = false;
+            }
+            shownChoices.push_back(c);
+        }
+        for (std::size_t i = 0; i < shownChoices.size(); ++i) {
+            const auto& c = shownChoices[i];
+            if (c.to - c.from <= 0) continue;
+            const bool lit = hoveredChoice == i;
+            const auto corners = choiceCorners(c);
+            BRepBuilderAPI_MakePolygon outline;
+            for (const auto& p : corners) outline.Add(gp_Pnt(p.x, p.y, p.z));
+            outline.Close();
+            BRepBuilderAPI_MakeFace face(outline.Wire(), true);
+            if (!face.IsDone()) continue;
+            Handle(AIS_Shape) square = new AIS_Shape(face.Face());
+            square->SetColor(rgb(c.color.r, c.color.g, c.color.b));
+            square->SetTransparency(lit ? 0.35 : 0.7);
+            context->Display(square, AIS_Shaded, -1, false);  // -1: never picked by OCCT (the view picks it)
+            choiceObjects.push_back(square);
+            ViewOverlay o;
+            o.shape = OverlayShape::Lines;
+            for (std::size_t k = 0; k < 4; ++k) {
+                o.points.push_back(corners[k]);
+                o.points.push_back(corners[(k + 1) % 4]);
+            }
+            o.color = c.color;
+            o.size = (lit ? 3.0 : 1.5) * ratio;
+            Handle(OverlayObject) edge = new OverlayObject(o);
+            context->Display(edge, 0, -1, false);
+            choiceObjects.push_back(edge);
+            if (!c.label.empty()) {
+                ViewOverlay words;
+                words.shape = OverlayShape::Labels;
+                words.points = {choiceLabelAt(c)};
+                words.texts = {c.label};
+                words.color = Rgb{30, 34, 40};
+                words.size = (lit ? 15.0 : 13.0) * ratio;
+                Handle(OverlayObject) label = new OverlayObject(words);
+                label->SetZLayer(Graphic3d_ZLayerId_Topmost);
+                context->Display(label, 0, -1, false);
+                choiceObjects.push_back(label);
+            }
+        }
+    }
+
+    // The choice under the mouse, if any.
+    std::optional<std::size_t> choiceUnder(QPointF at, double r) const {
+        if (shownChoices.empty() || !ready) return std::nullopt;
+        const ScreenPoint mouse{at.x() * r, at.y() * r};
+        return choiceAt(shownChoices, projection(), mouse, 6 * r, rayAt(mouse.x, mouse.y));
     }
 
     // A failure's details, with the graphics card and OpenGL version when known.
@@ -798,6 +882,25 @@ const std::vector<ViewHandle>& ViewWidget::handles() const {
     return impl_->handles;
 }
 
+void ViewWidget::setChoices(const std::vector<ViewChoice>& choices) {
+    auto& d = *impl_;
+    d.choices = choices;
+    d.hoveredChoice.reset();
+    d.pressedChoice.reset();
+    setMouseTracking(true);
+    if (!choices.empty()) setFocus(Qt::OtherFocusReason);  // so Escape reaches it
+    try {
+        d.showChoices(devicePixelRatioF());
+    } catch (const Standard_Failure& e) {
+        d.fail(*this, drawFailed(d.where(QStringLiteral("showing planes to pick: ") + failureText(e))));
+    }
+    update();
+}
+
+const std::vector<ViewChoice>& ViewWidget::choices() const {
+    return impl_->choices;
+}
+
 std::optional<QPoint> ViewWidget::toScreen(const kernel::Vec3& point) const {
     const auto& d = *impl_;
     if (!d.view || !d.ready) return std::nullopt;
@@ -881,6 +984,11 @@ void ViewWidget::keyPressEvent(QKeyEvent* event) {
     }
     if (impl_->drawing && event->key() == Qt::Key_Escape) {
         emit planeCancelled();
+        event->accept();
+        return;
+    }
+    if (!impl_->choices.empty() && event->key() == Qt::Key_Escape) {
+        emit choicesCancelled();
         event->accept();
         return;
     }
@@ -1010,6 +1118,12 @@ void ViewWidget::paintGL() {
             if (d.handleScale <= 0 || std::abs(scale - d.handleScale) > 0.01 * d.handleScale)
                 d.showHandles(devicePixelRatioF());
         }
+        // Choices sized in pixels stay that size too.
+        if (!d.choices.empty() && !d.drawing) {
+            const double scale = d.currentChoiceScale();
+            if (d.choiceScale <= 0 || std::abs(scale - d.choiceScale) > 0.01 * d.choiceScale)
+                d.showChoices(devicePixelRatioF());
+        }
         d.view->Invalidate();
         d.view->InvalidateImmediate();
         d.controller.FlushViewEvents(d.context, d.view, true);
@@ -1050,6 +1164,12 @@ void ViewWidget::mousePressEvent(QMouseEvent* event) {
             return;
         }
     }
+    if (event->button() == Qt::LeftButton && !d.drawing) {
+        // A choice under the mouse: wait for the button to come up. A drag still orbits.
+        d.pressedChoice = d.choiceUnder(event->position(), devicePixelRatioF());
+        d.choicePress = event->position().toPoint();
+        if (d.pressedChoice) setFocus(Qt::MouseFocusReason);
+    }
     d.clickAdds = event->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier);
     const double ratio = devicePixelRatioF();
     const Graphic3d_Vec2i p(static_cast<int>(event->position().x() * ratio),
@@ -1080,6 +1200,21 @@ void ViewWidget::mouseReleaseEvent(QMouseEvent* event) {
         update();
         emit handleDropped(id, d.dragBy);
         return;
+    }
+    if (d.pressedChoice && event->button() == Qt::LeftButton) {
+        // A click (not a drag) on the choice it went down on chooses it, instead of picking.
+        const auto pressed = *d.pressedChoice;
+        d.pressedChoice.reset();
+        if ((event->position().toPoint() - d.choicePress).manhattanLength() < 6 &&
+            d.choiceUnder(event->position(), devicePixelRatioF()) == pressed &&
+            pressed < d.shownChoices.size()) {
+            const std::string id = d.shownChoices[pressed].id;
+            // Let go of the button without picking what's behind the square.
+            d.controller.ResetViewInput();
+            emit choiceClicked(id);
+            update();
+            return;
+        }
     }
     // A right click that didn't move (much) asks for the menu; a right drag pans.
     if (event->button() == Qt::RightButton &&
@@ -1117,6 +1252,16 @@ void ViewWidget::mouseMoveEvent(QMouseEvent* event) {
             d.hovered = now;
             d.showHandles(r);
             setCursor(now ? Qt::SizeAllCursor : Qt::ArrowCursor);
+            update();
+        }
+    }
+    if (!d.drawing && !d.choices.empty() && !(event->buttons() & Qt::LeftButton)) {
+        // Light up the choice under the mouse.
+        const auto now = d.choiceUnder(event->position(), devicePixelRatioF());
+        if (now != d.hoveredChoice) {
+            d.hoveredChoice = now;
+            d.showChoices(devicePixelRatioF());
+            setCursor(now ? Qt::PointingHandCursor : Qt::ArrowCursor);
             update();
         }
     }

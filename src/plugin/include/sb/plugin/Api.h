@@ -161,7 +161,10 @@ class PluginContext;
 /// names a tab and a panel ("Model/Create"), TabSpec and PluginContext::addTab()
 /// say when a tab shows, and ActionSpec::primary marks a tab's main button.
 /// ActionSpec::buttonWhenEnabled is gone: buttons that can't be used are greyed out.
-inline constexpr int kPluginApiVersion = 55;
+/// Version 56 added squares to click in the viewers (sb.viewer/4: viewer::Choice,
+/// viewer::IChoiceUser, IViewer::offerChoices() and clearChoices()), which New
+/// sketch uses to show the three planes.
+inline constexpr int kPluginApiVersion = 56;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

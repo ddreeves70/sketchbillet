@@ -1581,12 +1581,13 @@ TEST_CASE("the Sketch tab shows while editing, and the Model tab otherwise", "[a
     auto current = [&] { return tabs->tabText(tabs->currentIndex()); };
     const char* sketchButtons[] = {"sb.sketcher.finish", "sb.sketcher.select", "sb.sketcher.line",
                                    "sb.sketcher.circle", "sb.sketcher.arc",    "sb.sketcher.trim"};
-    const char* usualButtons[] = {"sb.modeling.box", "sb.modeling.move", "sb.sketcher.new_xy",
+    const char* usualButtons[] = {"sb.modeling.box", "sb.modeling.move", "sb.sketcher.new",
                                   "sb.sketcher.edit"};
     CHECK(current() == QStringLiteral("Model"));
     for (const char* id : usualButtons) CHECK(shown(id));
     for (const char* id : sketchButtons) CHECK_FALSE(shown(id));
-    CHECK(app.shell->button("sb.sketcher.new_xy")->text() == QStringLiteral("New sketch"));
+    CHECK(app.shell->button("sb.sketcher.new")->text() == QStringLiteral("New sketch"));
+    CHECK_FALSE(shown("sb.sketcher.new_xy"));  // in the Sketch panel's dropdown
     CHECK_FALSE(shown("sb.sketcher.new_xz"));  // in the Sketch panel's dropdown
 
     app.click("sb.sketcher.new_xy");
@@ -3937,6 +3938,112 @@ TEST_CASE("Change edges: pick a fillet's edges again on its body, then Done or C
     CHECK(sel.pickMode() == plugin::PickMode::Bodies);
     CHECK(sel.pickOnly().isNil());
     CHECK(title() != QStringLiteral("Changing the edges of Fillet1"));
+}
+
+TEST_CASE("New sketch shows the three planes to click, or takes a flat face", "[app][sketch][planes]") {
+    App app;
+    auto* flat = app.flat();
+    REQUIRE(flat);
+    auto* viewer = seenViewer;  // the App loads gridClient, which keeps it
+    REQUIRE(viewer);
+    auto& sel = app.host.selection();
+    // Where to click a plane in the flat view, seen from above: the middle of XY's
+    // square, or on XZ's line (standing up, it's seen edge on).
+    const QPointF origin = flat->toScreen({0, 0, 0});
+    auto clickScreen = [&](QPointF p) {
+        for (auto type : {QEvent::MouseMove, QEvent::MouseButtonPress, QEvent::MouseButtonRelease}) {
+            const auto button = type == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton;
+            const auto held = type == QEvent::MouseButtonPress ? Qt::LeftButton : Qt::NoButton;
+            QMouseEvent e(type, p, flat->mapToGlobal(p), button, held, Qt::NoModifier);
+            QApplication::sendEvent(flat, &e);
+        }
+        settle();
+    };
+    auto newSketch = [&] {
+        app.click("sb.sketcher.new");
+        settle();
+    };
+
+    newSketch();
+    CHECK(app.doc().featureCount() == 0);  // nothing yet: pick a plane first
+    REQUIRE(viewer->choices().size() == 3);
+    CHECK(viewer->choices()[0].label == "XY (ground)");
+    CHECK(viewer->choices()[1].label == "XZ (front)");
+    CHECK(viewer->choices()[2].label == "YZ (side)");
+    CHECK(flat->choices().size() == 3);
+    CHECK(app.shell->action("sb.sketcher.new")->isChecked());  // lit while choosing
+    CHECK(sel.pickMode() == plugin::PickMode::Faces);          // a flat face works too
+    CHECK(app.shell->statusBar()->currentMessage().contains(QStringLiteral("Click a plane to sketch on")));
+
+    // XY: the sketch goes on the ground, and drawing starts.
+    clickScreen(origin + QPointF(90, -90));
+    REQUIRE(app.doc().featureCount() == 1);
+    CHECK(static_cast<const model::SketchFeature&>(app.doc().featureAt(0)).plane() == model::SketchPlane::XY);
+    CHECK(viewer->choices().empty());
+    CHECK(flat->choices().empty());
+    CHECK(sel.pickMode() == plugin::PickMode::Bodies);
+    CHECK_FALSE(app.shell->action("sb.sketcher.new")->isChecked());
+    CHECK(app.shell->action("sb.sketcher.finish")->isEnabled());  // editing it
+    app.click("sb.sketcher.finish");
+
+    // XZ, standing up: seen from above it's a line, and clicking on it works.
+    newSketch();
+    clickScreen(origin + QPointF(90, 0));
+    REQUIRE(app.doc().featureCount() == 2);
+    CHECK(static_cast<const model::SketchFeature&>(app.doc().featureAt(1)).plane() == model::SketchPlane::XZ);
+    app.click("sb.sketcher.finish");
+
+    // Clicking away from every plane picks as usual, and the planes stay.
+    newSketch();
+    clickScreen(origin + QPointF(-120, 120));
+    CHECK(app.doc().featureCount() == 2);
+    CHECK(viewer->choices().size() == 3);
+    // Escape stops, with nothing added.
+    QKeyEvent esc(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    QApplication::sendEvent(flat, &esc);
+    settle();
+    CHECK(viewer->choices().empty());
+    CHECK(sel.pickMode() == plugin::PickMode::Bodies);
+    CHECK(app.shell->statusBar()->currentMessage() == QStringLiteral("No new sketch."));
+    CHECK(app.doc().featureCount() == 2);
+    // Clicking New sketch again stops too.
+    newSketch();
+    newSketch();
+    CHECK(viewer->choices().empty());
+
+    // A flat face of a body, clicked while the planes show, gets the sketch.
+    const auto doc = app.shell->activeDesign();
+    auto& docs = app.host.documents();
+    REQUIRE(docs.run(doc, "feature.add_box", {{"size", kernel::Vec3{40, 20, 10}}}).empty());
+    settle();
+    const auto box = app.doc().featureAt(2).id();
+    const auto top = [&] {
+        const auto& names = *docs.lastRebuild(doc)->result(box)->names;
+        for (std::size_t i = 0; i < names.faces.size(); ++i) {
+            const auto& f = names.elements.faces[i];
+            if (f.geom == kernel::GeomKind::Plane && f.direction.z == 1)
+                return plugin::PickedElement{box, model::referTo(names, kernel::TopoKind::Face, int(i))};
+        }
+        FAIL("no top face");
+        return plugin::PickedElement{};
+    }();
+    newSketch();
+    sel.setElements(doc, {top});  // as clicking the box's top does
+    settle();
+    REQUIRE(app.doc().featureCount() == 4);
+    const auto& onTop = static_cast<const model::SketchFeature&>(app.doc().featureAt(3));
+    REQUIRE(onTop.face());
+    CHECK(onTop.face()->body == box);
+    CHECK(viewer->choices().empty());
+    app.click("sb.sketcher.finish");
+
+    // With a flat face picked first, New sketch goes straight on it, as before.
+    sel.setPickMode(plugin::PickMode::Faces);
+    sel.setElements(doc, {top});
+    settle();
+    newSketch();
+    REQUIRE(app.doc().featureCount() == 5);
+    CHECK(viewer->choices().empty());
 }
 
 TEST_CASE("New sketch on a face: click it, pick a face, click it again; Move to a face",

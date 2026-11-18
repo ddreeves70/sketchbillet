@@ -206,9 +206,9 @@ Mockups of the main window, split views, two monitors and the Plugin manager, ea
 | --- | --- | --- |
 | `sb.modeling` | Box, cylinder and Boolean commands and feature types; later sketch, extrude, fillet | 0 |
 | `sb.viewer` | The 3D viewer type, split layouts, view cube, picking and selection tools | 0 |
-| `sb.sketcher` | Draws sketches in the viewers and edits them with the mouse (Line, Circle, Arc, Point, snapping; picking and dragging) through the viewer's tools (`sb.viewer/3`) | 1 |
+| `sb.sketcher` | Draws sketches in the viewers and edits them with the mouse (Line, Circle, Arc, Point, snapping; picking and dragging) through the viewer's tools and choices (`sb.viewer/4`) | 1 |
 | `sb.parameters` | The Parameters panel: the design's named values, added, changed, renamed and deleted in place through the `parameter.*` commands | 1 |
-| `sb.movehandles` | Arrows and a square on the picked body; dragging them slides it (`SlideBodyCommand`), through the viewer's handles (`sb.viewer/3`) | 1 |
+| `sb.movehandles` | Arrows and a square on the picked body; dragging them slides it (`SlideBodyCommand`), through the viewer's handles (`sb.viewer/4`) | 1 |
 | `sb.featuretree` | The feature tree panel | 0 |
 | `sb.properties` | The properties panel for the selected step | 0 |
 | `sb.io` | `.sb` save and open, STEP and STL import and export | 0 |

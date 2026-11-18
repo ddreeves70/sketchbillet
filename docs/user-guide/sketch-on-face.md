@@ -13,6 +13,11 @@ face, so a circle at 20, 10 sits above the point 20, 10 of the ground.
 
 ## In the desktop app
 
+The quick way: click **New sketch**, then click the flat face, instead of one of
+the three planes. The sketch goes on that face.
+
+Or, to see which face it is before the sketch goes on it:
+
 1. Click **Sketch > New sketch on a face**. The 3D view now picks faces, and the
    bar at the bottom says so.
 2. Click the face to draw on. It turns orange, and Properties says which face
@@ -28,8 +33,8 @@ face, so a circle at 20, 10 sits above the point 20, 10 of the ground.
 
    ![Drawing a circle on the block's top](images/app-sketch-face-draw.png)
 
-Shortcut: with a flat face picked, the toolbar's **New sketch** button draws on
-that face too.
+With a flat face already picked, the toolbar's **New sketch** button draws on
+that face straight away.
 
 To move a sketch to another face, or to pick its face again when the sketch says
 it can't find it: pick the sketch in the feature tree, click **Sketch > Move to a

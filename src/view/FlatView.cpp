@@ -4,6 +4,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPolygonF>
 
 #include <algorithm>
 #include <cmath>
@@ -44,9 +45,43 @@ QPointF FlatView::toScreen(const kernel::Vec3& p) const {
 void FlatView::setDrawingPlane(std::optional<DrawingPlane> plane) {
     drawing_ = plane;
     leftDown_ = dragging_ = false;
-    setMouseTracking(plane.has_value());
-    setFocusPolicy(plane ? Qt::StrongFocus : Qt::NoFocus);
+    updateTracking();
     setCursor(plane ? Qt::CrossCursor : Qt::ArrowCursor);
+}
+
+void FlatView::updateTracking() {
+    const bool on = drawing_.has_value() || !choices_.empty();
+    setMouseTracking(on);
+    setFocusPolicy(on ? Qt::StrongFocus : Qt::NoFocus);
+}
+
+void FlatView::setChoices(const std::vector<ViewChoice>& choices) {
+    choices_ = choices;
+    hoveredChoice_.reset();
+    pressedChoice_.reset();
+    updateTracking();
+    if (!choices_.empty()) setFocus(Qt::OtherFocusReason);  // so Escape reaches it
+    update();
+}
+
+std::vector<ViewChoice> FlatView::shownChoices() const {
+    auto shown = choices_;
+    for (auto& c : shown) {
+        if (!c.pixels) continue;
+        c.from /= kPixelsPerMm;
+        c.to /= kPixelsPerMm;
+        c.pixels = false;
+    }
+    return shown;
+}
+
+std::optional<std::size_t> FlatView::choiceUnder(QPointF at) const {
+    if (choices_.empty() || drawing_) return std::nullopt;
+    const Projection project = [this](const kernel::Vec3& p) -> std::optional<ScreenPoint> {
+        const QPointF s = toScreen(p);
+        return ScreenPoint{s.x(), s.y()};
+    };
+    return choiceAt(shownChoices(), project, {at.x(), at.y()}, 6);
 }
 
 std::optional<PlanePoint> FlatView::planePoint(QPointF at) const {
@@ -71,6 +106,11 @@ bool adding(const QMouseEvent* event) {
 
 void FlatView::mousePressEvent(QMouseEvent* event) {
     QWidget::mousePressEvent(event);
+    if (!drawing_ && event->button() == Qt::LeftButton) {
+        pressedChoice_ = choiceUnder(event->position());
+        if (pressedChoice_) setFocus(Qt::MouseFocusReason);
+        leftPress_ = event->position().toPoint();
+    }
     if (!drawing_ || event->button() != Qt::LeftButton) return;
     setFocus(Qt::MouseFocusReason);
     leftPress_ = event->position().toPoint();
@@ -82,6 +122,14 @@ void FlatView::mousePressEvent(QMouseEvent* event) {
 
 void FlatView::mouseMoveEvent(QMouseEvent* event) {
     QWidget::mouseMoveEvent(event);
+    if (!drawing_ && !choices_.empty()) {
+        const auto now = choiceUnder(event->position());
+        if (now != hoveredChoice_) {
+            hoveredChoice_ = now;
+            setCursor(now ? Qt::PointingHandCursor : Qt::ArrowCursor);
+            update();
+        }
+    }
     auto p = planePoint(event->position());
     if (!p) return;
     p->add = adding(event);
@@ -95,6 +143,15 @@ void FlatView::mouseMoveEvent(QMouseEvent* event) {
 
 void FlatView::mouseReleaseEvent(QMouseEvent* event) {
     QWidget::mouseReleaseEvent(event);
+    if (pressedChoice_ && event->button() == Qt::LeftButton) {
+        const auto pressed = *pressedChoice_;
+        pressedChoice_.reset();
+        if ((event->position().toPoint() - leftPress_).manhattanLength() < kDragPixels &&
+            choiceUnder(event->position()) == pressed && pressed < choices_.size()) {
+            emit choiceClicked(choices_[pressed].id);
+            return;
+        }
+    }
     if (!drawing_ || event->button() != Qt::LeftButton || !leftDown_) return;
     leftDown_ = false;
     auto p = planePoint(event->position());
@@ -111,6 +168,11 @@ void FlatView::mouseReleaseEvent(QMouseEvent* event) {
 void FlatView::keyPressEvent(QKeyEvent* event) {
     if (drawing_ && event->key() == Qt::Key_Escape) {
         emit planeCancelled();
+        event->accept();
+        return;
+    }
+    if (!choices_.empty() && event->key() == Qt::Key_Escape) {
+        emit choicesCancelled();
         event->accept();
         return;
     }
@@ -201,6 +263,29 @@ void FlatView::paintEvent(QPaintEvent*) {
             for (const auto& p : o.points) painter.drawEllipse(toScreen(p), r, r);
             painter.setRenderHint(QPainter::Antialiasing, false);
         }
+    }
+    // Squares to choose, seen from above: one lying flat is a square, one standing
+    // up is a line. The one under the mouse is more solid.
+    if (!drawing_) {
+        const auto shown = shownChoices();
+        painter.setRenderHint(QPainter::Antialiasing);
+        for (std::size_t i = 0; i < shown.size(); ++i) {
+            const auto& c = shown[i];
+            const bool lit = hoveredChoice_ == i;
+            QPolygonF poly;
+            for (const auto& p : choiceCorners(c)) poly << toScreen(p);
+            const QColor color(c.color.r, c.color.g, c.color.b);
+            QColor fill = color;
+            fill.setAlpha(lit ? 160 : 70);
+            painter.setPen(QPen(color, lit ? 3.0 : 1.5));
+            painter.setBrush(fill);
+            painter.drawPolygon(poly);
+            if (!c.label.empty()) {
+                painter.setPen(QColor(30, 34, 40));
+                painter.drawText(toScreen(choiceLabelAt(c)), QString::fromStdString(c.label));
+            }
+        }
+        painter.setRenderHint(QPainter::Antialiasing, false);
     }
     // The text, on a light card in the top-left corner, so the origin stays clear.
     if (!text_.isEmpty()) {

@@ -67,8 +67,8 @@ view::DrawingPlane drawingPlane(const viewer::ToolPlane& p) {
     return {p.origin, cross(p.xAxis, p.yAxis)};
 }
 
-// The sb.viewer/3 service: one drawing tool, and one set of handles, for every
-// pane of every viewer.
+// The sb.viewer/4 service: one drawing tool, one set of handles and one set of
+// choices, for every pane of every viewer.
 class ViewerService final : public viewer::IViewer {
 public:
     void startTool(viewer::IViewTool& tool, const viewer::ToolPlane& plane) override;
@@ -80,6 +80,18 @@ public:
 
     std::vector<viewer::Handle> handles() const override { return given_; }
     viewer::IHandleUser* handleUser() const override { return handleUser_; }
+    void offerChoices(viewer::IChoiceUser& user, std::vector<viewer::Choice> choices) override;
+    void clearChoices(const viewer::IChoiceUser& user) override;
+    std::vector<viewer::Choice> choices() const override { return choices_; }
+    viewer::IChoiceUser* choiceUser() const override { return choiceUser_; }
+
+    // The choices to draw, as the view draws them.
+    std::vector<view::ViewChoice> viewChoices() const {
+        std::vector<view::ViewChoice> out;
+        for (const auto& c : choices_)
+            out.push_back({c.id, c.label, c.origin, c.xAxis, c.yAxis, c.from, c.to, true, {c.r, c.g, c.b}});
+        return out;
+    }
 
     // The handles to draw, as the view draws them.
     const std::vector<view::ViewHandle>& viewHandles() const { return handles_; }
@@ -95,12 +107,15 @@ private:
     void applyAll();
 
     void showHandlesAll();
+    void showChoicesAll();
 
     viewer::IViewTool* tool_ = nullptr;
     viewer::ToolPlane plane_{};
     viewer::IHandleUser* handleUser_ = nullptr;
     std::vector<view::ViewHandle> handles_;
     std::vector<viewer::Handle> given_;
+    viewer::IChoiceUser* choiceUser_ = nullptr;
+    std::vector<viewer::Choice> choices_;
     std::vector<ViewerPanel*> panels_;
 };
 
@@ -243,6 +258,13 @@ public:
         for (auto* pane : panes_) pane->setHandles(service_.viewHandles());
     }
 
+    // The choices in every pane, and in the flat view.
+    void applyChoices() {
+        const auto choices = service_.viewChoices();
+        for (auto* pane : panes_) pane->setChoices(choices);
+        if (flat_) flat_->setChoices(choices);
+    }
+
     // Turns the active pane to look straight at a plane.
     void face(const viewer::ToolPlane& plane) {
         if (auto* pane = activePane()) pane->lookAlong({drawingPlane(plane).normal, plane.yAxis});
@@ -271,6 +293,17 @@ private:
                 });
         connect(view, &View::planeCancelled, this, [this] {
             if (auto* t = service_.tool()) t->cancelled();
+        });
+    }
+
+    // Sends a view's clicks on choices to whoever offered them.
+    template <typename View>
+    void forwardChoices(View* view) {
+        connect(view, &View::choiceClicked, this, [this](const std::string& id) {
+            if (auto* u = service_.choiceUser()) u->chosen(id);
+        });
+        connect(view, &View::choicesCancelled, this, [this] {
+            if (auto* u = service_.choiceUser()) u->cancelled();
         });
     }
 
@@ -643,8 +676,10 @@ private:
         });
         forward(pane, paneKey(index));
         forwardHandles(pane);
+        forwardChoices(pane);
         pane->setDrawingPlane(service_.plane());
         pane->setHandles(service_.viewHandles());
+        pane->setChoices(service_.viewChoices());
         frames_.push_back(frame);
         panes_.push_back(pane);
     }
@@ -681,7 +716,9 @@ private:
         body_->layout()->addWidget(flat_);
         flat_->setOverlays(viewOverlays(ctx_.overlays().forPane({})));
         forward(flat_, paneKey(0));
+        forwardChoices(flat_);
         flat_->setDrawingPlane(service_.plane());
+        flat_->setChoices(service_.viewChoices());
         refresh();
     }
 
@@ -807,6 +844,23 @@ void ViewerService::clearHandles(const viewer::IHandleUser& user) {
 
 void ViewerService::showHandlesAll() {
     for (auto* panel : panels_) panel->applyHandles();
+}
+
+void ViewerService::offerChoices(viewer::IChoiceUser& user, std::vector<viewer::Choice> choices) {
+    choiceUser_ = &user;
+    choices_ = std::move(choices);
+    showChoicesAll();
+}
+
+void ViewerService::clearChoices(const viewer::IChoiceUser& user) {
+    if (choiceUser_ != &user) return;
+    choiceUser_ = nullptr;
+    choices_.clear();
+    showChoicesAll();
+}
+
+void ViewerService::showChoicesAll() {
+    for (auto* panel : panels_) panel->applyChoices();
 }
 
 void registerViewer(plugin::PluginContext& ctx) {

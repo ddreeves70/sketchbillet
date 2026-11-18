@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "sb/core/Id.h"
+#include "sb/view/Choices.h"
 #include "sb/view/Handles.h"
 #include "sb/view/Layout.h"
 #include "sb/view/Scene.h"
@@ -64,6 +65,18 @@ public:
     /// Gives the handles the view draws.
     /// @return The handles last given to setHandles().
     const std::vector<ViewHandle>& handles() const;
+
+    /// Shows flat squares to click, like the three base planes offered when
+    /// starting a sketch, in place of the ones shown. The one under the mouse
+    /// lights up; clicking it sends choiceClicked(), Escape sends
+    /// choicesCancelled(). A left drag that starts on one still orbits. Clicks
+    /// elsewhere pick as usual.
+    /// @param choices The squares; empty to show none.
+    void setChoices(const std::vector<ViewChoice>& choices);
+
+    /// Gives the squares shown to click.
+    /// @return The choices last given to setChoices().
+    const std::vector<ViewChoice>& choices() const;
 
     /// Gives where a point is drawn in the view, for tests that drag a handle.
     /// @param point A point, in mm.
@@ -174,6 +187,13 @@ signals:
 
     /// The student pressed Escape while dragging a handle: put back what the drag changed.
     void handleCancelled();
+
+    /// The student clicked one of the squares to choose (see setChoices()).
+    /// @param id The choice's id.
+    void choiceClicked(const std::string& id);
+
+    /// The student pressed Escape while squares to choose were shown.
+    void choicesCancelled();
 
     /// The student clicked in the view and the selection should change.
     /// @param selection The steps that should be selected, in picking order.
