@@ -695,12 +695,13 @@
         {"at": [620, 15], "n": 1},
         {"at": [195, 45], "n": 2},
         {"at": [1250, 95], "n": 3},
-        {"at": [130, 300], "n": 4},
+        {"at": [130, 328], "n": 4},
         {"at": [760, 520], "n": 5},
         {"at": [1240, 580], "n": 6},
         {"at": [150, 789], "n": 7},
         {"at": [1020, 789], "n": 8},
-        {"at": [520, 737], "n": 9}
+        {"at": [520, 737], "n": 9},
+        {"at": [160, 153], "n": 10}
       ]
     },
     {
@@ -720,12 +721,7 @@
           "Hole"
         ]
       },
-      "crop": [
-        900,
-        198,
-        380,
-        400
-      ]
+      "crop": [900, 226, 380, 400]
     },
     {
       "out": "docs/user-guide/images/app-combine.png",
@@ -741,12 +737,7 @@
           "Hole"
         ]
       },
-      "crop": [
-        0,
-        0,
-        620,
-        248
-      ]
+      "crop": [0, 0, 620, 276]
     },
     {
       "out": "docs/user-guide/images/app-failed.png",
@@ -800,12 +791,7 @@
           "sb.viewoptions.show"
         ]
       },
-      "crop": [
-        900,
-        198,
-        380,
-        450
-      ]
+      "crop": [900, 226, 380, 450]
     },
     {
       "out": "docs/user-guide/images/app-pane-options.png",
@@ -926,12 +912,7 @@
           "Tag"
         ]
       },
-      "crop": [
-        900,
-        198,
-        380,
-        380
-      ]
+      "crop": [900, 226, 380, 380]
     },
     {
       "out": "docs/user-guide/images/app-folders.png",
@@ -950,12 +931,7 @@
           "Hole"
         ]
       },
-      "crop": [
-        0,
-        80,
-        310,
-        260
-      ]
+      "crop": [0, 176, 310, 232]
     },
     {
       "out": "docs/user-guide/images/app-move.png",
@@ -1136,7 +1112,7 @@
       "out": "docs/user-guide/images/app-new-sketch-planes.png",
       "size": "1280x800",
       "app": {"trigger": ["sb.sketcher.new"]},
-      "crop": [520, 230, 380, 340]
+      "crop": [520, 244, 380, 340]
     },
     {
       "out": "docs/user-guide/images/app-sketch-edit.png",
@@ -1171,12 +1147,7 @@
           "sb.sketcher.edit"
         ]
       },
-      "crop": [
-        0,
-        106,
-        1280,
-        576
-      ]
+      "crop": [0, 134, 1280, 548]
     },
     {
       "out": "docs/user-guide/images/app-sketch-conflict.png",
@@ -1195,12 +1166,7 @@
           "sb.sketcher.edit"
         ]
       },
-      "crop": [
-        300,
-        140,
-        980,
-        542
-      ]
+      "crop": [300, 168, 980, 514]
     },
     {
       "out": "docs/user-guide/images/app-sketch-open.png",
@@ -1218,12 +1184,7 @@
           "sb.sketcher.edit"
         ]
       },
-      "crop": [
-        300,
-        140,
-        980,
-        542
-      ]
+      "crop": [300, 168, 980, 514]
     },
     {
       "out": "docs/user-guide/images/extrude-plate.png",
@@ -1312,12 +1273,7 @@
       "app": {
         "open": "o.sb"
       },
-      "crop": [
-        1130,
-        85,
-        150,
-        135
-      ]
+      "crop": [1130, 176, 150, 135]
     },
     {
       "out": "docs/user-guide/images/app-wireframe.png",
@@ -1357,12 +1313,7 @@
           "PenHole"
         ]
       },
-      "crop": [
-        900,
-        198,
-        380,
-        400
-      ]
+      "crop": [900, 226, 380, 400]
     },
     {
       "out": "docs/user-guide/images/app-sketch-smooth.png",
@@ -1380,12 +1331,7 @@
           "sb.shell.show.sb.sketcher.panel"
         ]
       },
-      "crop": [
-        390,
-        253,
-        560,
-        220
-      ]
+      "crop": [390, 267, 560, 220]
     },
     {
       "out": "docs/user-guide/images/app-sketch-rounded.png",
@@ -1403,12 +1349,7 @@
           "sb.shell.show.sb.sketcher.panel"
         ]
       },
-      "crop": [
-        570,
-        263,
-        390,
-        200
-      ]
+      "crop": [570, 277, 390, 200]
     },
     {
       "out": "docs/user-guide/images/app-sketch-spline.png",
@@ -1426,12 +1367,7 @@
           "sb.shell.show.sb.sketcher.panel"
         ]
       },
-      "crop": [
-        580,
-        203,
-        370,
-        250
-      ]
+      "crop": [580, 217, 370, 250]
     },
     {
       "out": "docs/user-guide/images/fillet-block.png",
@@ -1965,12 +1901,7 @@
           "sb.viewer.fit"
         ]
       },
-      "crop": [
-        900,
-        198,
-        380,
-        330
-      ]
+      "crop": [900, 226, 380, 330]
     },
     {
       "out": "docs/user-guide/images/app-timeline.png",

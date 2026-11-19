@@ -23,6 +23,8 @@
 #include <QPalette>
 #include <QPixmap>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSettings>
 #include <QShortcut>
 #include <QSpinBox>
@@ -2413,6 +2415,11 @@ TEST_CASE("several designs are open at once, each in its own tab", "[app][design
     auto* tabs = designTabs(app);
     REQUIRE(tabs);
     CHECK(tabTexts(tabs) == QStringList{QStringLiteral("Untitled")});
+    // Under the toolbar's panels, just above the view.
+    auto* panels = app.shell->findChild<QWidget*>(QStringLiteral("sb.ribbon.pages"));
+    REQUIRE(panels);
+    CHECK(tabs->mapTo(app.shell.get(), QPoint(0, 0)).y() >=
+          panels->mapTo(app.shell.get(), QPoint(0, panels->height())).y());
 
     app.click("sb.modeling.box");
     const DocId first = app.shell->activeDesign();
@@ -2573,6 +2580,25 @@ TEST_CASE("closing and quitting ask about each design with unsaved changes", "[a
     app.menu("sb.shell.close")->trigger();
     settle();
     CHECK(tabs->count() == 1);
+}
+
+TEST_CASE("in a short window, Properties scrolls instead of squeezing its rows together", "[app]") {
+    App app;
+    app.shell->resize(1280, 520);
+    app.click("sb.modeling.cylinder");  // picked: Properties shows its numbers, material and volume
+    settle();
+    auto* info = app.field<QLabel>("materialinfo");
+    auto* volume = app.field<QLabel>("volume");
+    REQUIRE(info);
+    REQUIRE(volume);
+    REQUIRE(info->isVisible());
+    // The material's description ends above the Volume row: nothing drawn on top of anything.
+    const int infoBottom = info->mapTo(app.properties(), QPoint(0, info->height())).y();
+    const int volumeTop = volume->mapTo(app.properties(), QPoint(0, 0)).y();
+    CHECK(infoBottom <= volumeTop);
+    auto* scroll = qobject_cast<QScrollArea*>(app.properties());  // the panel is the scroll area
+    REQUIRE(scroll);
+    CHECK(scroll->verticalScrollBar()->maximum() > 0);  // the rest is there to scroll to
 }
 
 TEST_CASE("opening a file that isn't a design explains why", "[app]") {

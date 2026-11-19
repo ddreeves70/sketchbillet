@@ -15,6 +15,8 @@
 #include <QLineEdit>
 #include <QPointer>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
@@ -1713,6 +1715,35 @@ private:
     std::vector<plugin::Subscription> subs_;
 };
 
+// Holds the panel and scrolls it when there isn't room for all its rows (a short
+// window), instead of squeezing them on top of each other. It asks for as much
+// height as the rows need, so a panel floating over the view still grows to fit.
+class Scroller final : public QScrollArea {
+public:
+    explicit Scroller(QWidget* inside) {
+        setObjectName(QStringLiteral("sb.properties.scroll"));
+        setFrameShape(QFrame::NoFrame);
+        setWidgetResizable(true);
+        setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        setWidget(inside);
+        // The panel's own background, not the scroll area's.
+        viewport()->setAutoFillBackground(false);
+        inside->setAutoFillBackground(false);
+    }
+    QSize sizeHint() const override { return widget() ? widget()->sizeHint() : QScrollArea::sizeHint(); }
+    QSize minimumSizeHint() const override {
+        // As wide as the panel must be; as short as one row, since it scrolls.
+        const QSize inside = widget() ? widget()->minimumSizeHint() : QSize();
+        return {std::max(inside.width(), widget() ? widget()->minimumWidth() : 0) +
+                    verticalScrollBar()->sizeHint().width(),
+                fontMetrics().height() * 3};
+    }
+    bool hasHeightForWidth() const override { return widget() && widget()->hasHeightForWidth(); }
+    int heightForWidth(int width) const override {
+        return widget() ? widget()->heightForWidth(width) : QScrollArea::heightForWidth(width);
+    }
+};
+
 void registerProperties(plugin::PluginContext& ctx) {
     auto* ui = ctx.service<ui::UiRegistry>();
     if (!ui) {
@@ -1725,7 +1756,7 @@ void registerProperties(plugin::PluginContext& ctx) {
                        [&ctx, ui, panel] {
                            auto* p = new Properties(ctx, *ui);
                            *panel = p;
-                           return p;
+                           return new Scroller(p);
                        }};
     spec.floatsOverView = true;  // at the view's top right
     ui->addPanel(std::move(spec));

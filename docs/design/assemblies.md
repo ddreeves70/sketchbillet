@@ -399,8 +399,8 @@ Each line is one pull request, in this order:
 
 1. **Several designs open at once** in the desktop app (tabs), needed to open a
    linked part beside its assembly. Useful on its own: a part and its drawing,
-   two parts to copy between. **Built** (Nov 19, 2026): a tab for each design in
-   the top row, File > Close, Ctrl+Tab, and a camera kept for each design (see
+   two parts to copy between. **Built** (Nov 19, 2026): a tab for each design
+   under the toolbar, File > Close, Ctrl+Tab, and a camera kept for each design (see
    [the user's guide](../user-guide/desktop-app.md#several-designs-at-once)).
 2. **Assembly documents** with inside parts and free or grounded components:
    `sb_model`, `sb_io` (schema 2), `assembly.new`, `component.new`,

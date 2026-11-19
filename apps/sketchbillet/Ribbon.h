@@ -21,9 +21,10 @@ class QToolButton;
 namespace sb::app {
 
 // The toolbar at the top of the window: a row with File, New, Open, Save, Undo
-// and Redo, a tab for each open design, search and a Help button, then tabs (Model, Sketch, Inspect, View),
+// and Redo, search and a Help button, then tabs (Model, Sketch, Inspect, View),
 // each with panels of buttons. Every panel has its name underneath, with a dropdown of everything in it
 // (Create ▾), like Fusion's toolbar. A tab can have one main button at its right end (Finish sketch).
+// Under the panels, a tab for each open design.
 //
 // Students can pin any tool in a panel's dropdown to the panel as a button, or
 // unpin a button, by right-clicking it; pins are kept as keys like
@@ -43,8 +44,8 @@ public:
     QMenu* helpMenu() const { return helpMenu_; }
     // Adds a small button to the top row, after File (New, Open, Save, Undo, Redo).
     void addQuick(QAction* action);
-    // The open designs, one tab each, in the top row after the quick buttons
-    // ("sb.ribbon.designs"). The shell fills it; each tab's data is the design's id.
+    // The open designs, one tab each, in a row under the panels, just above the
+    // view ("sb.ribbon.designs"). The shell fills it; each tab's data is the design's id.
     QTabBar* designTabs() const { return designs_; }
 
     // Search tools: the box in the top row (and S, from anywhere in the window)
