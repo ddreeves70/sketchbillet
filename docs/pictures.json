@@ -721,7 +721,7 @@
           "Hole"
         ]
       },
-      "crop": [900, 226, 380, 400]
+      "crop": [820, 226, 460, 400]
     },
     {
       "out": "docs/user-guide/images/app-combine.png",
@@ -791,7 +791,7 @@
           "sb.viewoptions.show"
         ]
       },
-      "crop": [900, 226, 380, 450]
+      "crop": [820, 226, 460, 450]
     },
     {
       "out": "docs/user-guide/images/app-pane-options.png",
@@ -912,7 +912,7 @@
           "Tag"
         ]
       },
-      "crop": [900, 226, 380, 380]
+      "crop": [820, 226, 460, 380]
     },
     {
       "out": "docs/user-guide/images/app-folders.png",
@@ -1313,7 +1313,7 @@
           "PenHole"
         ]
       },
-      "crop": [900, 226, 380, 400]
+      "crop": [820, 226, 460, 400]
     },
     {
       "out": "docs/user-guide/images/app-sketch-smooth.png",
@@ -1901,7 +1901,7 @@
           "sb.viewer.fit"
         ]
       },
-      "crop": [900, 226, 380, 330]
+      "crop": [820, 226, 460, 330]
     },
     {
       "out": "docs/user-guide/images/app-timeline.png",

@@ -89,8 +89,16 @@ For a filament or stock that isn't in the list, add your own:
   color, and fill in the other numbers if you know them.
 - **With `sketchbillet_cli`:** run [`material.define`](../cli/commands.md#materialdefine).
 
+To change one of your materials later, pick a body made of it and click **Edit...**
+next to the Material list. The window shows the material's numbers and color as
+they are: change any of them and click OK. Every body made of that material
+changes, and Undo puts it back. A material keeps its name; for another name, make a
+new one. SketchBillet's own materials, like PLA, can't be changed, so **Edit...** is
+greyed out for them: pick **New material...** instead.
+
 Your materials are saved in the design, so they travel with the file. Defining a
-material with the same name again changes it everywhere it's used.
+material with the same name again (with `material.define`) changes it everywhere
+it's used.
 [`material.delete`](../cli/commands.md#materialdelete) removes one no step uses.
 
 ## Tips

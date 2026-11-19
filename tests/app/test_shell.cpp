@@ -8,8 +8,10 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
+#include <QColorDialog>
 #include <QComboBox>
 #include <QCompleter>
+#include <QDialog>
 #include <QDoubleSpinBox>
 #include <QFile>
 #include <QGuiApplication>
@@ -32,6 +34,7 @@
 #include <QTabBar>
 #include <QTableWidget>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
 #include <QTreeWidget>
@@ -2599,6 +2602,105 @@ TEST_CASE("in a short window, Properties scrolls instead of squeezing its rows t
     auto* scroll = qobject_cast<QScrollArea*>(app.properties());  // the panel is the scroll area
     REQUIRE(scroll);
     CHECK(scroll->verticalScrollBar()->maximum() > 0);  // the rest is there to scroll to
+}
+
+namespace {
+
+// Does `fill` to the next window of this kind that opens (a QDialog named
+// `name`, or a QColorDialog when `name` is empty) once it's open, as a student
+// would; the test then does what opens it.
+template <typename F>
+void whenOpen(const QString& name, F fill) {
+    auto* timer = new QTimer;
+    QObject::connect(timer, &QTimer::timeout, [timer, name, fill] {
+        auto* open = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        const bool match = open && (name.isEmpty() ? qobject_cast<QColorDialog*>(open) != nullptr
+                                                   : open->objectName() == name);
+        if (!match) return;
+        timer->stop();
+        timer->deleteLater();
+        fill(open);
+    });
+    timer->start(10);
+}
+
+// Picks `color` in the next color window, and clicks OK.
+void pickColor(QColor color) {
+    whenOpen(QString(), [color](QDialog* d) {
+        auto* picker = qobject_cast<QColorDialog*>(d);
+        picker->setCurrentColor(color);
+        picker->accept();
+    });
+}
+
+const QString kMaterialWindow = QStringLiteral("sb.properties.materialdialog");
+
+}  // namespace
+
+TEST_CASE("make a material with its own color, then change it with Edit", "[app][materials]") {
+    App app;
+    app.click("sb.modeling.cylinder");  // picked: Properties shows its material
+    auto* material = app.field<QComboBox>("material");
+    auto* edit = app.field<QPushButton>("editmaterial");
+    REQUIRE(material);
+    REQUIRE(edit);
+    // PLA is one of SketchBillet's own materials: it can't be changed, and the tip says what to do.
+    CHECK_FALSE(edit->isEnabled());
+    CHECK(edit->toolTip().contains(QStringLiteral("New material")));
+    const FeatureId cylinder = app.doc().featureAt(0).id();
+
+    // New material...: a name, a density and a color.
+    whenOpen(kMaterialWindow, [](QDialog* d) {
+        CHECK(d->windowTitle() == QStringLiteral("New material"));
+        d->findChild<QLineEdit*>(QStringLiteral("name"))->setText(QStringLiteral("Blue PETG"));
+        d->findChild<QDoubleSpinBox*>(QStringLiteral("density"))->setValue(1.27);
+        pickColor(QColor(20, 60, 230));
+        d->findChild<QPushButton*>(QStringLiteral("color"))->click();  // returns once a color is picked
+        d->accept();
+    });
+    emit material->activated(material->findData(QString::fromLatin1("\x01new")));
+    settle();
+    const auto& made = app.doc().materialOf(cylinder);
+    CHECK(made.name == "Blue PETG");
+    CHECK(made.density == Catch::Approx(1.27));
+    CHECK(made.color == model::Color{20, 60, 230});
+
+    // Edit...: the window shows the material as it is; change its color and price.
+    material = app.field<QComboBox>("material");
+    edit = app.field<QPushButton>("editmaterial");
+    REQUIRE(edit->isEnabled());
+    whenOpen(kMaterialWindow, [](QDialog* d) {
+        CHECK(d->windowTitle() == QStringLiteral("Edit Blue PETG"));
+        auto* name = d->findChild<QLineEdit*>(QStringLiteral("name"));
+        CHECK(name->text() == QStringLiteral("Blue PETG"));
+        CHECK(name->isReadOnly());  // a material keeps its name
+        CHECK(d->findChild<QDoubleSpinBox*>(QStringLiteral("density"))->value() == Catch::Approx(1.27));
+        d->findChild<QDoubleSpinBox*>(QStringLiteral("price"))->setValue(25);
+        pickColor(QColor(230, 40, 30));
+        d->findChild<QPushButton*>(QStringLiteral("color"))->click();
+        d->accept();
+    });
+    edit->click();
+    settle();
+    REQUIRE(app.doc().customMaterials().size() == 1);  // changed, not added
+    const auto& changed = app.doc().materialOf(cylinder);
+    CHECK(changed.name == "Blue PETG");
+    CHECK(changed.color == model::Color{230, 40, 30});
+    CHECK(changed.costPerKg == Catch::Approx(25));
+    CHECK(changed.density == Catch::Approx(1.27));
+    CHECK(app.doc().undoLabel() == "Change material Blue PETG");
+
+    // Cancel changes nothing; Undo puts the old color back.
+    whenOpen(kMaterialWindow, [](QDialog* d) {
+        d->findChild<QDoubleSpinBox*>(QStringLiteral("density"))->setValue(9);
+        d->reject();
+    });
+    app.field<QPushButton>("editmaterial")->click();
+    settle();
+    CHECK(app.doc().materialOf(cylinder).density == Catch::Approx(1.27));
+    app.shell->undoAction()->trigger();
+    settle();
+    CHECK(app.doc().materialOf(cylinder).color == model::Color{20, 60, 230});
 }
 
 TEST_CASE("opening a file that isn't a design explains why", "[app]") {
