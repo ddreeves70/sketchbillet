@@ -12,7 +12,11 @@
 #include "sb/view/Choices.h"
 #include "sb/view/Scene.h"
 
+class QLineEdit;
+
 namespace sb::view {
+
+class InputBoxes;
 
 /// Draws the overlays (such as the grid) seen from above, with a text card in the top-left corner.
 ///
@@ -65,6 +69,25 @@ public:
     /// @return The choices last given to setChoices().
     const std::vector<ViewChoice>& choices() const { return choices_; }
 
+    /// Shows boxes to type numbers in, at points of the design, in place of the
+    /// ones shown, like a rectangle's width and height while it's drawn. Typing
+    /// sends inputTyped(), Enter inputEntered() and Escape inputsCancelled(); Tab
+    /// and Shift+Tab go from box to box. A box keeps what the student typed in it
+    /// until it's taken away; the others show the text given each time.
+    /// @param inputs The boxes, in Tab order; empty to show none.
+    /// @param focus A box to give the keyboard to, its words picked so typing
+    ///        replaces them; empty to leave the keyboard where it is.
+    void setInputs(const std::vector<ViewInput>& inputs, const std::string& focus = {});
+
+    /// Gives the boxes shown to type in.
+    /// @return The inputs last given to setInputs().
+    const std::vector<ViewInput>& inputs() const;
+
+    /// Finds one of the boxes, for tests that type in it.
+    /// @param id The box's id.
+    /// @return The box, or nullptr if it isn't shown.
+    QLineEdit* input(const std::string& id) const;
+
     /// Gives the screen position of a point, for tests that click on it.
     /// @param point A point in mm (z is ignored: the view is seen from above).
     /// @return Where it is drawn, in widget coordinates.
@@ -100,6 +123,18 @@ signals:
     /// The student pressed Escape while squares to choose were shown.
     void choicesCancelled();
 
+    /// The student typed in one of the boxes (see setInputs()).
+    /// @param id The box's id.
+    /// @param text What the box says now.
+    void inputTyped(const std::string& id, const QString& text);
+
+    /// The student pressed Enter in one of the boxes.
+    /// @param id The box's id.
+    void inputEntered(const std::string& id);
+
+    /// The student pressed Escape in one of the boxes.
+    void inputsCancelled();
+
 protected:
     /// Draws the overlays and the card.
     /// @param event Which part to draw (it draws everything).
@@ -134,6 +169,7 @@ private:
     std::vector<ViewChoice> choices_;
     std::optional<std::size_t> hoveredChoice_;
     std::optional<std::size_t> pressedChoice_;
+    InputBoxes* inputs_ = nullptr;  // boxes to type numbers in (setInputs())
 };
 
 }  // namespace sb::view

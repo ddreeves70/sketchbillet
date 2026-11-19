@@ -6,7 +6,10 @@ sb_add_library(sb_view
     FlatView.cpp
     Graphics.cpp
     Choices.cpp
+    Dimensions.cpp
     Handles.cpp
+    InputBoxes.cpp
+    InputBoxes.h
     Layout.cpp
     OcctGl.cpp
     OcctGl.h

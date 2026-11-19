@@ -157,14 +157,39 @@ public:
     virtual void cancelled() = 0;
 };
 
+/// A box to type a number in, shown in the viewer at a point of the design, like
+/// a rectangle's width while it's drawn (see IViewer::askNumbers()).
+struct NumberBox {
+    std::string id{};    ///< Says which box.
+    kernel::Vec3 at{};   ///< Where its middle goes, in mm.
+    std::string text{};  ///< What it shows, until the student types in it, like "40.00 mm".
+};
+
+/// Whoever asked for number boxes. The viewer calls it as the student types.
+class INumberUser {
+public:
+    /// Destroys it.
+    virtual ~INumberUser() = default;
+    /// The student typed in a box: called on every change.
+    /// @param id The box's id.
+    /// @param text What the box says now.
+    virtual void typed(const std::string& id, const std::string& text) = 0;
+    /// The student pressed Enter in a box. The boxes stay until clearNumbers().
+    /// @param id The box's id.
+    virtual void entered(const std::string& id) = 0;
+    /// The student pressed Escape in a box.
+    virtual void cancelled() = 0;
+};
+
 /// The viewers, as other plugins see them.
 class IViewer {
 public:
     /// The service's name and version.
     /// Version 2 added dragged(), dropped() and ToolPoint::add. Version 3 added
     /// handles (setHandles(), clearHandles()). Version 4 added choices
-    /// (offerChoices(), clearChoices()).
-    static constexpr const char* kServiceName = "sb.viewer/4";
+    /// (offerChoices(), clearChoices()). Version 5 added boxes to type numbers in
+    /// (askNumbers(), clearNumbers()).
+    static constexpr const char* kServiceName = "sb.viewer/5";
 
     /// Destroys the service.
     virtual ~IViewer() = default;
@@ -222,6 +247,30 @@ public:
     /// Gives who offered the choices.
     /// @return It, or nullptr if none are shown.
     virtual IChoiceUser* choiceUser() const = 0;
+
+    /// Shows boxes to type numbers in, in the active pane of every viewer, in
+    /// place of the ones shown (yours or another plugin's). Tab and Shift+Tab go
+    /// from box to box. A box keeps what the student typed in it until it's taken
+    /// away; give the boxes again (with new text) as what they measure changes.
+    /// @param user Told what's typed. It must stay alive until clearNumbers() or
+    ///        another askNumbers().
+    /// @param boxes The boxes, in Tab order; empty to show none.
+    /// @param focus A box to give the keyboard to, its words picked so typing
+    ///        replaces them; empty to leave the keyboard where it is.
+    virtual void askNumbers(INumberUser& user, std::vector<NumberBox> boxes,
+                            const std::string& focus = {}) = 0;
+
+    /// Takes away a user's number boxes, if they're the ones shown.
+    /// @param user The user.
+    virtual void clearNumbers(const INumberUser& user) = 0;
+
+    /// Gives the number boxes shown.
+    /// @return The boxes last given to askNumbers(), or none.
+    virtual std::vector<NumberBox> numberBoxes() const = 0;
+
+    /// Gives who asked for the number boxes.
+    /// @return It, or nullptr if none are shown.
+    virtual INumberUser* numberUser() const = 0;
 };
 
 }  // namespace sb::viewer

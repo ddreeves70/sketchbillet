@@ -1215,6 +1215,18 @@ std::vector<std::string> labelTexts(App& app, const char* name) {
     return o ? o->texts : std::vector<std::string>{};
 }
 
+// The edited sketch's dimensions (drawn as on a drawing): their numbers, in
+// order; with `red`, only the ones that can't all be true.
+std::vector<std::string> dimensionTexts(App& app, bool red = false) {
+    std::vector<std::string> out;
+    for (const auto& o : app.host.overlays().all()) {
+        if (o.id.rfind("sb.sketcher.edit.dimension.", 0) != 0 || o.texts.empty()) continue;
+        if (red && !(o.color == plugin::OverlayColor{207, 34, 46})) continue;
+        out.push_back(o.texts[0]);
+    }
+    return out;
+}
+
 QDoubleSpinBox* numberBox(App& app, const char* constraint) {
     auto* panel = app.shell->panelWidget(QStringLiteral("sb.sketcher.panel"));
     return panel ? panel->findChild<QDoubleSpinBox*>(QString::fromLatin1(constraint)) : nullptr;
@@ -1280,7 +1292,7 @@ TEST_CASE("Dimension: the number is ready to type in the Sketch panel, and typin
     const auto* length = d.sketch().findConstraint("Length1");
     REQUIRE(length);
     CHECK(length->value == Approx(60));  // today's size: nothing moved
-    CHECK(labelTexts(d.app, "edit.labels") == std::vector<std::string>{"60 mm"});
+    CHECK(dimensionTexts(d.app) == std::vector<std::string>{"60 mm"});
     auto* box = numberBox(d.app, "Length1");
     REQUIRE(box);
     CHECK(box->value() == Approx(60));
@@ -1288,7 +1300,7 @@ TEST_CASE("Dimension: the number is ready to type in the Sketch panel, and typin
     typeNumber(box, 45);
     CHECK(d.sketch().findConstraint("Length1")->value == Approx(45));
     CHECK(d.app.doc().undoLabel() == "Change Length1");
-    CHECK(labelTexts(d.app, "edit.labels") == std::vector<std::string>{"45 mm"});
+    CHECK(dimensionTexts(d.app) == std::vector<std::string>{"45 mm"});
     // The solved line really is 45 mm now.
     const auto* r = d.app.host.documents()
                         .lastRebuild(d.app.shell->activeDesign())
@@ -1352,6 +1364,71 @@ TEST_CASE("a dimension's box in the Sketch panel takes a formula, and shows it h
     CHECK(d.sketch().findConstraint("Length1")->value == Approx(30));
 }
 
+TEST_CASE("click a dimension in the drawing, type a new size and press Enter",
+          "[app][sketcher][dimensions]") {
+    Drawn d;
+    clickAt(d.flat, {30, 0, 0});
+    d.app.click("sb.sketcher.dimension");  // Length1 = 60
+    clickAt(d.flat, {200, 200, 0});        // let go of it
+    // Drawn as on a drawing: from the line's ends, its line off to one side.
+    const auto* dim = d.app.host.overlays().find("sb.sketcher.edit.dimension.1");
+    REQUIRE(dim);
+    CHECK(dim->shape == plugin::OverlayShape::Dimension);
+    CHECK(dim->texts == std::vector<std::string>{"60 mm"});
+    REQUIRE(dim->points.size() == 3);
+    CHECK(dim->points[2].y < 0);  // below the rectangle, outside it
+    CHECK_FALSE(d.flat->input("dimension"));
+
+    // Click its number: a box there, with the size in it, ready to type over.
+    clickAt(d.flat, dim->points[2]);
+    auto* box = d.flat->input("dimension");
+    REQUIRE(box);
+    CHECK(box->text() == QStringLiteral("60 mm"));
+    CHECK(box->hasFocus());
+    CHECK(box->selectedText() == box->text());
+    box->setText(QStringLiteral("45"));  // a plain number: mm, the design's unit
+    emit box->textEdited(box->text());
+    emit box->returnPressed();
+    settle();
+    CHECK(d.sketch().findConstraint("Length1")->value == Approx(45));
+    CHECK(d.app.doc().undoLabel() == "Change Length1");
+    CHECK_FALSE(d.flat->input("dimension"));  // the box goes
+    CHECK(dimensionTexts(d.app) == std::vector<std::string>{"45 mm"});
+
+    // Another unit, or a formula, works too.
+    clickAt(d.flat, d.app.host.overlays().find("sb.sketcher.edit.dimension.1")->points[2]);
+    box = d.flat->input("dimension");
+    REQUIRE(box);
+    box->setText(QStringLiteral("2 in"));
+    emit box->textEdited(box->text());
+    emit box->returnPressed();
+    settle();
+    CHECK(d.sketch().findConstraint("Length1")->value == Approx(50.8));
+
+    // Escape leaves it as it is.
+    clickAt(d.flat, d.app.host.overlays().find("sb.sketcher.edit.dimension.1")->points[2]);
+    box = d.flat->input("dimension");
+    REQUIRE(box);
+    box->setText(QStringLiteral("10"));
+    emit box->textEdited(box->text());
+    QKeyEvent esc(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    QApplication::sendEvent(box, &esc);
+    settle();
+    CHECK_FALSE(d.flat->input("dimension"));
+    CHECK(d.sketch().findConstraint("Length1")->value == Approx(50.8));
+
+    // Something it can't be says why, and changes nothing.
+    clickAt(d.flat, d.app.host.overlays().find("sb.sketcher.edit.dimension.1")->points[2]);
+    box = d.flat->input("dimension");
+    REQUIRE(box);
+    box->setText(QStringLiteral("-5"));
+    emit box->textEdited(box->text());
+    emit box->returnPressed();
+    settle();
+    CHECK(d.sketch().findConstraint("Length1")->value == Approx(50.8));
+    CHECK_FALSE(d.app.shell->lastProblems().empty());
+}
+
 TEST_CASE("constraints that can't all be true are red, and SketchBillet says which",
           "[app][sketcher][constrain]") {
     Drawn d;
@@ -1361,9 +1438,9 @@ TEST_CASE("constraints that can't all be true are red, and SketchBillet says whi
     d.app.click("sb.sketcher.dimension");  // Length1 = 60
     clickAt(d.flat, {30, 0, 0});
     d.app.click("sb.sketcher.horizontal_dimension");  // Width1 = 60, same thing for a horizontal line
-    CHECK(labelTexts(d.app, "edit.labels_conflict").empty());
+    CHECK(dimensionTexts(d.app, true).empty());
     typeNumber(numberBox(d.app, "HorizontalDistance1"), 50);  // can't be 60 long and 50 wide
-    CHECK_FALSE(labelTexts(d.app, "edit.labels_conflict").empty());
+    CHECK_FALSE(dimensionTexts(d.app, true).empty());
     CHECK(d.overlayPoints("edit.conflict") > 0);  // the line is red too
     REQUIRE_FALSE(d.app.shell->lastProblems().empty());
     CHECK(d.app.shell->lastProblems()[0].message.find("can't all be true at once") != std::string::npos);
@@ -1372,7 +1449,7 @@ TEST_CASE("constraints that can't all be true are red, and SketchBillet says whi
     CHECK(status->text().contains(QStringLiteral("can't all be true")));
     d.app.shell->undoAction()->trigger();  // back to 60: fine again
     settle();
-    CHECK(labelTexts(d.app, "edit.labels_conflict").empty());
+    CHECK(dimensionTexts(d.app, true).empty());
 }
 
 TEST_CASE("a constraint's label can be picked and deleted, and the panel follows",
@@ -3431,14 +3508,14 @@ TEST_CASE("units: sketch dimensions are labeled and typed in the design's unit",
     settle();
     clickAt(d.flat, {30, 0, 0});
     d.app.click("sb.sketcher.dimension");
-    CHECK(labelTexts(d.app, "edit.labels") == std::vector<std::string>{"6 cm"});  // 60 mm
+    CHECK(dimensionTexts(d.app) == std::vector<std::string>{"6 cm"});  // 60 mm
     auto* box = numberBox(d.app, "Length1");
     REQUIRE(box);
     CHECK(box->value() == Approx(6));
     CHECK(box->suffix() == QStringLiteral(" cm"));
     typeNumber(box, 4.5);
     CHECK(d.sketch().findConstraint("Length1")->value == Approx(45));  // mm inside
-    CHECK(labelTexts(d.app, "edit.labels") == std::vector<std::string>{"4.5 cm"});
+    CHECK(dimensionTexts(d.app) == std::vector<std::string>{"4.5 cm"});
 }
 
 TEST_CASE("the grid starts on, with lines and no snapping", "[app][grid]") {

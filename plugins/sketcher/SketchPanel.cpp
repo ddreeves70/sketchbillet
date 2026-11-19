@@ -8,6 +8,7 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QLocale>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSpinBox>
@@ -438,6 +439,80 @@ bool SketchPanel::runSpline(const std::string& command, model::Args args) {
     if (auto* ui = ctx_.service<ui::UiRegistry>()) ui->showProblems(problems);
     refresh();  // put the box back as it was
     return false;
+}
+
+namespace {
+
+// Sets a dimension to a number: the design's unit, or degrees for an angle. False if nothing changed.
+bool setDimensionValue(plugin::PluginContext& ctx, const model::SketchFeature* step, const std::string& name,
+                       double value) {
+    if (!step) return false;
+    const auto* c = step->sketch().findConstraint(name);
+    if (!c) return false;
+    const bool angle = c->kind == sketch::ConstraintKind::Angle;
+    const auto* design = ctx.documents().find(ctx.documents().active());
+    const auto unit = design ? design->lengthUnit() : LengthUnit::Millimeter;
+    const double now = angle ? c->value / kDegrees : toUnit(c->value, unit);
+    if (std::abs(now - value) < 1e-9) return false;  // nothing changed
+    if (!angle) value = fromUnit(value, unit);
+    const auto problems =
+        ctx.documents().run(ctx.documents().active(), "sketch.set_value",
+                            {{"sketch", step->id()}, {"constraint", name}, {"value", value}});
+    if (!problems.empty()) {
+        if (auto* ui = ctx.service<ui::UiRegistry>()) ui->showProblems(problems);
+        return false;
+    }
+    return true;
+}
+
+}  // namespace
+
+bool typeDimension(plugin::PluginContext& ctx, const FeatureId& sketch, const std::string& name,
+                   const std::string& text) {
+    const auto* step = sketchStep(ctx, sketch);
+    const auto* design = ctx.documents().find(ctx.documents().active());
+    if (!step || !design) return false;
+    const auto* c = step->sketch().findConstraint(name);
+    if (!c) return false;
+    const QString typed = QString::fromStdString(text).trimmed();
+    bool plain = false;
+    const double number = QLocale::c().toDouble(typed, &plain);
+    if (plain) return setDimensionValue(ctx, step, name, number);
+    model::Args args{{"sketch", step->id()}, {"constraint", name}};
+    const std::string formula = typed.toStdString();
+    // A formula with no parameters in it, like "1 in", is just a number in another unit.
+    std::optional<double> value;
+    if (model::Expression::parse(formula).isConstant()) {
+        const auto r = model::evalDimension(c->kind, formula, design->parameters().evaluate(),
+                                            name + " in " + step->name());
+        // sketch.set_value takes mm, and degrees for an angle.
+        if (r.ok())
+            value = c->kind == sketch::ConstraintKind::Angle ? r.value->value / kDegrees : r.value->value;
+    }
+    if (value) {
+        if (std::abs(*value - (c->kind == sketch::ConstraintKind::Angle ? c->value / kDegrees : c->value)) <
+            1e-9)
+            return false;
+        args["value"] = *value;
+    } else {
+        args["formula"] = formula;
+    }
+    const auto problems = ctx.documents().run(ctx.documents().active(), "sketch.set_value", args);
+    if (!problems.empty()) {
+        if (auto* ui = ctx.service<ui::UiRegistry>()) ui->showProblems(problems);
+        return false;
+    }
+    return true;
+}
+
+std::string dimensionBoxText(plugin::PluginContext& ctx, const sketch::Constraint& c) {
+    if (c.kind == sketch::ConstraintKind::Angle) {
+        return QString::number(c.value / kDegrees, 'g', 10).toStdString() + " deg";
+    }
+    const auto* design = ctx.documents().find(ctx.documents().active());
+    const auto unit = design ? design->lengthUnit() : LengthUnit::Millimeter;
+    return QString::number(toUnit(std::abs(c.value), unit), 'g', 10).toStdString() + " " +
+           std::string(unitSymbol(unit));
 }
 
 void SketchPanel::setValue(const std::string& name, double value) {

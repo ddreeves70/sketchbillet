@@ -54,9 +54,11 @@
 #include <map>
 #include <type_traits>
 
+#include "InputBoxes.h"
 #include "OcctGl.h"
 #include "sb/kernel_occt/OcctShape.h"
 #include "sb/view/Choices.h"
+#include "sb/view/Dimensions.h"
 #include "sb/view/Graphics.h"
 
 namespace sb::view {
@@ -93,6 +95,11 @@ public:
             aspect->SetColor(color.GetRGB());
             aspect->SetFont(Font_NOF_SANS_SERIF);
             aspect->SetTextFontAspect(Font_FA_Bold);
+            if (o.boxed) {
+                // On a box of the background's color, so a dimension's line doesn't run through the words.
+                aspect->SetDisplayType(Aspect_TODT_SUBTITLE);
+                aspect->SetColorSubTitle(rgb(240, 243, 247));
+            }
             group->SetGroupPrimitivesAspect(aspect);
             const std::size_t n = std::min(o.points.size(), o.texts.size());
             for (std::size_t i = 0; i < n; ++i) {
@@ -307,8 +314,12 @@ struct ViewWidget::Impl {
     Ray dragStart;                              // the line of sight when it was pressed
     kernel::Vec3 dragBy{};                      // how far it has been dragged
     bool fitPending = true;
-    bool everShown = false;                 // has the view had a body to fit yet?
-    std::optional<CameraPlace> placeLater;  // a camera place given before the view was made
+    bool everShown = false;                  // has the view had a body to fit yet?
+    std::optional<CameraPlace> placeLater;   // a camera place given before the view was made
+    InputBoxes* inputs = nullptr;            // boxes to type numbers in (setInputs())
+    std::vector<ViewOverlay> givenOverlays;  // as given, with Dimension overlays not yet worked out
+    double dimensionScale = 0;               // mm per pixel the dimensions were last drawn at
+    ScreenAxes dimensionScreen;              // which way the screen faced when they were
     bool ready = false;
     bool clickAdds = false;  // the last click had Ctrl or Shift held
     DisplayStyle style = DisplayStyle::ShadedWithEdges;
@@ -398,6 +409,26 @@ struct ViewWidget::Impl {
         const auto pb = rayHitsPlane(b.from, b.direction, facing);
         if (!pa || !pb) return 0;
         return std::hypot(pb->x - pa->x, pb->y - pa->y, pb->z - pa->z);
+    }
+
+    // How many mm one (logical) pixel covers where the first dimension is; 0 if there's none.
+    double currentDimensionScale(double ratio) const {
+        if (!view || view->Window().IsNull()) return 0;
+        for (const auto& o : givenOverlays) {
+            if (o.shape == OverlayShape::Dimension && o.points.size() >= 3)
+                return pixelSizeAt(o.points[2]) * ratio;
+        }
+        return 0;
+    }
+
+    // Which way the screen's right and up point in the design now.
+    ScreenAxes screenAxes() const {
+        if (!view) return {};
+        const Handle(Graphic3d_Camera)& cam = view->Camera();
+        const gp_Dir up = cam->Up();
+        const gp_Dir look = cam->Direction();  // into the screen
+        const gp_Dir right = look.Crossed(up);
+        return {{right.X(), right.Y(), right.Z()}, {up.X(), up.Y(), up.Z()}};
     }
 
     // The handles with their lengths in mm, for drawing and picking now.
@@ -648,6 +679,21 @@ ViewWidget::ViewWidget(QWidget* parent) : QOpenGLWidget(parent), impl_(std::make
     setFocusPolicy(Qt::StrongFocus);
     setMinimumSize(120, 90);
     auto& d = *impl_;
+    // Boxes to type in sit where their points are drawn (in logical pixels).
+    d.inputs = new InputBoxes(this, [this](const kernel::Vec3& at) -> std::optional<QPointF> {
+        auto& i = *impl_;
+        if (!i.view || i.view->Window().IsNull()) return std::nullopt;
+        const auto s = i.projection()(at);
+        if (!s) return std::nullopt;
+        const double ratio = devicePixelRatioF();
+        return QPointF(s->x / ratio, s->y / ratio);
+    });
+    d.inputs->typed = [this](const std::string& id, const QString& text) { emit inputTyped(id, text); };
+    d.inputs->entered = [this](const std::string& id) {
+        const std::string copy = id;  // the boxes may change while it's handled
+        emit inputEntered(copy);
+    };
+    d.inputs->cancelled = [this] { emit inputsCancelled(); };
     d.problem = graphicsProblem();
     if (!d.problem.isEmpty()) return;
     try {
@@ -838,7 +884,13 @@ void ViewWidget::setOverlays(const std::vector<ViewOverlay>& overlays) {
         d.overlays.clear();
         int order = 0;
         const double ratio = devicePixelRatioF();
-        for (const auto& given : overlays) {
+        // Dimensions are drawn at today's zoom (their arrowheads are sized in
+        // pixels), and again when it changes (see paintGL()).
+        d.givenOverlays = overlays;
+        d.dimensionScale = d.currentDimensionScale(ratio);
+        d.dimensionScreen = d.screenAxes();
+        for (const auto& given : expandDimensions(overlays, d.dimensionScale, d.dimensionScreen)) {
+            if (given.shape == OverlayShape::Dimension) continue;
             if (given.onViewCube && given.shape == OverlayShape::Lattice) continue;
             ViewOverlay o = given;
             if (o.onViewCube) {
@@ -1019,6 +1071,18 @@ ViewDirection ViewWidget::camera() const {
     return {{-look.X(), -look.Y(), -look.Z()}, {up.X(), up.Y(), up.Z()}};
 }
 
+void ViewWidget::setInputs(const std::vector<ViewInput>& inputs, const std::string& focus) {
+    impl_->inputs->set(inputs, focus);
+}
+
+const std::vector<ViewInput>& ViewWidget::inputs() const {
+    return impl_->inputs->inputs();
+}
+
+QLineEdit* ViewWidget::input(const std::string& id) const {
+    return impl_->inputs->box(id);
+}
+
 CameraPlace ViewWidget::cameraPlace() const {
     const auto& d = *impl_;
     if (d.placeLater) return *d.placeLater;
@@ -1163,6 +1227,18 @@ void ViewWidget::paintGL() {
             d.placeLater.reset();
         }
         if (d.fitPending) d.fit();
+        // Dimensions keep their arrowheads the same size on the screen as the view
+        // zooms, and their numbers' room as it turns.
+        const double dimensionScale = d.currentDimensionScale(devicePixelRatioF());
+        if (dimensionScale > 0) {
+            const auto screen = d.screenAxes();
+            auto turned = [](const kernel::Vec3& a, const kernel::Vec3& b) {
+                return a.x * b.x + a.y * b.y + a.z * b.z < 0.9995;
+            };
+            if (std::abs(dimensionScale - d.dimensionScale) > 0.02 * dimensionScale ||
+                turned(screen.right, d.dimensionScreen.right) || turned(screen.up, d.dimensionScreen.up))
+                setOverlays(d.givenOverlays);
+        }
         // Handles sized in pixels stay that size when the view zooms.
         if (!d.handles.empty() && !d.drawing) {
             const double scale = d.currentHandleScale();
@@ -1179,6 +1255,7 @@ void ViewWidget::paintGL() {
         d.view->InvalidateImmediate();
         d.controller.FlushViewEvents(d.context, d.view, true);
         d.ready = true;
+        d.inputs->place();  // the boxes follow their points as the view turns, pans and zooms
     } catch (const Standard_Failure& e) {
         d.fail(*this, drawFailed(d.where(QStringLiteral("drawing: ") + failureText(e))));
     }

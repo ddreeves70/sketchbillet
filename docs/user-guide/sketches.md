@@ -269,14 +269,24 @@ use **Parallel**, **Perpendicular**, **Equal** and an angle **Dimension**.
   Properties, while you edit a sketch) opens with the cursor in its
   number: type the size you want and press **Enter**, and the sketch changes to
   match. You can change any dimension there later, the same way.
-- **Labels.** Every constraint has a label beside what it's on: **H**, **V**,
+- **Dimensions look like a drawing's.** A length, a width, a height or a
+  distance has thin lines out from what it measures, a line with an arrow at
+  each end, and its size in the middle. A radius or a diameter has an arrow
+  pointing at the circle, with **R** or **Ø** and its size. Each one sits outside
+  the shape, away from its middle.
+
+  ![A rectangle with its width and height dimensioned, as on a drawing](images/app-sketch-dimensions.png)
+- **Change a size in the drawing.** Click a dimension's number, and a box opens
+  right there with its size picked. Type the new size and press **Enter**; **Esc**
+  leaves it as it is. A plain number is in the design's unit (set in Document
+  settings), like `45`. You can type another unit, like `2 in`, or a formula
+  with [parameters](parameters.md), like `wall * 2`.
+- **Labels.** Other constraints have a label beside what they're on: **H**, **V**,
   **//** (parallel), **90°** (perpendicular), **=**, **T** (tangent), **S**
-  (smooth), **On**,
-  **Mid**, **Sym** (symmetric), **Fix**, and the numbers of the dimensions (**40 mm**, **Ø8 mm**,
-  **R4 mm**, **x 10 mm** for a width, **y 10 mm** for a height). Coincident
-  points just share a dot.
-- **Picking a constraint.** Click its label, or its row in the Sketch panel. It
-  turns orange, and **Delete** deletes it.
+  (smooth), **On**, **Mid**, **Sym** (symmetric), **Fix**, and an angle's size,
+  like **30°**. Coincident points just share a dot.
+- **Picking a constraint.** Click its label (or a dimension's number), or its row
+  in the Sketch panel. It turns orange, and **Delete** deletes it.
 - **Already there?** Adding a constraint the sketch already has does nothing, and
   says which one it is.
 

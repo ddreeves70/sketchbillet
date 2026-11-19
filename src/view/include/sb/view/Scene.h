@@ -65,6 +65,24 @@ enum class OverlayShape {
     Points,   ///< A dot at each of `points`.
     Lattice,  ///< Evenly spaced lines, or dots where they cross, on a plane.
     Labels,   ///< Words: `texts[i]` is written at `points[i]`, facing the screen.
+    /// A dimension, as on a drawing: `points` are where it measures from and to,
+    /// and a point its line passes through; `texts[0]` is its number. See
+    /// OverlayDimension and dimensionDrawing().
+    Dimension,
+};
+
+/// How a Dimension overlay is drawn, beyond its points.
+struct OverlayDimension {
+    /// The direction it measures along (a unit vector), like the sketch's x for
+    /// a horizontal distance; zero to measure straight from one point to the other.
+    kernel::Vec3 along{};
+    /// The plane it lies on, as its direction (a unit vector): the sketch's.
+    kernel::Vec3 normal{0, 0, 1};
+    bool arrowAtFrom = true;  ///< An arrowhead where it measures from.
+    bool arrowAtTo = true;    ///< An arrowhead where it measures to.
+    /// The number goes just past the `to` end (a leader, for a radius or
+    /// diameter) instead of in the middle of its line.
+    bool textAtEnd = false;
 };
 
 /// Something drawn over the design that isn't part of it, such as the grid. The
@@ -85,7 +103,19 @@ struct ViewOverlay {
     /// True to draw it on the view cube: `points` are in screen pixels from the
     /// cube's middle, turning with the view like the cube (see kViewCubeHalfSize).
     bool onViewCube = false;
-    bool overBodies = false;  ///< True to draw it over the design, never hidden behind a body.
+    bool overBodies = false;       ///< True to draw it over the design, never hidden behind a body.
+    OverlayDimension dimension{};  ///< Dimension: how it's drawn.
+    /// Labels: drawn on a box of the view's background color, so lines under the
+    /// words (a dimension's line) don't run through them.
+    bool boxed = false;
+};
+
+/// A box to type a number in, shown in the view at a point of the design, like
+/// a rectangle's width while it's drawn, or a dimension being changed.
+struct ViewInput {
+    std::string id{};    ///< Says which box, in the view's signals.
+    kernel::Vec3 at{};   ///< Where its middle goes, in mm.
+    std::string text{};  ///< What it shows, until the student types in it.
 };
 
 /// How far each side of the view cube is from its middle, in screen pixels.

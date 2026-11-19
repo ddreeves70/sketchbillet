@@ -129,7 +129,8 @@ catch_discover_tests(sb_tests DISCOVERY_MODE PRE_TEST)
 # The 3D view: its plain logic everywhere, and its drawing where there is
 # OpenGL. CI's Linux machine draws on a virtual screen (xvfb-run) with Mesa.
 if(TARGET sb_view)
-  add_executable(sb_view_tests view/test_layout.cpp view/test_handles.cpp view/test_choices.cpp)
+  add_executable(sb_view_tests view/test_layout.cpp view/test_handles.cpp view/test_choices.cpp
+                              view/test_dimensions.cpp)
   target_link_libraries(sb_view_tests PRIVATE Catch2::Catch2WithMain sb::view)
   sb_set_warnings(sb_view_tests)
   if(WIN32)

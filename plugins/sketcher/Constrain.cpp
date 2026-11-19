@@ -340,6 +340,162 @@ std::string labelText(const sketch::Constraint& c, LengthUnit unit) {
     return "";
 }
 
+std::optional<DimensionPlace> dimensionPlace(const sketch::Constraint& c, const sketch::Sketch& s, double gap,
+                                             Point2 middle) {
+    auto unit = [](Point2 v, Point2 fallback) {
+        const double n = std::hypot(v.x, v.y);
+        return n > 1e-12 ? Point2{v.x / n, v.y / n} : fallback;
+    };
+    const double out = 2 * gap;  // how far its line is from what it measures
+    // Square to a segment, on its outside, `out` from it.
+    auto aligned = [&](Point2 a, Point2 b) -> std::optional<DimensionPlace> {
+        if (std::hypot(b.x - a.x, b.y - a.y) < 1e-9) return std::nullopt;
+        const Point2 m = mid(a, b);
+        Point2 n = unit({-(b.y - a.y), b.x - a.x}, {0, 1});
+        if ((m.x - middle.x) * n.x + (m.y - middle.y) * n.y < 0) n = {-n.x, -n.y};
+        DimensionPlace d;
+        d.from = a;
+        d.to = b;
+        d.through = {m.x + n.x * out, m.y + n.y * out};
+        d.textAt = d.through;
+        return d;
+    };
+    auto twoPoints = [&]() -> std::optional<std::pair<Point2, Point2>> {
+        if (c.points.size() < 2) return std::nullopt;
+        const auto a = sketch::pointOf(s, c.points[0]), b = sketch::pointOf(s, c.points[1]);
+        if (!a || !b) return std::nullopt;
+        return std::pair{*a, *b};
+    };
+    // A leader from the edge of a circle or arc, outwards, away from the middle.
+    auto leader = [&](const EntityId& id) -> std::optional<DimensionPlace> {
+        const auto* e = s.find(id);
+        if (!e) return std::nullopt;
+        Point2 center, dir;
+        double r = 0;
+        if (const auto* ci = std::get_if<sketch::CircleShape>(&e->shape)) {
+            center = ci->center;
+            r = ci->radius;
+            // Up along a diagonal, to the side away from the middle: clear of
+            // lengths and distances (which run across and up) and of the corner
+            // labels below (Fix), as Fusion draws them.
+            const double h = std::sqrt(0.5);
+            dir = {center.x >= middle.x ? h : -h, h};
+        } else if (const auto* a = std::get_if<sketch::ArcShape>(&e->shape)) {
+            center = a->center;
+            r = a->radius;
+            const double t = (a->startAngle + a->endAngle) / 2;
+            dir = {std::cos(t), std::sin(t)};
+        } else {
+            return std::nullopt;
+        }
+        DimensionPlace d;
+        const double reach = 1.5 * out;  // a little longer than other dimensions are out, to clear the shape
+        d.from = {center.x + dir.x * r, center.y + dir.y * r};
+        d.to = {center.x + dir.x * (r + reach), center.y + dir.y * (r + reach)};
+        d.through = d.from;
+        d.arrowAtTo = false;
+        d.textAtEnd = true;
+        d.textAt = {center.x + dir.x * (r + reach + gap), center.y + dir.y * (r + reach + gap)};
+        return d;
+    };
+    switch (c.kind) {
+        case ConstraintKind::Length: {
+            const auto* l = c.entities.empty() ? nullptr : lineOf(s, c.entities[0]);
+            return l ? aligned(l->start, l->end) : std::nullopt;
+        }
+        case ConstraintKind::Distance: {
+            const auto ab = twoPoints();
+            return ab ? aligned(ab->first, ab->second) : std::nullopt;
+        }
+        case ConstraintKind::HorizontalDistance:
+        case ConstraintKind::VerticalDistance: {
+            const auto ab = twoPoints();
+            if (!ab) return std::nullopt;
+            const auto [a, b] = *ab;
+            const bool across = c.kind == ConstraintKind::HorizontalDistance;  // measured along x
+            DimensionPlace d;
+            d.from = a;
+            d.to = b;
+            d.along = across ? Point2{1, 0} : Point2{0, 1};
+            if (std::abs(across ? b.x - a.x : b.y - a.y) < 1e-9) return std::nullopt;
+            // Its line above or below the points (beside them, for a vertical one), outside.
+            if (across) {
+                const bool above = (a.y + b.y) / 2 >= middle.y;
+                d.through = {a.x, above ? std::max(a.y, b.y) + out : std::min(a.y, b.y) - out};
+                d.textAt = {(a.x + b.x) / 2, d.through.y};
+            } else {
+                const bool right = (a.x + b.x) / 2 >= middle.x;
+                d.through = {right ? std::max(a.x, b.x) + out : std::min(a.x, b.x) - out, a.y};
+                d.textAt = {d.through.x, (a.y + b.y) / 2};
+            }
+            return d;
+        }
+        case ConstraintKind::Radius:
+        case ConstraintKind::Diameter:
+            return c.entities.empty() ? std::nullopt : leader(c.entities[0]);
+        default:
+            return std::nullopt;
+    }
+}
+
+namespace {
+
+// A dimension's direction, and the direction square to it towards its line.
+std::pair<Point2, Point2> dimensionAxes(const DimensionPlace& d) {
+    Point2 u = d.along;
+    if (std::hypot(u.x, u.y) < 1e-12) u = {d.to.x - d.from.x, d.to.y - d.from.y};
+    const double n = std::hypot(u.x, u.y);
+    u = n > 1e-12 ? Point2{u.x / n, u.y / n} : Point2{1, 0};
+    Point2 side{-u.y, u.x};
+    const Point2 m = mid(d.from, d.to);
+    if ((d.through.x - m.x) * side.x + (d.through.y - m.y) * side.y < 0) side = {-side.x, -side.y};
+    return {u, side};
+}
+
+}  // namespace
+
+std::pair<Point2, Point2> dimensionLine(const DimensionPlace& d) {
+    const auto [u, side] = dimensionAxes(d);
+    auto onLine = [&](Point2 p) {
+        const double k = (d.through.x - p.x) * side.x + (d.through.y - p.y) * side.y;
+        return Point2{p.x + side.x * k, p.y + side.y * k};
+    };
+    return {onLine(d.from), onLine(d.to)};
+}
+
+void pushOut(DimensionPlace& d, double by) {
+    const auto side = dimensionAxes(d).second;
+    d.through = {d.through.x + side.x * by, d.through.y + side.y * by};
+    d.textAt = {d.textAt.x + side.x * by, d.textAt.y + side.y * by};
+}
+
+bool dimensionsClash(const DimensionPlace& a, const DimensionPlace& b, double near) {
+    if (a.textAtEnd || b.textAtEnd) return false;  // leaders go their own way
+    const auto [ua, sa] = dimensionAxes(a);
+    const auto [ub, sb] = dimensionAxes(b);
+    // Not side by side: more than about 10° apart.
+    if (std::abs(ua.x * ub.y - ua.y * ub.x) > 0.18) return false;
+    const auto [a0, a1] = dimensionLine(a);
+    const auto [b0, b1] = dimensionLine(b);
+    // How far apart the two lines are, and whether they overlap along their direction.
+    const double apart = std::abs((b0.x - a0.x) * sa.x + (b0.y - a0.y) * sa.y);
+    if (apart >= near) return false;
+    auto along = [&](Point2 p) { return p.x * ua.x + p.y * ua.y; };
+    const double aLo = std::min(along(a0), along(a1)), aHi = std::max(along(a0), along(a1));
+    const double bLo = std::min(along(b0), along(b1)), bHi = std::max(along(b0), along(b1));
+    return aLo < bHi + near && bLo < aHi + near;
+}
+
+std::string dimensionText(const sketch::Constraint& c, LengthUnit unit) {
+    switch (c.kind) {
+        case ConstraintKind::HorizontalDistance:
+        case ConstraintKind::VerticalDistance:
+            return lengthText(std::abs(c.value), unit);
+        default:
+            return labelText(c, unit);
+    }
+}
+
 std::optional<LabelPlace> labelPlace(const sketch::Constraint& c, const sketch::Sketch& s, double gap,
                                      Point2 middle) {
     auto unit = [](Point2 v, Point2 fallback) {

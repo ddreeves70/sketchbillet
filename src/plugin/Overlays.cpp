@@ -20,7 +20,10 @@ bool same(const Overlay& a, const Overlay& b) {
                       [](const auto& x, const auto& y) { return same(x, y); }) &&
            same(p.origin, q.origin) && same(p.xAxis, q.xAxis) && same(p.yAxis, q.yAxis) &&
            p.spacing == q.spacing && p.halfSize == q.halfSize && p.dots == q.dots &&
-           a.onViewCube == b.onViewCube && a.overBodies == b.overBodies;
+           a.onViewCube == b.onViewCube && a.overBodies == b.overBodies &&
+           same(a.dimension.along, b.dimension.along) && same(a.dimension.normal, b.dimension.normal) &&
+           a.dimension.arrowAtFrom == b.dimension.arrowAtFrom &&
+           a.dimension.arrowAtTo == b.dimension.arrowAtTo && a.dimension.textAtEnd == b.dimension.textAtEnd;
 }
 
 }  // namespace

@@ -1151,6 +1151,19 @@
       ]
     },
     {
+      "out": "docs/user-guide/images/app-sketch-dimensions.png",
+      "size": "1280x800",
+      "commands": [
+        "run --save rect.sb feature.add_sketch",
+        "run --open rect.sb --save rect.sb sketch.add_rectangle sketch=Sketch1 from=-35,-20 to=35,20",
+        "run --open rect.sb --save rect.sb sketch.constrain sketch=Sketch1 kind=fix on=Line1.start",
+        "run --open rect.sb --save rect.sb sketch.constrain sketch=Sketch1 kind=horizontal_distance on=Line1.start,Line1.end value=70",
+        "run --open rect.sb --save rect.sb sketch.constrain sketch=Sketch1 kind=vertical_distance on=Line2.start,Line2.end value=40"
+      ],
+      "app": {"open": "rect.sb", "select": ["Sketch1"], "trigger": ["sb.sketcher.edit"]},
+      "crop": [340, 176, 620, 506]
+    },
+    {
       "out": "docs/user-guide/images/app-sketch-free.png",
       "size": "1280x800",
       "script": "plate-free",

@@ -180,9 +180,35 @@ std::optional<double> edgeDistance(const sketch::Shape& shape, sketch::Point2 p)
 }
 
 // The sketcher: the drawing of sketches, and the mouse tool that edits one.
+// Hears what's typed in the viewer's number boxes, and passes it on.
+struct NumberUser final : viewer::INumberUser {
+    std::function<void(const std::string& id, const std::string& text)> onTyped;
+    std::function<void(const std::string& id)> onEntered;
+    std::function<void()> onCancelled;
+    void typed(const std::string& id, const std::string& text) override {
+        if (onTyped) onTyped(id, text);
+    }
+    void entered(const std::string& id) override {
+        if (onEntered) onEntered(id);
+    }
+    void cancelled() override {
+        if (onCancelled) onCancelled();
+    }
+};
+
 class Sketcher final : public viewer::IViewTool {
 public:
-    explicit Sketcher(plugin::PluginContext& ctx) : ctx_(ctx) {}
+    explicit Sketcher(plugin::PluginContext& ctx) : ctx_(ctx) {
+        // A dimension clicked in the view: its box. Enter changes it, Escape doesn't.
+        dimensionBox_.onTyped = [this](const std::string&, const std::string& text) {
+            dimensionText_ = text;
+        };
+        dimensionBox_.onEntered = [this](const std::string&) { changeDimension(); };
+        dimensionBox_.onCancelled = [this] { closeDimensionBox(); };
+    }
+
+    // The dimension being changed in a box in the view, if any.
+    std::optional<ConstraintId> changingDimension() const { return changing_; }
 
     // --- Editing ---------------------------------------------------------
 
@@ -209,6 +235,7 @@ public:
     }
 
     void finish() {
+        closeDimensionBox();
         if (auto* viewer = ctx_.service<viewer::IViewer>()) viewer->stopTool(*this);
         const bool was = editing();
         editing_ = {};
@@ -232,6 +259,7 @@ public:
                 "with Sketch > New sketch.");
             return;
         }
+        closeDimensionBox();
         tool_ = tool;
         pending_.clear();
         hoverItem_.reset();
@@ -469,6 +497,8 @@ public:
                 conflictLabels = labelsIn(kConflict), hoverLabels = labelsIn(kHover),
                 pickedLabels = labelsIn(kPicked);
         labels_.clear();
+        std::vector<Overlay> dimensions;               // one overlay each
+        std::vector<sketcher::DimensionPlace> placed;  // where they went, so the next ones don't land on them
         if (doc) {
             for (std::size_t i = 0; i < doc->featureCount(); ++i) {
                 const auto& f = doc->featureAt(i);
@@ -554,7 +584,54 @@ public:
                 };
                 const auto* design = ctx_.documents().find(ctx_.documents().active());
                 const auto unit = design ? design->lengthUnit() : LengthUnit::Millimeter;
+                const auto axes = axesOf(step);
                 for (const auto& c : whole.constraints) {
+                    const Item item{{}, std::nullopt, c.id};
+                    const bool conflict = last && listed(last->conflicting, c.id);
+                    // The color it's drawn in: picked, under the mouse, can't all be true, a repeat.
+                    const plugin::OverlayColor color = std::ranges::find(picked_, item) != picked_.end()
+                                                           ? kPicked
+                                                       : hoverItem_ == item && !drag_          ? kHover
+                                                       : conflict                              ? kConflict
+                                                       : last && listed(last->redundant, c.id) ? kRedundant
+                                                                                               : kLabel;
+                    // Lengths, distances, radii and diameters: drawn as on a drawing.
+                    if (auto dim = sketcher::dimensionPlace(c, whole, gap, middle)) {
+                        // One already there: further out, a step at a time.
+                        for (int tries = 0;
+                             tries < 8 &&
+                             std::ranges::any_of(
+                                 placed,
+                                 [&](const auto& p) { return sketcher::dimensionsClash(p, *dim, gap); });
+                             ++tries)
+                            sketcher::pushOut(*dim, 1.5 * gap);
+                        placed.push_back(*dim);
+                        Overlay d{.shape = OverlayShape::Dimension, .color = color, .size = 13};
+                        d.points = {model::toDesign(axes, dim->from), model::toDesign(axes, dim->to),
+                                    model::toDesign(axes, dim->through)};
+                        d.texts = {sketcher::dimensionText(c, unit)};
+                        const auto origin = model::toDesign(axes, {0, 0});
+                        const auto along = model::toDesign(axes, dim->along);
+                        d.dimension.along = {along.x - origin.x, along.y - origin.y, along.z - origin.z};
+                        d.dimension.normal = {axes.x.y * axes.y.z - axes.x.z * axes.y.y,
+                                              axes.x.z * axes.y.x - axes.x.x * axes.y.z,
+                                              axes.x.x * axes.y.y - axes.x.y * axes.y.x};  // x × y
+                        d.dimension.arrowAtFrom = dim->arrowAtFrom;
+                        d.dimension.arrowAtTo = dim->arrowAtTo;
+                        d.dimension.textAtEnd = dim->textAtEnd;
+                        dimensions.push_back(std::move(d));
+                        labels_.emplace_back(c.id, dim->textAt);
+                        if (conflict) {
+                            for (const auto& e : entities) {
+                                const bool on = std::ranges::find(c.entities, e.id) != c.entities.end() ||
+                                                std::ranges::any_of(c.points, [&](const auto& p) {
+                                                    return p.entity == e.id;
+                                                });
+                                if (on) lineInto(conflictLines, e);
+                            }
+                        }
+                        continue;
+                    }
                     const auto text = sketcher::labelText(c, unit);
                     const auto spot = sketcher::labelPlace(c, whole, gap, middle);
                     if (text.empty() || !spot) continue;
@@ -572,8 +649,6 @@ public:
                     }
                     used.emplace_back(place, half);
                     labels_.emplace_back(c.id, place);
-                    const Item item{{}, std::nullopt, c.id};
-                    const bool conflict = last && listed(last->conflicting, c.id);
                     Overlay& into = std::ranges::find(picked_, item) != picked_.end() ? pickedLabels
                                     : hoverItem_ == item && !drag_                    ? hoverLabels
                                     : conflict                                        ? conflictLabels
@@ -611,7 +686,14 @@ public:
                                                            {"edit.labels_hover", &hoverLabels},
                                                            {"edit.labels_picked", &pickedLabels}};
         for (const auto& [name, overlay] : layers) overlays.remove(name);
+        for (const auto& name : dimensionNames_) overlays.remove(name);
         for (const auto& [name, overlay] : layers) show(overlays, name, std::move(*overlay));
+        // Dimensions over the labels, each its own overlay.
+        dimensionNames_.clear();
+        for (std::size_t i = 0; i < dimensions.size(); ++i) {
+            dimensionNames_.push_back("edit.dimension." + std::to_string(i + 1));
+            overlays.set(dimensionNames_.back(), std::move(dimensions[i]));
+        }
         drawPreview();
     }
 
@@ -922,6 +1004,11 @@ public:
     // and lets go of picked parts that went away.
     void checkStillThere() {
         if (editing() && (ctx_.documents().active() != doc_ || !sketchStep(editing_))) finish();
+        // A dimension being changed that isn't there anymore (undone, deleted): its box goes.
+        if (changing_) {
+            const auto* step = sketchStep(editing_);
+            if (!step || !step->sketch().find(*changing_)) closeDimensionBox();
+        }
         // Constraints that can't all be true: say which, in plain words (they're red too).
         if (const auto* step = sketchStep(editing_)) {
             const auto* last = lastResult(*step);
@@ -1173,10 +1260,46 @@ private:
         } else {
             picked_ = {*item};
         }
+        // A click on a dimension's number opens a box there to type a new one.
+        closeDimensionBox();
+        if (item && !point.add && item->isConstraint()) openDimensionBox(item->constraint);
         draw();
         hint();
         refreshPanels();
         ctx_.publish(plugin::ActionsChanged{});  // Delete turns on or off
+    }
+
+    // Opens a box in the view, on a dimension's number, to type a new one.
+    void openDimensionBox(const ConstraintId& id) {
+        const auto* step = sketchStep(editing_);
+        auto* viewer = ctx_.service<viewer::IViewer>();
+        if (!step || !viewer) return;
+        const auto* c = step->sketch().find(id);
+        const auto spot = std::ranges::find_if(labels_, [&](const auto& l) { return l.first == id; });
+        if (!c || !sketch::isDimension(c->kind) || spot == labels_.end()) return;
+        changing_ = id;
+        dimensionText_ = sketcher::dimensionBoxText(ctx_, *c);
+        viewer->askNumbers(dimensionBox_,
+                           {{"dimension", model::toDesign(axesOf(*step), spot->second), dimensionText_}},
+                           "dimension");
+        message("Type a new size for " + c->name + " and press Enter. Esc leaves it as it is.");
+    }
+
+    // Changes the dimension to what was typed in its box, then closes the box.
+    void changeDimension() {
+        const auto id = changing_;
+        const auto text = dimensionText_;
+        closeDimensionBox();
+        const auto* step = sketchStep(editing_);
+        const auto* c = step && id ? step->sketch().find(*id) : nullptr;
+        if (!c) return;
+        sketcher::typeDimension(ctx_, editing_, c->name, text);
+    }
+
+    void closeDimensionBox() {
+        if (!changing_) return;
+        changing_.reset();
+        if (auto* viewer = ctx_.service<viewer::IViewer>()) viewer->clearNumbers(dimensionBox_);
     }
 
     // Where a mouse point lands: on a sketch point if it's close, else on the
@@ -1654,6 +1777,10 @@ private:
     std::vector<Item> picked_;                                     // what's picked (Select), in picking order
     std::optional<Drag> drag_;                                     // what's being dragged
     std::vector<std::pair<ConstraintId, sketch::Point2>> labels_;  // where the edited sketch's labels are
+    std::vector<std::string> dimensionNames_;                      // the dimension overlays drawn last time
+    NumberUser dimensionBox_;               // hears the box of a dimension being changed
+    std::optional<ConstraintId> changing_;  // the dimension being changed in that box
+    std::string dimensionText_;             // what its box says
     ConstraintId justAdded_{};
     std::vector<QPointer<sketcher::SketchPanel>> panels_;  // a new dimension, for the Sketch panel
     bool dragCancelled_ = false;                           // Escape during a drag: ignore its drop
