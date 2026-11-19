@@ -8,7 +8,7 @@ step's numbers in Properties. Everything you do can be undone.
 
 | # | Part | What it's for |
 | --- | --- | --- |
-| 1 | **Top row** | **File** (new, open, open a sample, save, close, import, export, check for printing, quit), then New, Open, Save, Undo and Redo, always there. Then a tab for each open design (see [Several designs at once](#several-designs-at-once)). **Search tools** and **Help** are at the right |
+| 1 | **Top row** | **File** (new, open, open a sample, save, close, import, export, check for printing, quit), then New, Open, Save, Undo and Redo, always there. **Search tools** and **Help** are at the right |
 | 2 | **Tabs** | **Model** (making the part), **Inspect** (measuring, parameters, checking for printing) and **View** (the grid, the axes, panels and layouts). While you edit a sketch, the **Sketch** tab takes the Model tab's place |
 | 3 | **Panels** | Each tab's tools, in panels, with each panel's name underneath: **Create**, **Modify**, **Combine** and so on. The most-used tools are buttons, each with a picture and its name. Click a panel's name for everything in it. See [The toolbar](#the-toolbar) |
 | 4 | **Feature tree** | Every step of the design, in the order SketchBillet builds them, with how each one built. It floats over the viewer, see-through, and starts with the design's **Document settings** |
@@ -17,6 +17,7 @@ step's numbers in Properties. Everything you do can be undone.
 | 7 | **Status bar** | Messages, and what went wrong when something does |
 | 8 | **Grid status** | The grid's spacing and style, and whether snapping is on |
 | 9 | **Timeline** | The steps in order, left to right, and the blue rollback marker. Drag the marker to go back in time, or drag a step to change the order. See [The timeline](#the-timeline) |
+| 10 | **Design tabs** | A tab for each open design, under the toolbar. Click one to show that design. See [Several designs at once](#several-designs-at-once) |
 
 ## The toolbar
 
@@ -491,11 +492,11 @@ and when you quit, it asks about each one.
 
 ## Several designs at once
 
-You can have several designs open at once, each in its own tab in the top row,
-like tabs in a web browser. That's handy for copying steps from one part to
+You can have several designs open at once, each in its own tab under the
+toolbar, just above the viewer, like tabs in a web browser. That's handy for copying steps from one part to
 another, or for keeping an old version open while you make a new one.
 
-![Two designs open, the tag and the desk organizer, each in its own tab at the top. The organizer's tab is picked, so it shows.](images/app-design-tabs.png)
+![Two designs open, the tag and the desk organizer, each in its own tab under the toolbar. The organizer's tab is picked, so it shows.](images/app-design-tabs.png)
 
 - **File > New**, **File > Open** and **File > Open Sample** each open a new
   tab. The empty Untitled design SketchBillet starts with is the exception: if
