@@ -26,11 +26,21 @@ std::string escape(const std::string& text) {
     out.reserve(text.size());
     for (char c : text) {
         switch (c) {
-            case '&': out += "&amp;"; break;
-            case '<': out += "&lt;"; break;
-            case '>': out += "&gt;"; break;
-            case '"': out += "&quot;"; break;
-            case '\'': out += "&apos;"; break;
+            case '&':
+                out += "&amp;";
+                break;
+            case '<':
+                out += "&lt;";
+                break;
+            case '>':
+                out += "&gt;";
+                break;
+            case '"':
+                out += "&quot;";
+                break;
+            case '\'':
+                out += "&apos;";
+                break;
             default:
                 // XML 1.0 can't hold most control characters at all.
                 if (static_cast<unsigned char>(c) >= 0x20 || c == '\t' || c == '\n' || c == '\r') out += c;
@@ -56,7 +66,8 @@ std::string hexColor(const model::Color& c) {
 constexpr const char* kContentTypes =
     "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
     "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">\n"
-    " <Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>\n"
+    " <Default Extension=\"rels\" "
+    "ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>\n"
     " <Default Extension=\"model\" ContentType=\"application/vnd.ms-package.3dmanufacturing-3dmodel+xml\"/>\n"
     "</Types>\n";
 
@@ -78,7 +89,8 @@ std::string model(const std::vector<MeshObject>& objects, const std::string& tit
     // id 1: the materials, one entry per part, in order.
     x += "  <basematerials id=\"1\">\n";
     for (const auto& o : objects)
-        x += "   <base name=\"" + escape(o.material.name) + "\" displaycolor=\"" + hexColor(o.material.color) + "\"/>\n";
+        x += "   <base name=\"" + escape(o.material.name) + "\" displaycolor=\"" +
+             hexColor(o.material.color) + "\"/>\n";
     x += "  </basematerials>\n";
     for (std::size_t i = 0; i < objects.size(); ++i) {
         const auto& o = objects[i];
@@ -97,13 +109,14 @@ std::string model(const std::vector<MeshObject>& objects, const std::string& tit
         }
         x += "    </vertices>\n    <triangles>\n";
         for (const auto& t : mesh.triangles) {
-            x += "     <triangle v1=\"" + std::to_string(t[0]) + "\" v2=\"" + std::to_string(t[1]) + "\" v3=\"" +
-                 std::to_string(t[2]) + "\"/>\n";
+            x += "     <triangle v1=\"" + std::to_string(t[0]) + "\" v2=\"" + std::to_string(t[1]) +
+                 "\" v3=\"" + std::to_string(t[2]) + "\"/>\n";
         }
         x += "    </triangles>\n   </mesh>\n  </object>\n";
     }
     x += " </resources>\n <build>\n";
-    for (std::size_t i = 0; i < objects.size(); ++i) x += "  <item objectid=\"" + std::to_string(i + 2) + "\"/>\n";
+    for (std::size_t i = 0; i < objects.size(); ++i)
+        x += "  <item objectid=\"" + std::to_string(i + 2) + "\"/>\n";
     x += " </build>\n</model>\n";
     return x;
 }
@@ -112,13 +125,17 @@ std::string model(const std::vector<MeshObject>& objects, const std::string& tit
 
 Diagnostics write3mfBytes(const std::vector<MeshObject>& objects, const std::string& title, Bytes& out) {
     if (objects.empty())
-        return {{"export.nothing", Severity::Error, "There's nothing to put in the 3MF file. Make a shape first.", {}}};
+        return {{"export.nothing",
+                 Severity::Error,
+                 "There's nothing to put in the 3MF file. Make a shape first.",
+                 {}}};
     zip::Entries entries;
     entries.emplace_back("[Content_Types].xml", kContentTypes);
     entries.emplace_back("_rels/.rels", kRels);
     entries.emplace_back("3D/3dmodel.model", model(objects, title));
-    return zip::pack(entries, out,
-                     {"export.3mf.failed", Severity::Error, "SketchBillet couldn't put the part into a 3MF file.", {}});
+    return zip::pack(
+        entries, out,
+        {"export.3mf.failed", Severity::Error, "SketchBillet couldn't put the part into a 3MF file.", {}});
 }
 
 Diagnostics write3mf(const std::vector<MeshObject>& objects, const std::string& title,
@@ -126,7 +143,8 @@ Diagnostics write3mf(const std::vector<MeshObject>& objects, const std::string& 
     Bytes bytes;
     if (auto issues = write3mfBytes(objects, title, bytes); !issues.empty()) return issues;
     return zip::writeAtomically(bytes, path,
-                                {"export.cant_write", Severity::Error,
+                                {"export.cant_write",
+                                 Severity::Error,
                                  "SketchBillet couldn't write " + path.filename().string() +
                                      ". Check that the folder exists, that you're allowed to save there, and "
                                      "that the disk isn't full.",
@@ -134,15 +152,20 @@ Diagnostics write3mf(const std::vector<MeshObject>& objects, const std::string& 
 }
 
 Diagnostics export3mf(const model::Document& doc, const model::RebuildReport& report,
-                      const kernel::IKernel& kernel, const FeatureId& step, const std::filesystem::path& path) {
+                      const kernel::IKernel& kernel, const FeatureId& step,
+                      const std::filesystem::path& path) {
     const auto* shape = report.shapeOf(step);
     const auto* feature = doc.find(step);
     if (!shape || !feature)
-        return {{"export.nothing", Severity::Error, "That step didn't build, so there's nothing to export.", {}}};
+        return {
+            {"export.nothing", Severity::Error, "That step didn't build, so there's nothing to export.", {}}};
     MeshObject part{feature->name(), kernel.tessellate(*shape, kernel::MeshQuality{}), doc.materialOf(step)};
+    part.material.color = doc.colorOf(step);  // the body's own color, if it has one
     if (part.mesh.triangles.empty())
-        return {{"export.nothing", Severity::Error,
-                 feature->name() + " has no surface to export. Pick a step that makes a solid shape.", {}}};
+        return {{"export.nothing",
+                 Severity::Error,
+                 feature->name() + " has no surface to export. Pick a step that makes a solid shape.",
+                 {}}};
     return write3mf({std::move(part)}, doc.name(), path);
 }
 

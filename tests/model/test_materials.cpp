@@ -224,3 +224,66 @@ TEST_CASE("bad material numbers and colors are refused", "[model][material]") {
     CHECK(issues[0].code == "material.color");
     CHECK(t.doc.customMaterials().empty());
 }
+
+TEST_CASE("a body is drawn in its material's color until it gets its own", "[model][material][color]") {
+    Tag t;
+    const Color pla = defaultMaterial().color;
+    const Color aluminum = findBuiltinMaterial("Aluminum 6061")->color;
+    const Color red{208, 48, 48};
+    CHECK(t.doc.colorOf(t.plate) == pla);
+    CHECK(t.doc.colorOf(t.tag) == pla);
+    CHECK(t.doc.colorOf(FeatureId::generate()) == pla);  // not in the design
+
+    // A material gives its color, and the cut follows its first body.
+    REQUIRE(t.run("feature.set_material", {{"feature", t.plate}, {"material", std::string("Aluminum 6061")}})
+                .empty());
+    CHECK(t.doc.colorOf(t.plate) == aluminum);
+    CHECK(t.doc.colorOf(t.tag) == aluminum);
+
+    // The plate's own color: it changes how it looks, not what it's made of.
+    REQUIRE(t.run("feature.set_color", {{"feature", t.plate}, {"color", std::string("#d03030")}}).empty());
+    CHECK(t.doc.undoLabel() == "Color Plate #d03030");
+    CHECK(t.doc.colorOf(t.plate) == red);
+    CHECK(t.doc.colorOf(t.tag) == red);  // a red plate with a hole cut in it is still red
+    CHECK(t.doc.materialOf(t.plate).name == "Aluminum 6061");
+    CHECK(t.doc.colorOf(t.hole) == pla);
+
+    // The nearest choice wins: a material picked for the cut itself gives its color.
+    REQUIRE(t.run("feature.set_material", {{"feature", t.tag}, {"material", std::string("PLA")}}).empty());
+    CHECK(t.doc.colorOf(t.tag) == pla);
+    REQUIRE(t.doc.undo());
+    // ... and so does the cut's own color.
+    REQUIRE(t.run("feature.set_color", {{"feature", t.tag}, {"color", std::string("#102030")}}).empty());
+    CHECK(t.doc.colorOf(t.tag) == Color{16, 32, 48});
+    CHECK(t.doc.colorOf(t.plate) == red);
+
+    // Undo takes the color away; empty clears it.
+    REQUIRE(t.doc.undo());
+    CHECK(t.doc.colorOf(t.tag) == red);
+    REQUIRE(t.run("feature.set_color", {{"feature", t.plate}, {"color", std::string()}}).empty());
+    CHECK(t.doc.undoLabel() == "Clear color of Plate");
+    CHECK_FALSE(t.doc.find(t.plate)->color().has_value());
+    CHECK(t.doc.colorOf(t.plate) == aluminum);
+    REQUIRE(t.doc.undo());
+    CHECK(t.doc.colorOf(t.plate) == red);
+}
+
+TEST_CASE("a color that can't be read is refused with a plain message", "[model][material][color]") {
+    Tag t;
+    const auto problems = t.run("feature.set_color", {{"feature", t.plate}, {"color", std::string("red")}});
+    REQUIRE(problems.size() == 1);
+    CHECK(problems[0].code == "feature.color");
+    CHECK(problems[0].message.find("#d03030") != std::string::npos);  // says how to write one
+    CHECK_FALSE(t.doc.find(t.plate)->color().has_value());
+    CHECK_FALSE((t.doc.canUndo() && t.doc.undoLabel().rfind("Color", 0) == 0));
+}
+
+TEST_CASE("editing a step keeps its color", "[model][material][color]") {
+    Tag t;
+    REQUIRE(t.run("feature.set_color", {{"feature", t.plate}, {"color", std::string("#d03030")}}).empty());
+    auto copy = t.doc.find(t.plate)->clone();
+    static_cast<BoxFeature&>(*copy).setSize({70, 30, 4});
+    REQUIRE(t.doc.execute(std::make_unique<EditFeatureCommand>(std::move(copy))).empty());
+    CHECK(t.doc.find(t.plate)->color() == Color{208, 48, 48});
+    CHECK(t.doc.colorOf(t.tag) == Color{208, 48, 48});
+}

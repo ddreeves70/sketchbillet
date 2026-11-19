@@ -4,6 +4,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -55,12 +56,16 @@ struct Design {
 TEST_CASE("3MF export of a cut, rounded and revolved design gives closed skins", "[io][3mf][occt]") {
     Design d;
     // A plate with a hole, its corners rounded.
-    const auto plate = d.run("feature.add_box", {{"size", kernel::Vec3{60, 30, 6}}, {"name", std::string("Plate")}});
-    const auto pin = d.run("feature.add_cylinder", {{"radius", 4.0}, {"height", 10.0}, {"base", kernel::Vec3{15, 15, -2}}});
-    const auto cut = d.run("feature.add_boolean", {{"operation", std::string("cut")}, {"a", plate}, {"b", pin}});
+    const auto plate =
+        d.run("feature.add_box", {{"size", kernel::Vec3{60, 30, 6}}, {"name", std::string("Plate")}});
+    const auto pin = d.run("feature.add_cylinder",
+                           {{"radius", 4.0}, {"height", 10.0}, {"base", kernel::Vec3{15, 15, -2}}});
+    const auto cut =
+        d.run("feature.add_boolean", {{"operation", std::string("cut")}, {"a", plate}, {"b", pin}});
     // A ring, revolved from a rectangle beside the z axis, off to one side.
     const auto sketch = d.run("feature.add_sketch", {{"plane", std::string("xz")}});
-    d.run("sketch.add_rectangle", {{"sketch", sketch}, {"from", sketch::Point2{8, 0}}, {"to", sketch::Point2{12, 5}}});
+    d.run("sketch.add_rectangle",
+          {{"sketch", sketch}, {"from", sketch::Point2{8, 0}}, {"to", sketch::Point2{12, 5}}});
     const auto ring = d.run("feature.add_revolve", {{"sketch", sketch}, {"axis", std::string("y")}});
     REQUIRE(d.doc.execute(std::make_unique<SetMaterialCommand>(ring, "petg")).empty());
 
@@ -90,4 +95,27 @@ TEST_CASE("3MF export of a step that didn't build says so", "[io][3mf][occt]") {
     CHECK(issues[0].code == "export.nothing");
     CHECK_FALSE(std::filesystem::exists("never.3mf"));
     (void)box;
+}
+
+TEST_CASE("3MF export uses the body's own color, or its material's", "[io][3mf][occt][color]") {
+    Design d;
+    const auto box = d.run("feature.add_box", {{"size", kernel::Vec3{10, 10, 10}}});
+    auto report = d.doc.regenerate(*d.kernel, d.solver.get());
+    auto model = [&] {
+        const auto path = std::filesystem::temp_directory_path() / "sb_test_color.3mf";
+        REQUIRE(io::export3mf(d.doc, report, *d.kernel, box, path).empty());
+        std::ifstream f(path, std::ios::binary);
+        const io::Bytes bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        f.close();
+        std::filesystem::remove(path);
+        return test::entry(bytes, "3D/3dmodel.model");
+    };
+    std::string pla = colorText(defaultMaterial().color);  // "#rrggbb"; 3MF writes it in capitals
+    for (auto& ch : pla) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    CHECK(model().find("displaycolor=\"" + pla) != std::string::npos);
+    REQUIRE(d.doc.execute(std::make_unique<SetColorCommand>(box, Color{208, 48, 48})).empty());
+    report = d.doc.regenerate(*d.kernel, d.solver.get());
+    const auto text = model();
+    CHECK(text.find("name=\"PLA\"") != std::string::npos);  // still PLA
+    CHECK(text.find("displaycolor=\"#D03030") != std::string::npos);
 }

@@ -380,6 +380,32 @@ void SetMaterialCommand::revert(DocumentEditor& editor) {
     if (Feature* f = editor.find(id_)) f->setMaterial(oldKey_);
 }
 
+SetColorCommand::SetColorCommand(FeatureId id, std::optional<Color> color, std::string badColor)
+    : id_(id), color_(color), badColor_(std::move(badColor)) {}
+
+std::string SetColorCommand::label() const {
+    return color_ ? "Color " + name_ + " " + colorText(*color_) : "Clear color of " + name_;
+}
+
+Diagnostics SetColorCommand::apply(DocumentEditor& editor) {
+    Feature* f = editor.find(id_);
+    if (!f) return {error("feature.not_found", "That step isn't in the design anymore.")};
+    if (!badColor_.empty()) {
+        return {
+            error("feature.color", "SketchBillet can't read the color " + badColor_ +
+                                       ". Write it as # and six digits or letters a to f, like "
+                                       "#d03030 for red, or leave it empty to use the material's color.")};
+    }
+    name_ = f->name();
+    old_ = f->color();
+    f->setColor(color_);
+    return {};
+}
+
+void SetColorCommand::revert(DocumentEditor& editor) {
+    if (Feature* f = editor.find(id_)) f->setColor(old_);
+}
+
 SetUnitsCommand::SetUnitsCommand(LengthUnit unit) : unit_(unit) {}
 
 std::string SetUnitsCommand::label() const {
