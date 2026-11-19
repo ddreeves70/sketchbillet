@@ -2703,6 +2703,46 @@ TEST_CASE("make a material with its own color, then change it with Edit", "[app]
     CHECK(app.doc().materialOf(cylinder).color == model::Color{20, 60, 230});
 }
 
+TEST_CASE("a body is its material's color until it's given its own", "[app][materials][color]") {
+    App app;
+    app.click("sb.modeling.cylinder");
+    const FeatureId cylinder = app.doc().featureAt(0).id();
+    auto* color = app.field<QPushButton>("bodycolor");
+    auto* reset = app.field<QPushButton>("bodycolorreset");
+    REQUIRE(color);
+    REQUIRE(reset);
+    const auto pla = model::defaultMaterial().color;
+    const QString plaName = QColor(pla.r, pla.g, pla.b).name();
+    CHECK(color->text() == plaName + QStringLiteral(" (by default)"));
+    CHECK_FALSE(reset->isEnabled());  // nothing to go back from
+
+    // Click the color, pick red: the body is red, and still PLA.
+    pickColor(QColor(208, 48, 48));
+    color->click();
+    settle();
+    CHECK(app.doc().find(cylinder)->color() == model::Color{208, 48, 48});
+    CHECK(app.doc().materialOf(cylinder).name == "PLA");
+    CHECK(app.doc().undoLabel() == "Color Cylinder1 #d03030");
+    color = app.field<QPushButton>("bodycolor");
+    reset = app.field<QPushButton>("bodycolorreset");
+    CHECK(color->text() == QStringLiteral("#d03030"));
+    CHECK(reset->isEnabled());
+    // Cancel in the color window changes nothing.
+    whenOpen(QString(), [](QDialog* d) { d->reject(); });
+    color->click();
+    settle();
+    CHECK(app.doc().find(cylinder)->color() == model::Color{208, 48, 48});
+
+    // Use material color: back to PLA's.
+    reset->click();
+    settle();
+    CHECK_FALSE(app.doc().find(cylinder)->color().has_value());
+    CHECK(app.field<QPushButton>("bodycolor")->text() == plaName + QStringLiteral(" (by default)"));
+    app.shell->undoAction()->trigger();
+    settle();
+    CHECK(app.doc().colorOf(cylinder) == model::Color{208, 48, 48});
+}
+
 TEST_CASE("opening a file that isn't a design explains why", "[app]") {
     App app;
     const auto problems =

@@ -229,6 +229,12 @@ either a built-in material's key (like `"pla"` or `"aluminum_6061"`, listed in
 with no material picked has no `"material"` key. A key SketchBillet doesn't know is kept
 as it is, and the body counts as PLA.
 
+A step can also have `"color"`: the color picked for its body, as `"#rrggbb"`
+(like `"#d03030"`). A step with no color of its own has no `"color"` key, and its
+body is drawn in its material's color. A color SketchBillet can't read is left out
+when the design opens. Older versions of SketchBillet skip the key, so they open the
+design with the material's colors.
+
 ### materials.json
 
 Only a design that added materials of its own has this file:

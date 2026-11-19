@@ -21,6 +21,7 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`feature.unlink`](#featureunlink) | Makes a linked copy a copy of its own, so it stops following the original |
 | [`feature.import`](#featureimport) | Adds a part made in another program, from a STEP, STL or 3MF file |
 | [`feature.reload_import`](#featurereload_import) | Reads an imported part's file again, after it changes |
+| [`feature.set_color`](#featureset_color) | Picks the color a body is drawn in |
 | [`feature.set_material`](#featureset_material) | Picks what a body is made of |
 | [`feature.slide`](#featureslide) | Slides a body by a distance, as dragging its arrows does |
 | [`feature.set_value`](#featureset_value) | Changes a step's number, like an extrude's distance, to a number or a formula |
@@ -497,6 +498,43 @@ has a file to read again:
 ```console
 $ sketchbillet_cli run --open strap.sb feature.reload_import feature=Strap
 error [import.not_import]: Strap isn't an imported part, so there's no file to read again. Pick an Import step.
+```
+
+## feature.set_color
+
+Picks the color a step's body is drawn in, in the viewer and in 3MF files. It
+changes only how the body looks, not its material, so the mass and cost stay the
+same. A body with no color of its own is its material's color. A union, cut or
+intersect with no color or material of its own takes the color of its first body,
+`a` (see [Materials](../user-guide/materials.md#a-color-for-each-body)).
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `feature` | step name | yes | The step |
+| `color` | text | yes | The color as `#` and six digits or letters a to f (red, green and blue), like `#d03030` for red. Leave it empty (`color=`) to use the material's color again |
+
+The demo tag in red: `Tag` cuts the hole out of `Plate`, so it's red too.
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli demo tag.sb
+wrote tag.sb
+$ sketchbillet_cli run --open tag.sb --save tag.sb feature.set_color feature=Plate color=#d03030
+Demo tag: 3 steps
+  Plate        ok  volume 7200.00 mm^3
+  Hole         ok  volume 117.81 mm^3
+  Tag          ok  volume 7121.46 mm^3  mass 8.83 g (PLA)
+wrote tag.sb
+```
+
+A color written another way is refused:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli demo tag.sb
+wrote tag.sb
+$ sketchbillet_cli run --open tag.sb feature.set_color feature=Plate color=red
+error [feature.color]: SketchBillet can't read the color red. Write it as # and six digits or letters a to f, like #d03030 for red, or leave it empty to use the material's color.
 ```
 
 ## feature.set_material

@@ -495,6 +495,30 @@ private:
     std::string oldKey_;
 };
 
+/// Picks the color a step's body is drawn in, or clears it so the body gets
+/// its color by default (see Document::colorOf()). It changes only how the body
+/// looks, not its material.
+class SetColorCommand final : public Command {
+public:
+    /// Prepares the change.
+    /// @param id The step.
+    /// @param color The color, or nothing to clear the step's color.
+    /// @param badColor Color text that couldn't be read (see parseColor()), so
+    ///        apply() refuses with a message; empty if the color is fine.
+    SetColorCommand(FeatureId id, std::optional<Color> color, std::string badColor = {});
+
+    std::string label() const override;
+    Diagnostics apply(DocumentEditor& editor) override;
+    void revert(DocumentEditor& editor) override;
+
+private:
+    FeatureId id_;
+    std::optional<Color> color_;
+    std::optional<Color> old_;
+    std::string badColor_;
+    std::string name_;  // the step's name, for the label
+};
+
 /// Adds a material to the design, or changes one the design added earlier
 /// (matched by name, ignoring upper and lower case). SketchBillet's built-in materials
 /// can't be changed: give a new material another name.

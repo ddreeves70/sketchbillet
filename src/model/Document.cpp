@@ -666,6 +666,22 @@ FeatureId Document::materialSource(const FeatureId& id) const {
     return {};
 }
 
+Color Document::colorOf(const FeatureId& id) const {
+    // Follow first inputs back, as materialSource() does; the step limit is a
+    // guard against a damaged design.
+    const Feature* f = find(id);
+    for (std::size_t steps = 0; f && steps <= features_.size(); ++steps) {
+        if (f->color()) return *f->color();
+        if (!f->material().empty()) {
+            if (const Material* m = findMaterial(f->material())) return m->color;
+        }
+        const auto inputs = f->dependencies();
+        if (inputs.empty()) break;
+        f = find(inputs.front());
+    }
+    return defaultMaterial().color;
+}
+
 const Material& Document::materialOf(const FeatureId& id) const {
     const FeatureId source = materialSource(id);
     if (source.isNil()) return defaultMaterial();

@@ -38,6 +38,7 @@ Commands for sketchbillet_cli run:
   feature.import           Import a part
   feature.reload_import    Reload import from file
   feature.rename           Rename step
+  feature.set_color        Set color
   feature.set_edges        Pick edges again
   feature.set_material     Set material
   feature.set_sketch_face  Move sketch to a face

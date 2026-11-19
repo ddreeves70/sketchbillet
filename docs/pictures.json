@@ -1098,6 +1098,22 @@
       }
     },
     {
+      "out": "docs/user-guide/images/app-body-color.png",
+      "size": "1280x800",
+      "script": "tag",
+      "commands": ["run --open tag.sb --save tag.sb feature.set_color feature=Plate color=#d03030"],
+      "app": {"open": "tag.sb"},
+      "crop": [0, 176, 1280, 506]
+    },
+    {
+      "out": "docs/user-guide/images/app-body-color-row.png",
+      "size": "1280x800",
+      "script": "tag",
+      "commands": ["run --open tag.sb --save tag.sb feature.set_color feature=Plate color=#d03030"],
+      "app": {"open": "tag.sb", "select": ["Plate"]},
+      "crop": [906, 450, 374, 140]
+    },
+    {
       "out": "docs/user-guide/images/app-design-tabs.png",
       "size": "1280x800",
       "script": "organizer-app",

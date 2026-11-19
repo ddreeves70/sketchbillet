@@ -20,9 +20,9 @@ namespace sb::io {
 
 /// One part to put in a 3MF file.
 struct MeshObject {
-    std::string name;         ///< The part's name, shown in the slicer's list of objects.
-    kernel::Mesh mesh;        ///< Its triangles (mm), facing out. Points shared by faces are joined when written.
-    model::Material material; ///< What it's made of: its name and color go in the file.
+    std::string name;   ///< The part's name, shown in the slicer's list of objects.
+    kernel::Mesh mesh;  ///< Its triangles (mm), facing out. Points shared by faces are joined when written.
+    model::Material material;  ///< What it's made of: its name and color go in the file.
 };
 
 /// Packs parts into 3MF bytes. Each part's mesh is welded (kernel::weld()) so
@@ -44,7 +44,8 @@ Diagnostics write3mf(const std::vector<MeshObject>& objects, const std::string& 
                      const std::filesystem::path& path);
 
 /// Writes one step's body to a 3MF file: meshed as finely as STL export, named
-/// after the step, and made of the step's material.
+/// after the step, and made of the step's material, in the body's color
+/// (Document::colorOf()).
 /// @param doc The design.
 /// @param report Its last rebuild.
 /// @param kernel The kernel that built it, to mesh the body.
@@ -57,6 +58,7 @@ Diagnostics write3mf(const std::vector<MeshObject>& objects, const std::string& 
 /// auto problems = io::export3mf(doc, report, kernel, report.bodies().front(), "tag.3mf");
 /// @endcode
 Diagnostics export3mf(const model::Document& doc, const model::RebuildReport& report,
-                      const kernel::IKernel& kernel, const FeatureId& step, const std::filesystem::path& path);
+                      const kernel::IKernel& kernel, const FeatureId& step,
+                      const std::filesystem::path& path);
 
 }  // namespace sb::io

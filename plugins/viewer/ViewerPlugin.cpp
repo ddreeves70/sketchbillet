@@ -916,9 +916,9 @@ view::SceneContent viewerScene(const plugin::DocumentList& docs, const plugin::S
     const auto* design = docs.find(id);
     if (!report || !design) return out;
     if (selection.doc() == id) out.selected = selection.features();
-    // Each body is drawn in its material's color.
+    // Each body is drawn in its own color, or its material's (Document::colorOf()).
     auto colorOf = [design](const FeatureId& f) {
-        const auto c = design->materialOf(f).color;
+        const auto c = design->colorOf(f);
         return view::Rgb{c.r, c.g, c.b};
     };
     const auto& bodies = report->bodies();
