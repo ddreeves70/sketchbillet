@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -753,9 +754,32 @@ private:
 
     void refresh() {
         refreshPending_ = false;
+        switchCameras();
         content_ = viewerScene(ctx_.documents(), ctx_.selection());
         for (auto* pane : panes_) pane->setContent(content_);
         if (flat_) flat_->setText(flatText());
+    }
+
+    // Each open design keeps its own camera in each pane: switching to another
+    // design keeps this one's, and puts back the other's (or fits it, the first time).
+    void switchCameras() {
+        const DocId active = ctx_.documents().active();
+        if (active == shownDoc_) return;
+        if (ctx_.documents().find(shownDoc_)) {
+            auto& kept = cameras_[shownDoc_];
+            kept.clear();
+            for (auto* pane : panes_) kept.push_back(pane->cameraPlace());
+        }
+        std::erase_if(cameras_, [this](const auto& c) { return !ctx_.documents().find(c.first); });
+        const auto it = cameras_.find(active);
+        for (std::size_t i = 0; i < panes_.size(); ++i) {
+            if (it != cameras_.end() && i < it->second.size() && it->second[i].scale > 0) {
+                panes_[i]->setCameraPlace(it->second[i]);
+            } else if (!shownDoc_.isNil()) {
+                panes_[i]->fitWhenShown();
+            }
+        }
+        shownDoc_ = active;
     }
 
     QString flatText() const {
@@ -792,6 +816,8 @@ private:
     view::PaneLayout layout_ = view::PaneLayout::Single;
     int active_ = 0;
     view::SceneContent content_;
+    DocId shownDoc_;                                           // the design the panes show
+    std::map<DocId, std::vector<view::CameraPlace>> cameras_;  // other open designs' cameras, by pane
     QString problem_;
     bool refreshPending_ = false;
     std::vector<plugin::Subscription> subs_;

@@ -191,4 +191,10 @@ if(TARGET sb_app_core)
   endif()
   catch_discover_tests(sb_app_tests DISCOVERY_MODE PRE_TEST
     PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+  # The app tests tagged [gl] again, with the real 3D view, on a virtual screen
+  # (SB_SCREEN keeps main.cpp from turning the screen off).
+  if(SB_XVFB_RUN)
+    add_test(NAME app.gl COMMAND ${SB_XVFB_RUN} -a -s "-screen 0 1280x1024x24" $<TARGET_FILE:sb_app_tests> "[gl]")
+    set_tests_properties(app.gl PROPERTIES ENVIRONMENT "SB_SCREEN=1;QT_QPA_PLATFORM=xcb;LIBGL_ALWAYS_SOFTWARE=1")
+  endif()
 endif()

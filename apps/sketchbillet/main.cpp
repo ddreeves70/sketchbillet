@@ -268,12 +268,13 @@ int main(int argc, char** argv) {
     sb::app::Shell shell(host, ui, *settings);
     shell.setSamplesFolder(samplesFolder());
 
-    QString open = option(args, QStringLiteral("--open"));
-    if (open.isEmpty() && args.size() > 1 &&
-        args.at(1).endsWith(QStringLiteral(".sb"), Qt::CaseInsensitive)) {
-        open = args.at(1);
+    // Designs to open, each in its own tab: every .sb file named, with --open or
+    // without (as when several are opened together from the file manager). No
+    // other option takes a .sb file.
+    for (int i = 1; i < args.size(); ++i) {
+        if (args.at(i).endsWith(QStringLiteral(".sb"), Qt::CaseInsensitive))
+            shell.openDesign(QDir::current().absoluteFilePath(args.at(i)).toStdWString());
     }
-    if (!open.isEmpty()) shell.openDesign(QDir::current().absoluteFilePath(open).toStdWString());
     if (const auto select = option(args, QStringLiteral("--select")); !select.isEmpty()) {
         shell.selectSteps(select.split(QLatin1Char(',')));
     }

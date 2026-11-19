@@ -8,7 +8,7 @@ step's numbers in Properties. Everything you do can be undone.
 
 | # | Part | What it's for |
 | --- | --- | --- |
-| 1 | **Top row** | **File** (new, open, open a sample, save, import, export, check for printing, quit), then New, Open, Save, Undo and Redo, always there. **Search tools** and **Help** are at the right |
+| 1 | **Top row** | **File** (new, open, open a sample, save, close, import, export, check for printing, quit), then New, Open, Save, Undo and Redo, always there. Then a tab for each open design (see [Several designs at once](#several-designs-at-once)). **Search tools** and **Help** are at the right |
 | 2 | **Tabs** | **Model** (making the part), **Inspect** (measuring, parameters, checking for printing) and **View** (the grid, the axes, panels and layouts). While you edit a sketch, the **Sketch** tab takes the Model tab's place |
 | 3 | **Panels** | Each tab's tools, in panels, with each panel's name underneath: **Create**, **Modify**, **Combine** and so on. The most-used tools are buttons, each with a picture and its name. Click a panel's name for everything in it. See [The toolbar](#the-toolbar) |
 | 4 | **Feature tree** | Every step of the design, in the order SketchBillet builds them, with how each one built. It floats over the viewer, see-through, and starts with the design's **Document settings** |
@@ -69,7 +69,8 @@ If you built SketchBillet yourself, the app is in your build folder:
 | Linux | `build/dev/apps/sketchbillet/sketchbillet` |
 
 It starts with an empty design called Untitled. To open a design straight away,
-give its file: `sketchbillet tag.sb`.
+give its file: `sketchbillet tag.sb`. Give several files, or open several at once
+from your file manager, and each one gets its own tab.
 
 ## Make a part
 
@@ -469,7 +470,8 @@ whatever made it: a tool, a renamed step, or a number typed in Properties. Its t
 says what it will undo, like "Undo Add Box1". **Redo** (Ctrl+Y or Ctrl+Shift+Z) puts it
 back.
 
-Opening a design starts a fresh undo history.
+Each open design has its own undo history: Undo takes back the last change to
+the design that's showing. Opening a design starts a fresh history.
 
 ## Saving
 
@@ -479,12 +481,43 @@ Opening a design starts a fresh undo history.
 | File > Open... | Ctrl+O | Opens a `.sb` design |
 | File > Save | Ctrl+S | Saves to the design's file (asks for a name the first time) |
 | File > Save as... | Ctrl+Shift+S | Saves under a new name |
+| File > Close | Ctrl+W | Closes the design that's showing |
 | File > Export... | Ctrl+E | Writes the part as STL or 3MF (for 3D printing) or STEP (for other CAD programs) |
 | File > Check for Printing... | Ctrl+Shift+P | Checks the part is closed all round and has no wall too thin to print (see [Getting ready to print](printing.md)) |
 
-A `*` after the name in the title bar means there are unsaved changes. SketchBillet asks
-before closing or replacing a design with unsaved changes. SketchBillet has one design
-open at a time for now.
+A `*` after the name in the title bar, and on the design's tab, means there are
+unsaved changes. SketchBillet asks before closing a design with unsaved changes,
+and when you quit, it asks about each one.
+
+## Several designs at once
+
+You can have several designs open at once, each in its own tab in the top row,
+like tabs in a web browser. That's handy for copying steps from one part to
+another, or for keeping an old version open while you make a new one.
+
+![Two designs open, the tag and the desk organizer, each in its own tab at the top. The organizer's tab is picked, so it shows.](images/app-design-tabs.png)
+
+- **File > New**, **File > Open** and **File > Open Sample** each open a new
+  tab. The empty Untitled design SketchBillet starts with is the exception: if
+  you haven't added anything to it, the design you open takes its place.
+- **Click a tab** to show that design. The feature tree, Properties, the
+  timeline and the viewer all show the design whose tab is picked, and **Undo**
+  works on it.
+- **Ctrl+Tab** shows the next design, and **Ctrl+Shift+Tab** the one before.
+- **Each design keeps its own view:** turn one design to look at it from the
+  front, switch to another and back, and it's still facing you from the front.
+- **The x on a tab**, or **File > Close** (Ctrl+W), closes that design. If it has
+  unsaved changes, SketchBillet shows it and asks whether to save it first.
+  Closing the last design leaves a new empty one, so you can start again.
+- **Drag a tab** to change the order. Hold the mouse over a tab to see where its
+  file is saved.
+- A tab shows the design's file name, without `.sb`, once it's saved. Before
+  that, new designs are called Untitled, Untitled 2 and so on.
+- Opening a design that's open already just shows its tab.
+
+**Tip:** to copy steps from one design to another, pick them in the feature tree,
+press Ctrl+C, click the other design's tab and press Ctrl+V. See
+[Copying steps](#copying-steps).
 
 ## Exporting
 

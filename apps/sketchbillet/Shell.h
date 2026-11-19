@@ -41,7 +41,7 @@ class ViewOverlay;
 // The main window. It owns no features of its own: panels (the viewer too), menu
 // items and toolbar buttons come from plugins (through AppUi and PluginHost::actions()).
 // The shell adds what every program needs: File (new, open, save), Edit (undo,
-// redo), Window (panels and layouts), and one open design at a time.
+// redo), Window (panels and layouts), and a tab for each open design.
 class Shell : public QMainWindow {
     Q_OBJECT
 public:
@@ -64,9 +64,22 @@ public:
     // Shows the print check's findings. Tests replace it so no dialog opens.
     std::function<void(const model::PrintCheckResult& result)> showPrintCheck;
 
-    // Designs. Each returns what went wrong, if anything (also shown in the status bar).
-    bool newDesign();  // false if the student cancelled
+    // Designs. Several can be open at once, each in its own tab; New, Open and Open
+    // Sample add one and show it. An empty "Untitled" nobody has touched yet is
+    // replaced instead, so starting SketchBillet and opening a file leaves one tab.
+    // Each returns what went wrong, if anything (also shown in the status bar).
+    bool newDesign();
     Diagnostics openDesign(const std::filesystem::path& path);
+    // Closes a design (File > Close, or its tab's x), asking first if it has
+    // unsaved changes. Closing the last one leaves a new empty design. Returns
+    // false if the student cancelled.
+    bool closeDesign(const DocId& id);
+    // Shows the next (1) or previous (-1) open design, going round at the ends
+    // (Ctrl+Tab and Ctrl+Shift+Tab).
+    void nextDesign(int step);
+    // What a design is called on its tab and in the title bar: its file's name
+    // without .sb once it's saved, or the design's own name before that.
+    QString designTitle(const DocId& id) const;
     // Opens a sample design (File > Open Sample) by its key, like "l-bracket": a
     // new design that isn't saved anywhere yet, so Save asks where to keep it.
     Diagnostics openSample(const QString& key);
@@ -176,8 +189,10 @@ private:
     void refreshActions();  // plugins' check marks and changing texts
     void showProblems(const Diagnostics& problems);
     void showMessage(const QString& message);
-    bool confirmLoseChanges();
-    void replaceActive(std::unique_ptr<model::Document> doc, std::filesystem::path path);
+    bool confirmCloseAll();           // asks about every design with unsaved changes; false if cancelled
+    bool askToSave(const DocId& id);  // asks about one design's unsaved changes; false if cancelled
+    void addDesign(std::unique_ptr<model::Document> doc, std::filesystem::path path);
+    void syncDesignTabs();  // a tab for each open design, the active one picked
     void rebuildLayoutMenu();
     void showPanel(const QString& id, bool show = true);
     void showOverlay(const QString& id, bool show);  // a floating panel's frame
@@ -232,6 +247,7 @@ private:
     Diagnostics lastProblems_;
     std::vector<plugin::Subscription> subs_;
     bool refreshPending_ = false;
+    bool syncingTabs_ = false;  // while syncDesignTabs() changes the tabs itself
 };
 
 }  // namespace sb::app

@@ -114,6 +114,62 @@ TEST_CASE("standard views turn the camera", "[view][gl]") {
     }
 }
 
+TEST_CASE("a camera's place is kept and put back, without fitting again", "[view][gl]") {
+    Fixture f;
+    f.view.setContent({{{f.boxId, f.box, false}}, {}});
+    settle(f.view);
+    f.view.setStandardView(StandardView::Front);
+    settle(f.view);
+    const CameraPlace front = f.view.cameraPlace();
+    REQUIRE(front.scale > 0);
+
+    // Another design is shown: a bigger box, fitted, from another side.
+    const FeatureId bigId = FeatureId::generate();
+    const auto big = f.kernel->makeBox({0, 0, 0}, 200, 200, 200).shape;
+    f.view.fitWhenShown();
+    f.view.setContent({{{bigId, big, false}}, {}});
+    f.view.setStandardView(StandardView::Top);
+    settle(f.view);
+    CHECK(f.view.cameraPlace().scale > 2 * front.scale);  // zoomed out to fit the big box
+
+    // Back to the first design: its camera, exactly, and no fitting to the box.
+    f.view.setContent({{{f.boxId, f.box, false}}, {}});
+    f.view.setCameraPlace(front);
+    settle(f.view);
+    const CameraPlace back = f.view.cameraPlace();
+    CHECK(back.eye.x == Approx(front.eye.x).margin(1e-6));
+    CHECK(back.eye.y == Approx(front.eye.y).margin(1e-6));
+    CHECK(back.eye.z == Approx(front.eye.z).margin(1e-6));
+    CHECK(back.at.x == Approx(front.at.x).margin(1e-6));
+    CHECK(back.at.z == Approx(front.at.z).margin(1e-6));
+    CHECK(back.up.z == Approx(front.up.z).margin(1e-6));
+    CHECK(back.scale == Approx(front.scale));
+
+    // A place with no scale (from a view that hadn't drawn) is ignored.
+    f.view.setCameraPlace({});
+    settle(f.view);
+    CHECK(f.view.cameraPlace().scale == Approx(front.scale));
+}
+
+TEST_CASE("a camera place given before the view first draws is used when it does", "[view][gl]") {
+    std::unique_ptr<kernel::IKernel> kernel = kernel::makeOcctKernel();
+    const FeatureId id = FeatureId::generate();
+    const auto box = kernel->makeBox({0, 0, 0}, 10, 10, 10).shape;
+    const CameraPlace place{{0, -500, 5}, {0, 0, 5}, {0, 0, 1}, 80};
+    ViewWidget view;
+    view.setCameraPlace(place);
+    CHECK(view.cameraPlace().scale == Approx(80));  // kept until the view is made
+    view.resize(400, 300);
+    view.show();
+    REQUIRE(waitFor([&] { return view.ready() || !view.problem().isEmpty(); }));
+    REQUIRE(view.problem().isEmpty());
+    view.setContent({{{id, box, false}}, {}});  // the first body doesn't fit the view
+    settle(view);
+    const auto got = view.cameraPlace();
+    CHECK(got.eye.y == Approx(-500).margin(1e-6));
+    CHECK(got.scale == Approx(80));
+}
+
 TEST_CASE("clicking a body picks it; Ctrl-click and empty space change the pick", "[view][gl]") {
     Fixture f;
     const FeatureId other = FeatureId::generate();

@@ -52,6 +52,15 @@ struct ViewDirection {
     kernel::Vec3 up{};     ///< The direction that points up on the screen.
 };
 
+/// Where a camera is and how far it's zoomed, to put it back later (each open
+/// design keeps its own, see ViewWidget::cameraPlace()).
+struct CameraPlace {
+    kernel::Vec3 eye{};  ///< Where the camera is, in mm.
+    kernel::Vec3 at{};   ///< The point it looks at, in mm.
+    kernel::Vec3 up{};   ///< The direction that points up on the screen (a unit vector).
+    double scale = 0;    ///< How much of the scene fits on screen: its height, in mm. 0 means not known.
+};
+
 /// Gives the number of panes in a layout.
 /// @param layout The layout.
 /// @return 1, 2 or 4.

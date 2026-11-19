@@ -31,6 +31,7 @@
 #include <QSettings>
 #include <QStatusBar>
 #include <QStyle>
+#include <QTabBar>
 #include <QToolBar>
 #include <QToolButton>
 
@@ -274,7 +275,6 @@ void Shell::buildMenus() {
     newAct->setObjectName(QStringLiteral("sb.shell.new"));
     newAct->setShortcut(QKeySequence::New);
     auto* openAct = file->addAction(tr("&Open..."), this, [this] {
-        if (!confirmLoseChanges()) return;
         const auto path = QFileDialog::getOpenFileName(this, tr("Open design"), QString(),
                                                        tr("SketchBillet designs (*.sb)"));
         if (!path.isEmpty()) openDesign(path.toStdWString());
@@ -294,6 +294,32 @@ void Shell::buildMenus() {
     });
     saveAs->setObjectName(QStringLiteral("sb.shell.saveas"));
     saveAs->setShortcut(QKeySequence::SaveAs);
+    auto* closeAct = file->addAction(tr("&Close"), this, [this] { closeDesign(activeDesign()); });
+    closeAct->setObjectName(QStringLiteral("sb.shell.close"));
+    closeAct->setShortcut(QKeySequence::Close);
+    closeAct->setStatusTip(
+        tr("Close this design. SketchBillet asks first if it has changes that aren't saved."));
+    // Ctrl+Tab and Ctrl+Shift+Tab go from one open design to the next.
+    auto* next = new QAction(tr("Next Design"), this);
+    next->setObjectName(QStringLiteral("sb.shell.nextdesign"));
+    next->setShortcuts({QKeySequence(Qt::CTRL | Qt::Key_Tab), QKeySequence::NextChild});
+    connect(next, &QAction::triggered, this, [this] { nextDesign(1); });
+    addAction(next);
+    auto* previous = new QAction(tr("Previous Design"), this);
+    previous->setObjectName(QStringLiteral("sb.shell.previousdesign"));
+    previous->setShortcuts(
+        {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Backtab), QKeySequence::PreviousChild});
+    connect(previous, &QAction::triggered, this, [this] { nextDesign(-1); });
+    addAction(previous);
+    auto* tabs = ribbon_->designTabs();
+    connect(tabs, &QTabBar::currentChanged, this, [this, tabs](int index) {
+        if (syncingTabs_ || index < 0) return;
+        if (const auto id = DocId::parse(tabs->tabData(index).toString().toStdString()))
+            host_.documents().setActive(*id);
+    });
+    connect(tabs, &QTabBar::tabCloseRequested, this, [this, tabs](int index) {
+        if (const auto id = DocId::parse(tabs->tabData(index).toString().toStdString())) closeDesign(*id);
+    });
     file->addSeparator();
     auto* importAct = file->addAction(tr("&Import..."), this, [this] {
         const auto path = askImportPath();
@@ -838,10 +864,24 @@ std::filesystem::path Shell::activePath() const {
     return it == paths_.end() ? std::filesystem::path() : it->second;
 }
 
-bool Shell::confirmLoseChanges() {
-    const auto* doc = host_.documents().find(activeDesign());
+QString Shell::designTitle(const DocId& id) const {
+    const auto it = paths_.find(id);
+    if (it != paths_.end() && !it->second.empty())
+        return QString::fromStdWString(it->second.stem().wstring());
+    const auto* doc = host_.documents().find(id);
+    return doc ? qs(doc->name()) : tr("Untitled");
+}
+
+bool Shell::askToSave(const DocId& id) {
+    auto& docs = host_.documents();
+    const auto* doc = docs.find(id);
     if (!doc || !doc->isModified()) return true;
-    switch (askUnsaved(qs(doc->name()))) {
+    // Show the design being asked about, so the student knows which one it is.
+    if (docs.active() != id) {
+        docs.setActive(id);
+        refresh();
+    }
+    switch (askUnsaved(designTitle(id))) {
         case Unsaved::Save:
             return save();
         case Unsaved::Discard:
@@ -852,13 +892,57 @@ bool Shell::confirmLoseChanges() {
     return false;
 }
 
-void Shell::replaceActive(std::unique_ptr<model::Document> doc, std::filesystem::path path) {
+bool Shell::confirmCloseAll() {
+    for (const auto& id : host_.documents().ids()) {
+        if (!askToSave(id)) return false;
+    }
+    return true;
+}
+
+bool Shell::closeDesign(const DocId& id) {
     auto& docs = host_.documents();
+    if (!docs.find(id)) return false;
+    if (!askToSave(id)) return false;
+    const QString title = designTitle(id);
+    docs.close(id);
+    paths_.erase(id);
+    // There's always a design to work on, so Create works straight away.
+    if (docs.ids().empty()) docs.add(std::make_unique<model::Document>(model::DocKind::Part, "Untitled"));
+    refresh();
+    showMessage(tr("Closed %1").arg(title));
+    return true;
+}
+
+void Shell::nextDesign(int step) {
+    const auto ids = host_.documents().ids();
+    if (ids.size() < 2) return;
+    // In the order the tabs show, which the student can change by dragging them.
+    std::vector<DocId> order;
+    for (int i = 0; i < ribbon_->designTabs()->count(); ++i) {
+        const auto id = DocId::parse(ribbon_->designTabs()->tabData(i).toString().toStdString());
+        if (id && host_.documents().find(*id)) order.push_back(*id);
+    }
+    if (order.size() != ids.size()) order = ids;
+    const auto at = std::find(order.begin(), order.end(), activeDesign());
+    const auto n = static_cast<int>(order.size());
+    const int i = at == order.end() ? 0 : static_cast<int>(at - order.begin());
+    host_.documents().setActive(order[static_cast<std::size_t>(((i + step) % n + n) % n)]);
+}
+
+// An empty, untouched design not saved anywhere (like the one SketchBillet starts with).
+static bool blankDesign(const model::Document* doc, bool saved) {
+    return doc && doc->featureCount() == 0 && !doc->isModified() && !doc->canUndo() && !saved;
+}
+
+void Shell::addDesign(std::unique_ptr<model::Document> doc, std::filesystem::path path) {
+    auto& docs = host_.documents();
+    // An empty, untouched design gives way to the one coming in.
     const DocId old = activeDesign();
+    const bool blank = blankDesign(docs.find(old), paths_.count(old) > 0);
     const DocId id = docs.add(std::move(doc));
     if (!path.empty()) paths_[id] = std::move(path);
     docs.setActive(id);
-    if (!old.isNil() && old != id) {
+    if (blank && old != id) {
         docs.close(old);
         paths_.erase(old);
     }
@@ -866,8 +950,19 @@ void Shell::replaceActive(std::unique_ptr<model::Document> doc, std::filesystem:
 }
 
 bool Shell::newDesign() {
-    if (!confirmLoseChanges()) return false;
-    replaceActive(std::make_unique<model::Document>(model::DocKind::Part, "Untitled"), {});
+    // A name no other open design has: Untitled, Untitled 2, ... (the blank design
+    // this one replaces doesn't count).
+    const DocId old = activeDesign();
+    const bool blank = blankDesign(host_.documents().find(old), paths_.count(old) > 0);
+    auto taken = [&](const QString& name) {
+        for (const auto& id : host_.documents().ids()) {
+            if (!(blank && id == old) && designTitle(id) == name) return true;
+        }
+        return false;
+    };
+    QString name = tr("Untitled");
+    for (int n = 2; taken(name); ++n) name = tr("Untitled %1").arg(n);
+    addDesign(std::make_unique<model::Document>(model::DocKind::Part, name.toStdString()), {});
     return true;
 }
 
@@ -878,11 +973,12 @@ Diagnostics Shell::openDesign(const std::filesystem::path& path) {
         return opened.issues;
     }
     if (host_.documents().find(opened.document->id())) {
-        // Already open (the same design): just show it.
+        // Already open (the same design): just show its tab.
         host_.documents().setActive(opened.document->id());
+        showMessage(tr("%1 is open already.").arg(designTitle(opened.document->id())));
         return {};
     }
-    replaceActive(std::move(opened.document), path);
+    addDesign(std::move(opened.document), path);
     showMessage(tr("Opened %1").arg(QString::fromStdWString(path.filename().wstring())));
     return {};
 }
@@ -972,9 +1068,7 @@ void Shell::setSamplesFolder(const std::filesystem::path& folder) {
     QMenu* group = nullptr;
     for (const auto& sample : samples_) {
         if (!group || group->title() != sample.group) group = samplesMenu_->addMenu(sample.group);
-        auto* a = group->addAction(sample.title, this, [this, key = sample.key] {
-            if (confirmLoseChanges()) openSample(key);
-        });
+        auto* a = group->addAction(sample.title, this, [this, key = sample.key] { openSample(key); });
         a->setObjectName(QStringLiteral("sb.shell.sample.") + sample.key);
         a->setToolTip(sample.about);
         a->setStatusTip(sample.about);
@@ -1003,7 +1097,7 @@ Diagnostics Shell::openSample(const QString& key) {
         host_.documents().setActive(opened.document->id());
         return {};
     }
-    replaceActive(std::move(opened.document), {});  // no file yet: Save asks where
+    addDesign(std::move(opened.document), {});  // no file yet: Save asks where
     showMessage(tr("Opened the sample %1. Save it to keep your changes.").arg(it->title));
     return {};
 }
@@ -1290,13 +1384,44 @@ bool Shell::selectElements(const QString& body, kernel::TopoKind kind, const QLi
 // What the window shows
 // ---------------------------------------------------------------------------
 
+void Shell::syncDesignTabs() {
+    auto* tabs = ribbon_->designTabs();
+    auto& docs = host_.documents();
+    syncingTabs_ = true;
+    // Tabs of designs that were closed go; new designs get a tab at the end.
+    for (int i = tabs->count() - 1; i >= 0; --i) {
+        const auto id = DocId::parse(tabs->tabData(i).toString().toStdString());
+        if (!id || !docs.find(*id)) tabs->removeTab(i);
+    }
+    for (const auto& id : docs.ids()) {
+        const QString key = QString::fromStdString(id.toString());
+        int at = -1;
+        for (int i = 0; i < tabs->count() && at < 0; ++i) {
+            if (tabs->tabData(i).toString() == key) at = i;
+        }
+        if (at < 0) {
+            at = tabs->addTab(QString());
+            tabs->setTabData(at, key);
+        }
+        const auto* doc = docs.find(id);
+        const QString title = designTitle(id);
+        // A * after the name: changes that aren't saved yet.
+        tabs->setTabText(at, doc && doc->isModified() ? title + QStringLiteral("*") : title);
+        const auto path = paths_.find(id);
+        tabs->setTabToolTip(at, path != paths_.end() ? QString::fromStdWString(path->second.wstring())
+                                                     : tr("%1 isn't saved yet.").arg(title));
+        if (id == docs.active()) tabs->setCurrentIndex(at);
+    }
+    syncingTabs_ = false;
+}
+
 void Shell::refresh() {
     refreshPending_ = false;
     auto& docs = host_.documents();
     const auto* doc = docs.find(activeDesign());
-    const QString name = doc ? qs(doc->name()) : tr("Untitled");
-    setWindowTitle(tr("%1[*] - SketchBillet").arg(name));
+    setWindowTitle(tr("%1[*] - SketchBillet").arg(designTitle(activeDesign())));
     setWindowModified(doc && doc->isModified());
+    syncDesignTabs();
 
     undo_->setEnabled(doc && doc->canUndo());
     redo_->setEnabled(doc && doc->canRedo());
@@ -1482,7 +1607,7 @@ int Shell::bringPanelsOnScreen() {
 }
 
 void Shell::closeEvent(QCloseEvent* event) {
-    if (!confirmLoseChanges()) {
+    if (!confirmCloseAll()) {
         event->ignore();
         return;
     }
