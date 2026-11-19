@@ -49,6 +49,18 @@ Ribbon::Ribbon(QWidget* parent) : QWidget(parent) {
     fileMenu_->setObjectName(QStringLiteral("sb.ribbon.file.menu"));
     file->setMenu(fileMenu_);
     top_->addWidget(file);
+    // The open designs, one tab each (the quick buttons go in before them).
+    designs_ = new QTabBar(top);
+    designs_->setObjectName(QStringLiteral("sb.ribbon.designs"));
+    designs_->setDocumentMode(true);
+    designs_->setExpanding(false);
+    designs_->setDrawBase(false);
+    designs_->setTabsClosable(true);
+    designs_->setMovable(true);
+    designs_->setUsesScrollButtons(true);
+    designs_->setElideMode(Qt::ElideRight);
+    designs_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    top_->addWidget(designs_, 0, Qt::AlignBottom);
     top_->addStretch(1);
     // Search tools: type part of a tool's name (or what it does), then Enter.
     search_ = new QLineEdit(top);

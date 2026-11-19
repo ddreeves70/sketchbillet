@@ -14,6 +14,15 @@
       "run --open o.sb --save o.sb feature.add_box name=Slot corner=65,24,4 size=45,12,5",
       "run --open o.sb --save o.sb feature.add_boolean name=Organizer operation=cut a=Hollow b=Slot"
     ],
+    "organizer-app": [
+      "run --save organizer.sb feature.add_box name=Base size=120,60,8",
+      "run --open organizer.sb --save organizer.sb feature.add_cylinder name=Cup base=30,30,0 radius=22 height=80",
+      "run --open organizer.sb --save organizer.sb feature.add_boolean name=Body operation=union a=Base b=Cup",
+      "run --open organizer.sb --save organizer.sb feature.add_cylinder name=PenHole base=30,30,6 radius=18 height=80",
+      "run --open organizer.sb --save organizer.sb feature.add_boolean name=Hollow operation=cut a=Body b=PenHole",
+      "run --open organizer.sb --save organizer.sb feature.add_box name=Slot corner=65,24,4 size=45,12,5",
+      "run --open organizer.sb --save organizer.sb feature.add_boolean name=Organizer operation=cut a=Hollow b=Slot"
+    ],
     "parts": [
       "run --save p.sb feature.add_box size=30,30,10",
       "run --open p.sb --save p.sb feature.add_cylinder base=30,15,0 radius=10 height=20"
@@ -675,15 +684,15 @@
     {
       "out": "docs/user-guide/images/app-main.png",
       "size": "1280x800",
-      "script": "organizer",
+      "script": "organizer-app",
       "app": {
-        "open": "o.sb",
+        "open": "organizer.sb",
         "select": [
           "PenHole"
         ]
       },
       "callouts": [
-        {"at": [230, 15], "n": 1},
+        {"at": [620, 15], "n": 1},
         {"at": [195, 45], "n": 2},
         {"at": [1250, 95], "n": 3},
         {"at": [130, 300], "n": 4},
@@ -697,8 +706,8 @@
     {
       "out": "docs/user-guide/images/app-toolbar.png",
       "size": "1280x800",
-      "script": "organizer",
-      "app": {"open": "o.sb", "select": ["PenHole"]},
+      "script": "organizer-app",
+      "app": {"open": "organizer.sb", "select": ["PenHole"]},
       "crop": [0, 0, 1280, 140]
     },
     {
@@ -1111,6 +1120,17 @@
         "file": "plate.sb",
         "name": "Sketch1"
       }
+    },
+    {
+      "out": "docs/user-guide/images/app-design-tabs.png",
+      "size": "1280x800",
+      "script": "organizer-app",
+      "commands": [
+        "run --save tag.sb feature.add_box name=Plate size=60,30,4",
+        "run --open tag.sb --save tag.sb feature.add_cylinder name=Hole base=9,15,-1 radius=2.5 height=6",
+        "run --open tag.sb --save tag.sb feature.add_boolean name=Tag operation=cut a=Plate b=Hole"
+      ],
+      "app": {"open": ["tag.sb", "organizer.sb"]}
     },
     {
       "out": "docs/user-guide/images/app-new-sketch-planes.png",

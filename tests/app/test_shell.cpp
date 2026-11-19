@@ -65,6 +65,7 @@
 #include "sb/ui/FormulaBox.h"
 #include "sb/ui/UiRegistry.h"
 #include "sb/view/FlatView.h"
+#include "sb/view/ViewWidget.h"
 #include "sb/viewer/Viewer.h"
 
 using namespace sb;
@@ -2087,11 +2088,19 @@ TEST_CASE("save, then open again", "[app]") {
 
     REQUIRE(app.shell->newDesign());
     CHECK(app.doc().featureCount() == 0);
+    // part.sb is still open in its own tab: opening it again just shows that tab.
     REQUIRE(app.shell->openDesign(path).empty());
     settle();
     CHECK(app.doc().featureCount() == 1);
     CHECK(app.tree()->topLevelItem(0)->text(0) == QStringLiteral("Box1"));
-    CHECK(app.host.documents().ids().size() == 1);  // one design at a time
+    CHECK(app.host.documents().ids().size() == 2);
+
+    // Closed, then opened from the file.
+    REQUIRE(app.shell->closeDesign(app.shell->activeDesign()));
+    REQUIRE(app.shell->openDesign(path).empty());
+    settle();
+    CHECK(app.doc().featureCount() == 1);
+    CHECK(app.shell->designTitle(app.shell->activeDesign()) == QStringLiteral("part"));
 }
 
 namespace {
@@ -2379,8 +2388,191 @@ TEST_CASE("unsaved changes: cancel keeps the design", "[app]") {
     App app;
     app.click("sb.modeling.box");
     app.shell->askUnsaved = [](const QString&) { return app::Shell::Unsaved::Cancel; };
-    CHECK_FALSE(app.shell->newDesign());
+    CHECK_FALSE(app.shell->closeDesign(app.shell->activeDesign()));
     CHECK(app.doc().featureCount() == 1);
+    CHECK_FALSE(app.shell->close());  // quitting is cancelled too
+    CHECK(app.shell->isVisible());
+}
+
+namespace {
+
+QTabBar* designTabs(App& app) {
+    return app.shell->findChild<QTabBar*>(QStringLiteral("sb.ribbon.designs"));
+}
+
+QStringList tabTexts(QTabBar* tabs) {
+    QStringList texts;
+    for (int i = 0; i < tabs->count(); ++i) texts << tabs->tabText(i);
+    return texts;
+}
+
+}  // namespace
+
+TEST_CASE("several designs are open at once, each in its own tab", "[app][designs][gl]") {
+    App app;
+    auto* tabs = designTabs(app);
+    REQUIRE(tabs);
+    CHECK(tabTexts(tabs) == QStringList{QStringLiteral("Untitled")});
+
+    app.click("sb.modeling.box");
+    const DocId first = app.shell->activeDesign();
+    CHECK(tabTexts(tabs) == QStringList{QStringLiteral("Untitled*")});  // * : not saved
+
+    // New keeps the first design open, beside the new one, and gives it a name of its own.
+    REQUIRE(app.shell->newDesign());
+    settle();
+    const DocId second = app.shell->activeDesign();
+    CHECK(second != first);
+    CHECK(tabTexts(tabs) == QStringList({QStringLiteral("Untitled*"), QStringLiteral("Untitled 2")}));
+    CHECK(tabs->currentIndex() == 1);
+    CHECK(app.doc().featureCount() == 0);
+    CHECK(app.shell->windowTitle() == QStringLiteral("Untitled 2[*] - SketchBillet"));
+
+    // Clicking a tab shows that design: its steps in the tree, its name in the title bar.
+    tabs->setCurrentIndex(0);
+    settle();
+    CHECK(app.shell->activeDesign() == first);
+    REQUIRE(app.tree()->topLevelItemCount() == 1);
+    CHECK(app.tree()->topLevelItem(0)->text(0) == QStringLiteral("Box1"));
+    CHECK(app.shell->windowTitle() == QStringLiteral("Untitled[*] - SketchBillet"));
+
+    // Undo works on the design that's showing.
+    app.shell->undoAction()->trigger();
+    settle();
+    CHECK(app.doc().featureCount() == 0);
+    CHECK(app.host.documents().find(second)->featureCount() == 0);
+    app.shell->redoAction()->trigger();
+    settle();
+
+    // Ctrl+Tab goes round them.
+    app.shell->nextDesign(1);
+    settle();
+    CHECK(app.shell->activeDesign() == second);
+    CHECK(tabs->currentIndex() == 1);
+    app.shell->nextDesign(1);
+    settle();
+    CHECK(app.shell->activeDesign() == first);
+    app.shell->nextDesign(-1);
+    settle();
+    CHECK(app.shell->activeDesign() == second);
+    CHECK(app.menu("sb.shell.nextdesign")->shortcuts().contains(QKeySequence(Qt::CTRL | Qt::Key_Tab)));
+
+    // Each design keeps its own camera. (Only with 3D graphics, as the app.gl test
+    // runs this: the flat view, used without them, has no camera.)
+    auto* view = app.shell->findChild<view::ViewWidget*>();
+    if (qEnvironmentVariableIsSet("SB_SCREEN")) REQUIRE((view && view->ready()));
+    if (view && view->ready()) {
+        REQUIRE(app.shell->activeDesign() == second);
+        view->setStandardView(view::StandardView::Top);
+        settle();
+        const auto top = view->camera();
+        app.shell->nextDesign(1);  // to the first design
+        settle();
+        view->setStandardView(view::StandardView::Front);
+        settle();
+        app.shell->nextDesign(1);  // back to the second: still from the top
+        settle();
+        CHECK(view->camera().toEye.z == Catch::Approx(top.toEye.z).margin(1e-6));
+        app.shell->nextDesign(1);  // and the first: still from the front
+        settle();
+        CHECK(view->camera().toEye.y == Catch::Approx(-1).margin(1e-6));
+        app.shell->nextDesign(1);
+        settle();
+    }
+
+    // Steps copied in one design paste into another (the user's guide's tip).
+    app.shell->nextDesign(1);
+    settle();
+    REQUIRE(app.shell->activeDesign() == first);
+    app.pickRows({0});
+    app.shell->copyAction()->trigger();
+    app.shell->nextDesign(1);
+    settle();
+    REQUIRE(app.shell->activeDesign() == second);
+    app.shell->pasteAction()->trigger();
+    settle();
+    CHECK(app.doc().featureCount() == 1);
+    CHECK(app.host.documents().find(first)->featureCount() == 1);
+    app.shell->undoAction()->trigger();  // the second design empty again
+    settle();
+    app.shell->nextDesign(1);
+    settle();
+
+    // A tab's x closes its design; one with no changes closes without asking.
+    int asked = 0;
+    app.shell->askUnsaved = [&](const QString&) {
+        ++asked;
+        return app::Shell::Unsaved::Discard;
+    };
+    emit tabs->tabCloseRequested(1);
+    settle();
+    CHECK(asked == 0);
+    CHECK(tabTexts(tabs) == QStringList{QStringLiteral("Untitled*")});
+    CHECK(app.shell->activeDesign() == first);
+}
+
+TEST_CASE("opening a file takes the place of the empty design SketchBillet starts with", "[app][designs]") {
+    App app;
+    app.click("sb.modeling.box");
+    const auto path = app.dir.filePath(QStringLiteral("bracket.sb")).toStdWString();
+    REQUIRE(app.shell->saveDesign(path).empty());
+    REQUIRE(app.shell->closeDesign(app.shell->activeDesign()));
+    settle();
+    auto* tabs = designTabs(app);
+    // Closing the last design leaves an empty one, so Create still works.
+    CHECK(tabTexts(tabs) == QStringList{QStringLiteral("Untitled")});
+
+    REQUIRE(app.shell->openDesign(path).empty());
+    settle();
+    CHECK(app.host.documents().ids().size() == 1);
+    CHECK(tabTexts(tabs) == QStringList{QStringLiteral("bracket")});  // the file's name
+    CHECK(tabs->tabToolTip(0) == QString::fromStdWString(path));
+    CHECK(app.shell->windowTitle() == QStringLiteral("bracket[*] - SketchBillet"));
+
+    // A design with steps in it isn't replaced: the next one opens beside it.
+    REQUIRE(app.shell->newDesign());
+    settle();
+    CHECK(tabTexts(tabs) == QStringList({QStringLiteral("bracket"), QStringLiteral("Untitled")}));
+}
+
+TEST_CASE("closing and quitting ask about each design with unsaved changes", "[app][designs]") {
+    App app;
+    app.click("sb.modeling.box");
+    REQUIRE(app.shell->newDesign());
+    settle();
+    app.click("sb.modeling.cylinder");
+    REQUIRE(app.shell->newDesign());  // a third, with no changes
+    settle();
+    auto* tabs = designTabs(app);
+    REQUIRE(tabs->count() == 3);
+
+    // Quitting asks about each design with changes, showing it while it asks;
+    // Cancel on the second stops, and everything stays open.
+    QStringList asked;
+    app.shell->askUnsaved = [&](const QString& name) {
+        asked << name + QStringLiteral(" showing ") + app.shell->designTitle(app.shell->activeDesign());
+        return asked.size() == 1 ? app::Shell::Unsaved::Discard : app::Shell::Unsaved::Cancel;
+    };
+    CHECK_FALSE(app.shell->close());
+    CHECK(asked == QStringList({QStringLiteral("Untitled showing Untitled"),
+                                QStringLiteral("Untitled 2 showing Untitled 2")}));
+    CHECK(app.host.documents().ids().size() == 3);
+
+    // Save, from the question, saves that design and then closes it.
+    const auto path = app.dir.filePath(QStringLiteral("round.sb"));
+    app.shell->askSavePath = [&](const QString&) { return path; };
+    app.shell->askUnsaved = [](const QString&) { return app::Shell::Unsaved::Save; };
+    tabs->setCurrentIndex(1);
+    settle();
+    REQUIRE(app.shell->closeDesign(app.shell->activeDesign()));
+    settle();
+    CHECK(QFile::exists(path));
+    CHECK(tabs->count() == 2);
+    // File > Close closes the design that's showing.
+    app.shell->askUnsaved = [](const QString&) { return app::Shell::Unsaved::Discard; };
+    app.menu("sb.shell.close")->trigger();
+    settle();
+    CHECK(tabs->count() == 1);
 }
 
 TEST_CASE("opening a file that isn't a design explains why", "[app]") {

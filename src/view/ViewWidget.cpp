@@ -307,7 +307,8 @@ struct ViewWidget::Impl {
     Ray dragStart;                              // the line of sight when it was pressed
     kernel::Vec3 dragBy{};                      // how far it has been dragged
     bool fitPending = true;
-    bool everShown = false;  // has the view had a body to fit yet?
+    bool everShown = false;                 // has the view had a body to fit yet?
+    std::optional<CameraPlace> placeLater;  // a camera place given before the view was made
     bool ready = false;
     bool clickAdds = false;  // the last click had Ctrl or Shift held
     DisplayStyle style = DisplayStyle::ShadedWithEdges;
@@ -324,6 +325,15 @@ struct ViewWidget::Impl {
         context->Redisplay(obj, false);
     }
     QString problem;
+
+    void place(const CameraPlace& p) {
+        const Handle(Graphic3d_Camera)& cam = view->Camera();
+        cam->SetEyeAndCenter(gp_Pnt(p.eye.x, p.eye.y, p.eye.z), gp_Pnt(p.at.x, p.at.y, p.at.z));
+        cam->SetUp(gp_Dir(p.up.x, p.up.y, p.up.z));
+        cam->SetScale(p.scale);
+        view->ZFitAll();
+        fitPending = false;
+    }
 
     void fit() {
         Bnd_Box box;
@@ -1009,6 +1019,43 @@ ViewDirection ViewWidget::camera() const {
     return {{-look.X(), -look.Y(), -look.Z()}, {up.X(), up.Y(), up.Z()}};
 }
 
+CameraPlace ViewWidget::cameraPlace() const {
+    const auto& d = *impl_;
+    if (d.placeLater) return *d.placeLater;
+    if (!d.view) return {};
+    const Handle(Graphic3d_Camera)& cam = d.view->Camera();
+    const gp_Pnt eye = cam->Eye();
+    const gp_Pnt at = cam->Center();
+    const gp_Dir up = cam->Up();
+    return {{eye.X(), eye.Y(), eye.Z()}, {at.X(), at.Y(), at.Z()}, {up.X(), up.Y(), up.Z()}, cam->Scale()};
+}
+
+void ViewWidget::setCameraPlace(const CameraPlace& place) {
+    auto& d = *impl_;
+    if (place.scale <= 0) return;
+    d.everShown = true;  // the camera is where it should be: no fitting to the first body
+    d.fitPending = false;
+    if (!d.view) {
+        d.placeLater = place;
+        return;
+    }
+    d.controller.AbortViewAnimation();
+    try {
+        d.place(place);
+    } catch (const Standard_Failure&) {
+        d.fitPending = true;  // a place OCCT can't use (the eye on the point looked at): fit instead
+    }
+    update();
+}
+
+void ViewWidget::fitWhenShown() {
+    auto& d = *impl_;
+    d.placeLater.reset();
+    d.everShown = false;  // setContent() fits once there's a body to show
+    d.fitPending = false;
+    update();
+}
+
 const SceneContent& ViewWidget::content() const {
     return impl_->content;
 }
@@ -1110,6 +1157,10 @@ void ViewWidget::paintGL() {
                                           .arg(QString::fromStdString(why))
                                           .arg(defaultFramebufferObject()))));
             return;
+        }
+        if (d.placeLater) {
+            d.place(*d.placeLater);
+            d.placeLater.reset();
         }
         if (d.fitPending) d.fit();
         // Handles sized in pixels stay that size when the view zooms.

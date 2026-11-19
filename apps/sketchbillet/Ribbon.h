@@ -21,10 +21,9 @@ class QToolButton;
 namespace sb::app {
 
 // The toolbar at the top of the window: a row with File, New, Open, Save, Undo
-// and Redo and a Help button, then tabs (Model, Sketch, Inspect, View), each
-// with panels of buttons. Every panel has its name underneath, with a dropdown
-// of everything in it (Create ▾), like Fusion's toolbar. A tab can have one main
-// button at its right end (Finish sketch).
+// and Redo, a tab for each open design, search and a Help button, then tabs (Model, Sketch, Inspect, View),
+// each with panels of buttons. Every panel has its name underneath, with a dropdown of everything in it
+// (Create ▾), like Fusion's toolbar. A tab can have one main button at its right end (Finish sketch).
 //
 // Students can pin any tool in a panel's dropdown to the panel as a button, or
 // unpin a button, by right-clicking it; pins are kept as keys like
@@ -44,6 +43,9 @@ public:
     QMenu* helpMenu() const { return helpMenu_; }
     // Adds a small button to the top row, after File (New, Open, Save, Undo, Redo).
     void addQuick(QAction* action);
+    // The open designs, one tab each, in the top row after the quick buttons
+    // ("sb.ribbon.designs"). The shell fills it; each tab's data is the design's id.
+    QTabBar* designTabs() const { return designs_; }
 
     // Search tools: the box in the top row (and S, from anywhere in the window)
     // finds any tool by its name or its tip, and runs it. Tools that can't be
@@ -154,6 +156,7 @@ private:
     QHBoxLayout* top_ = nullptr;
     int quickAt_ = 1;  // where the next quick button goes in the top row
     QTabBar* bar_ = nullptr;
+    QTabBar* designs_ = nullptr;
     QStackedWidget* pages_ = nullptr;
     std::deque<Tab> tabs_;  // a deque, so a Tab& stays good as more are added
     QStringList order_;

@@ -98,6 +98,20 @@ public:
     /// @return Unit vectors, from the point looked at towards the camera, and up.
     ViewDirection camera() const;
 
+    /// Gives where the camera is and how far it's zoomed, to put back later with
+    /// setCameraPlace().
+    /// @return The camera's place, or one with a scale of 0 before the view has drawn.
+    CameraPlace cameraPlace() const;
+
+    /// Puts the camera back where cameraPlace() said it was. The view doesn't zoom
+    /// to fit afterwards, even the first time it has something to show.
+    /// @param place The place; one with a scale of 0 is ignored.
+    void setCameraPlace(const CameraPlace& place);
+
+    /// Zooms to fit the next time setContent() has something to show, as a new
+    /// view does: call it before showing another design whose camera isn't known yet.
+    void fitWhenShown();
+
     /// Gives what the view shows.
     /// @return The content last given to setContent().
     const SceneContent& content() const;

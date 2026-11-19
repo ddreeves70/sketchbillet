@@ -1,7 +1,8 @@
 # Assemblies
 
 > **Draft, for review.** Phase 4's first item (see the [roadmap](roadmap.md)).
-> Nothing on this page is built yet. Two choices were made on Nov 13, 2026: an
+> Building it, step 1 (several designs open at once) is built (Nov 19, 2026);
+> the rest isn't yet. Two choices were made on Nov 13, 2026: an
 > assembly's parts can live **inside** the assembly file or be **linked** to
 > other files, from the start; and parts move along **chains** of joints first,
 > with loops (like a four-bar linkage) later. Changes to `sb_model`, naming and
@@ -398,7 +399,9 @@ Each line is one pull request, in this order:
 
 1. **Several designs open at once** in the desktop app (tabs), needed to open a
    linked part beside its assembly. Useful on its own: a part and its drawing,
-   two parts to copy between.
+   two parts to copy between. **Built** (Nov 19, 2026): a tab for each design in
+   the top row, File > Close, Ctrl+Tab, and a camera kept for each design (see
+   [the user's guide](../user-guide/desktop-app.md#several-designs-at-once)).
 2. **Assembly documents** with inside parts and free or grounded components:
    `sb_model`, `sb_io` (schema 2), `assembly.new`, `component.new`,
    `component.insert`, `open --components`.

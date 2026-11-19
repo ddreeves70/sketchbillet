@@ -27,6 +27,8 @@ An "app" recipe takes a screenshot of the desktop app instead (pass --sketchbill
                                 "trigger": ["sb.viewer.layout.fourpanes"], "flat": false},
      "crop": [x, y, width, height], "callouts": [{"at": [x, y], "n": 1}]}   both optional
 
+"open" can be a list of designs, each opened in its own tab; the last one shows.
+
 A "part" recipe pictures one of the reference parts in tests/reference/: it runs
 the part's steps and shows its "show" step, so the recipe needs no commands:
 
@@ -240,7 +242,9 @@ def main():
                 argv = [str(Path(args.sketchbillet_app).resolve()), "--settings", str(Path(tmp) / "settings.ini"),
                         "--screenshot", str(out)]
                 if "open" in app:
-                    argv += ["--open", app["open"]]
+                    # One design, or a list of them, each opened in its own tab.
+                    for design in [app["open"]] if isinstance(app["open"], str) else app["open"]:
+                        argv += ["--open", design]
                 if "select" in app:
                     argv += ["--select", ",".join(app["select"])]
                 if "trigger" in app:
