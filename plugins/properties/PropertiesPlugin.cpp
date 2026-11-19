@@ -77,13 +77,27 @@ QString massText(double grams) {
                         : QObject::tr("%1 kg").arg(grams / 1000, 0, 'f', 3);
 }
 
-// Asks for a new material's numbers. Returns false if cancelled.
-bool askNewMaterial(QWidget* parent, model::Material& m) {
+// Asks for a material's numbers: a new one's (`editing` false), or changes to
+// `m`, one of the design's own (its name stays). Returns false if cancelled.
+// Object names, for tests: the window "sb.properties.materialdialog", and its
+// boxes "name", "density", "color", "youngs", "poisson", "yield" and "price".
+bool askMaterial(QWidget* parent, model::Material& m, bool editing) {
     QDialog dialog(parent);
-    dialog.setWindowTitle(QObject::tr("New material"));
+    dialog.setObjectName(QStringLiteral("sb.properties.materialdialog"));
+    dialog.setWindowTitle(editing ? QObject::tr("Edit %1").arg(QString::fromStdString(m.name))
+                                  : QObject::tr("New material"));
     auto* form = new QFormLayout(&dialog);
     auto* name = new QLineEdit(&dialog);
+    name->setObjectName(QStringLiteral("name"));
     name->setPlaceholderText(QObject::tr("For example: Blue PETG"));
+    if (editing) {
+        // Changing the name would make another material: New material is for that.
+        name->setText(QString::fromStdString(m.name));
+        name->setReadOnly(true);
+        name->setToolTip(
+            QObject::tr("A material keeps its name. To make one with another name, pick New "
+                        "material... in the Material list."));
+    }
     auto number = [&dialog](double max, int decimals, const QString& suffix) {
         auto* s = new QDoubleSpinBox(&dialog);
         s->setRange(0, max);
@@ -93,14 +107,26 @@ bool askNewMaterial(QWidget* parent, model::Material& m) {
         return s;
     };
     auto* density = number(25, 3, QObject::tr(" g/cm³"));
-    density->setValue(1.24);
+    density->setObjectName(QStringLiteral("density"));
+    density->setValue(editing ? m.density : 1.24);
     auto* youngs = number(1000, 2, QObject::tr(" GPa"));
+    youngs->setObjectName(QStringLiteral("youngs"));
     auto* poisson = number(0.5, 3, QString());
+    poisson->setObjectName(QStringLiteral("poisson"));
     auto* yield = number(5000, 0, QObject::tr(" MPa"));
+    yield->setObjectName(QStringLiteral("yield"));
     auto* cost = number(100000, 2, QObject::tr(" per kg"));
+    cost->setObjectName(QStringLiteral("price"));
     cost->setPrefix(QStringLiteral("$"));
-    QColor color(120, 170, 220);
+    if (editing) {
+        youngs->setValue(m.youngsModulus);
+        poisson->setValue(m.poissonsRatio);
+        yield->setValue(m.yieldStrength);
+        cost->setValue(m.costPerKg);
+    }
+    QColor color = editing ? QColor(m.color.r, m.color.g, m.color.b) : QColor(120, 170, 220);
     auto* colorButton = new QPushButton(&dialog);
+    colorButton->setObjectName(QStringLiteral("color"));
     auto showColor = [colorButton, &color] {
         colorButton->setText(color.name());
         colorButton->setStyleSheet(QStringLiteral("background: %1").arg(color.name()));
@@ -123,7 +149,7 @@ bool askNewMaterial(QWidget* parent, model::Material& m) {
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     if (dialog.exec() != QDialog::Accepted) return false;
-    m.name = name->text().trimmed().toStdString();
+    if (!editing) m.name = name->text().trimmed().toStdString();
     m.density = density->value();
     m.color = {static_cast<std::uint8_t>(color.red()), static_cast<std::uint8_t>(color.green()),
                static_cast<std::uint8_t>(color.blue())};
@@ -1402,7 +1428,14 @@ private:
         material->setObjectName(QStringLiteral("material"));
         material->setToolTip(
             tr("What this step's body is made of. It sets the mass, weight, cost and color."));
-        form->addRow(tr("Material"), material);
+        auto* edit = new QPushButton(tr("Edit..."), form_);
+        edit->setObjectName(QStringLiteral("editmaterial"));
+        auto* row = new QHBoxLayout;
+        row->setContentsMargins(0, 0, 0, 0);
+        row->addWidget(material, 1);
+        row->addWidget(edit);
+        form->addRow(tr("Material"), row);
+        connect(edit, &QPushButton::clicked, this, [this] { editMaterial(); });
         auto* info = new QLabel(form_);
         info->setObjectName(QStringLiteral("materialinfo"));
         info->setWordWrap(true);
@@ -1432,7 +1465,7 @@ private:
             }
         });
 
-        updaters_.push_back([this, material, info, volume, mass, cost](const model::Feature& g) {
+        updaters_.push_back([this, material, edit, info, volume, mass, cost](const model::Feature& g) {
             const auto* doc = design();
             if (!doc) return;
             // The first item: what the body gets when nothing is picked for it.
@@ -1459,6 +1492,15 @@ private:
             material->setCurrentIndex(at < 0 ? 0 : at);
 
             const auto& m = doc->materialOf(g.id());
+            // Only the design's own materials can be changed; SketchBillet's stay as they are.
+            edit->setEnabled(!m.builtin);
+            edit->setToolTip(m.builtin ? tr("%1 is one of SketchBillet's own materials, so it can't be "
+                                            "changed. To use other numbers or another color, pick New "
+                                            "material... in the list.")
+                                             .arg(qs(m.name))
+                                       : tr("Change %1's color, density or price. Every body made of "
+                                            "%1 changes too.")
+                                             .arg(qs(m.name)));
             auto known = [](double v, const QString& text) { return v > 0 ? text : tr("unknown"); };
             info->setText(
                 tr("%1: density %2 g/cm³, stiffness %3, Poisson's ratio %4, yield strength %5, price %6")
@@ -1500,9 +1542,24 @@ private:
         schedule();
     }
 
+    // Changes the picked body's material (one of the design's own), for every body made of it.
+    void editMaterial() {
+        const auto* f = selected();
+        const auto* doc = design();
+        if (!f || !doc) return;
+        model::Material m = doc->materialOf(f->id());
+        if (m.builtin) return;
+        const model::Material was = m;
+        if (!askMaterial(this, m, true) || m == was) return;
+        auto problems = ctx_.documents().execute(ctx_.selection().doc(),
+                                                 std::make_unique<model::DefineMaterialCommand>(m));
+        if (!problems.empty()) ui_.showProblems(problems);
+        schedule();
+    }
+
     void newMaterial() {
         model::Material m;
-        if (!askNewMaterial(this, m)) {
+        if (!askMaterial(this, m, false)) {
             schedule();  // put the combo back
             return;
         }
