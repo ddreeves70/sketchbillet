@@ -168,7 +168,9 @@ class PluginContext;
 /// and plugin::OverlayDimension) and boxes to type numbers in the viewers
 /// (sb.viewer/5: viewer::NumberBox, viewer::INumberUser, IViewer::askNumbers() and
 /// clearNumbers()), which the sketcher uses to change a dimension that's clicked.
-inline constexpr int kPluginApiVersion = 57;
+/// Version 58 added ui::PanelSpec::icon: a panel with a picture gets a button in the
+/// Panels group of the View tab.
+inline constexpr int kPluginApiVersion = 58;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

@@ -7,3 +7,5 @@ sb_add_library(sb_plugin_properties
     sb::plugin
     sb::model
 )
+sb_embed_files(sb_plugin_properties HEADER PropertiesIcons.h NAMESPACE sb::icons::properties
+  FILES icons/properties.svg)

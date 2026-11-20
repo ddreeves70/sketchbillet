@@ -31,6 +31,7 @@
 #include <variant>
 #include <vector>
 
+#include "PropertiesIcons.h"
 #include "sb/model/Commands.h"
 #include "sb/model/ConstructionPlane.h"
 #include "sb/model/Document.h"
@@ -1862,6 +1863,7 @@ void registerProperties(plugin::PluginContext& ctx) {
                            return new Scroller(p);
                        }};
     spec.floatsOverView = true;  // at the view's top right
+    spec.icon = std::string(icons::properties::properties_svg);
     ui->addPanel(std::move(spec));
     ctx.addAction(plugin::ActionSpec{.id = "sb.properties.change_edges",
                                      .text = "Change edges",

@@ -77,6 +77,9 @@ public:
     // `button` (its shorter words; may be `item` itself), shown when `onPanel`
     // unless the student unpinned it, or when they pinned it.
     void addTool(const QString& tab, const QString& panel, QAction* item, QAction* button, bool onPanel);
+    // Adds a button that runs `action` to the panel, and nothing to its dropdown
+    // (for things the dropdown already has its own way, like opening panels).
+    void addButton(const QString& tab, const QString& panel, QAction* action);
     // Adds "Right-click a tool to pin it" at the end of every dropdown with tools.
     // Call once every tool is added.
     void addPinHints();

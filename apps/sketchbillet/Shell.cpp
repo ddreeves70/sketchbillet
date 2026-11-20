@@ -446,6 +446,19 @@ void Shell::buildMenus() {
     // View > Panels and View > Layout: show and hide panels, and saved layouts.
     windowMenu_ = ribbon_->panelMenu(tr("View"), tr("Panels"));
     layoutMenu_ = ribbon_->panelMenu(tr("View"), tr("Layout"));
+    auto* saveLayoutButton = new QAction(svgIcon(icons::app::save_layout_svg), tr("Save layout"), this);
+    saveLayoutButton->setObjectName(QStringLiteral("sb.shell.save_layout"));
+    saveLayoutButton->setToolTip(
+        tr("Save how the panels are arranged, under a name, to open again from Layout."));
+    saveLayoutButton->setStatusTip(saveLayoutButton->toolTip());
+    connect(saveLayoutButton, &QAction::triggered, this, [this] { saveLayoutAs(); });
+    ribbon_->addButton(tr("View"), tr("Layout"), saveLayoutButton);
+    auto* resetLayoutButton = new QAction(svgIcon(icons::app::reset_layout_svg), tr("Reset layout"), this);
+    resetLayoutButton->setObjectName(QStringLiteral("sb.shell.reset_layout"));
+    resetLayoutButton->setToolTip(tr("Put every panel back where it started."));
+    resetLayoutButton->setStatusTip(resetLayoutButton->toolTip());
+    connect(resetLayoutButton, &QAction::triggered, this, [this] { resetLayout(); });
+    ribbon_->addButton(tr("View"), tr("Layout"), resetLayoutButton);
 
     helpMenu_ = ribbon_->helpMenu();
     auto* about = helpMenu_->addAction(tr("&About SketchBillet"), this, [this] {
@@ -530,6 +543,7 @@ void Shell::buildPanels() {
         Overlay o;
         o.dock = dock;
         o.shown = !spec->startHidden;
+        o.startsShown = o.shown;
         o.frame = new ViewOverlay(spec->title, viewDock, right);
         o.frame->setObjectName(QStringLiteral("sb.shell.overlay.") + id);
         o.frame->topInset = [this, viewDock, id, right] {
@@ -603,6 +617,24 @@ void Shell::buildPanels() {
         setOverView(id, settings_.value(panelKey(id, "overView"), true).toBool());
     }
     windowMenu_->addSeparator();
+    // A button in the Panels group for each panel with a picture: it opens and closes
+    // the panel, wherever it is (floating over the view or docked).
+    for (const auto* spec : specs) {
+        if (spec->icon.empty()) continue;
+        const QString id = qs(spec->id);
+        auto* dock = docks_->findDockWidget(id);
+        if (!dock) continue;
+        auto* b = new QAction(svgIcon(spec->icon), spec->title, this);
+        b->setObjectName(QStringLiteral("sb.shell.panel.") + id);
+        b->setCheckable(true);
+        b->setToolTip(tr("Open or close the %1 panel.").arg(spec->title.toLower()));
+        b->setStatusTip(b->toolTip());
+        connect(b, &QAction::triggered, this, [this, id](bool on) { openPanel(id, on); });
+        connect(dock, &ads::CDockWidget::viewToggled, this, [this, id] { syncPanelButton(id); });
+        ribbon_->addButton(tr("View"), tr("Panels"), b);
+        panelButtons_[id] = b;
+        syncPanelButton(id);
+    }
     for (const auto* spec : specs) {
         if (!spec->allowMultiple) continue;
         const QString id = qs(spec->id);
@@ -645,18 +677,20 @@ QString Shell::openAnotherPanel(const QString& id) {
     return {};
 }
 
+void Shell::saveLayoutAs() {
+    bool ok = false;
+    const auto name = QInputDialog::getText(this, tr("Save layout"), tr("Name for this layout:"),
+                                            QLineEdit::Normal, tr("My layout"), &ok);
+    if (ok && !name.trimmed().isEmpty()) saveNamedLayout(name.trimmed());
+}
+
 void Shell::rebuildLayoutMenu() {
     layoutMenu_->clear();
     for (const auto& name : layoutNames()) {
         layoutMenu_->addAction(name, this, [this, name] { openNamedLayout(name); });
     }
     if (!layoutNames().isEmpty()) layoutMenu_->addSeparator();
-    layoutMenu_->addAction(tr("Save layout as..."), this, [this] {
-        bool ok = false;
-        const auto name = QInputDialog::getText(this, tr("Save layout"), tr("Name for this layout:"),
-                                                QLineEdit::Normal, tr("My layout"), &ok);
-        if (ok && !name.trimmed().isEmpty()) saveNamedLayout(name.trimmed());
-    });
+    layoutMenu_->addAction(tr("Save layout as..."), this, [this] { saveLayoutAs(); });
     layoutMenu_->addAction(tr("Reset layout"), this, [this] { resetLayout(); });
     auto* resetTools =
         layoutMenu_->addAction(tr("Reset toolbar buttons"), this, [this] { ribbon_->resetPins(); });
@@ -1510,6 +1544,7 @@ void Shell::setOverView(const QString& id, bool over) {
     o.over->setChecked(over);
     showOverlay(id, over && o.shown);
     settings_.setValue(panelKey(id, "overView"), over);
+    syncPanelButton(id);
 }
 
 bool Shell::overView(const QString& id) const {
@@ -1536,6 +1571,28 @@ void Shell::showPanel(const QString& id, bool show) {
     }
 }
 
+void Shell::openPanel(const QString& id, bool open) {
+    // A docked panel that was closed opens where it starts, as from Panels > title.
+    if (auto it = overlays_.find(id);
+        open && it != overlays_.end() && !it->second.frame->body() && it->second.dock->isClosed()) {
+        setOverView(id, true);
+    }
+    showPanel(id, open);
+    syncPanelButton(id);
+}
+
+void Shell::syncPanelButton(const QString& id) {
+    auto b = panelButtons_.find(id);
+    if (b == panelButtons_.end()) return;
+    bool open = false;
+    if (auto o = overlays_.find(id); o != overlays_.end() && o->second.frame->body()) {
+        open = o->second.shown;
+    } else if (const auto* dock = docks_->findDockWidget(id)) {
+        open = !dock->isClosed();
+    }
+    b->second->setChecked(open);
+}
+
 void Shell::showOverlay(const QString& id, bool show) {
     auto& o = overlays_.at(id);
     if (o.frame->body()) o.shown = show;
@@ -1543,6 +1600,7 @@ void Shell::showOverlay(const QString& id, bool show) {
     o.frame->setVisible(show);
     if (show) o.frame->place();
     placeOverlaysAfter(id);  // the ones under it move up or down
+    syncPanelButton(id);
 }
 
 void Shell::placeOverlaysAfter(const QString& id) {
@@ -1613,6 +1671,7 @@ void Shell::resetLayout() {
         settings_.remove(panelKey(id, "overlaySize"));
         settings_.remove(panelKey(id, "overlayFolded"));
         setOverView(id, true);
+        showOverlay(id, o.startsShown);  // open, or closed, as when SketchBillet starts
     }
 }
 

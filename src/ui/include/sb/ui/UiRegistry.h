@@ -45,6 +45,10 @@ struct PanelSpec {
     /// no more of the view than its rows need; call `updateGeometry()` when they
     /// change), up to the size the student drags it to.
     bool floatsOverView = false;
+    /// A picture for the panel's button in the Panels group of the View tab, SVG text as for
+    /// plugin::ActionSpec::icon. With one, the panel gets a button there that opens and
+    /// closes it; without one, it's only in the group's dropdown.
+    std::string icon{};
 };
 
 /// Something a plugin shows in the desktop app's status bar, at the bottom right.

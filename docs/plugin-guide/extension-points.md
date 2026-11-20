@@ -863,6 +863,15 @@ void registerNotes(sb::plugin::PluginContext& ctx) {
   ui->addPanel(std::move(spec));
   ```
 
+- **A button on the View tab.** Give the panel a picture and it gets a button
+  in the **Panels** group of the View tab, which opens and closes it, highlighted
+  while it's open. Without one, the panel is only in that group's dropdown. The
+  picture is SVG text, built in with `sb_embed_files()` as for toolbar icons:
+
+  ```cpp
+  spec.icon = std::string(sam::icons::notes::notes_svg);  // Panels > Notes is a button too
+  ```
+
 - **Icons on your own buttons.** `ui->icon(svg)` turns an SVG picture into an
   icon drawn like SketchBillet's toolbar icons (`currentColor` becomes the theme's text
   color). Build the SVG in with `sb_embed_files()`, as for toolbar icons:

@@ -8,4 +8,4 @@ sb_add_library(sb_plugin_featuretree
     sb::model
 )
 sb_embed_files(sb_plugin_featuretree HEADER FeatureTreeIcons.h NAMESPACE sb::icons::featuretree
-  FILES icons/settings.svg)
+  FILES icons/settings.svg icons/feature_tree.svg)
