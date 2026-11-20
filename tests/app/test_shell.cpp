@@ -50,7 +50,9 @@
 #include "Ribbon.h"
 #include "Shell.h"
 #include "sb/grid/Grid.h"
+#include "sb/io/SketchBilletFile.h"
 #include "sb/kernel_occt/OcctKernel.h"
+#include "sb/model/AssemblyCommands.h"
 #include "sb/model/ConstructionPlane.h"
 #include "sb/model/Feature.h"
 #include "sb/model/Holes.h"
@@ -2818,6 +2820,20 @@ TEST_CASE("a body is its material's color until it's given its own", "[app][mate
     app.shell->undoAction()->trigger();
     settle();
     CHECK(app.doc().colorOf(cylinder) == model::Color{208, 48, 48});
+}
+
+TEST_CASE("an assembly doesn't open in the app yet, and says how to see it", "[app][assembly]") {
+    App app;
+    model::Document car(model::DocKind::Part, "Car");
+    REQUIRE(car.execute(std::make_unique<model::MakeAssemblyCommand>()).empty());
+    const auto path = app.dir.filePath(QStringLiteral("car.sb")).toStdWString();
+    REQUIRE(io::writeFile(car, path).empty());
+    const auto problems = app.shell->openDesign(path);
+    REQUIRE(problems.size() == 1);
+    CHECK(problems[0].code == "assembly.app");
+    CHECK(problems[0].message.find("sketchbillet_cli open car.sb --components") != std::string::npos);
+    CHECK(app.host.documents().ids().size() == 1);  // still just the empty design it started with
+    CHECK(app.doc().kind() == model::DocKind::Part);
 }
 
 TEST_CASE("opening a file that isn't a design explains why", "[app]") {

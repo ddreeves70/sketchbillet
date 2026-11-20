@@ -10,6 +10,7 @@
 #include "sb/core/Diagnostic.h"
 #include "sb/core/Id.h"
 #include "sb/core/Units.h"
+#include "sb/model/Assembly.h"
 #include "sb/model/Feature.h"
 #include "sb/model/Folder.h"
 #include "sb/model/Material.h"
@@ -18,6 +19,7 @@
 namespace sb::model {
 
 class Document;
+enum class DocKind;
 
 /// Write access to a Document, given only to Commands.
 ///
@@ -77,6 +79,24 @@ public:
     /// Changes the unit the design shows its lengths in (see Document::lengthUnit()).
     /// @param unit The unit.
     void setLengthUnit(LengthUnit unit);
+
+    /// Makes the design a part or an assembly (MakeAssemblyCommand).
+    /// @param kind The kind.
+    void setKind(DocKind kind);
+
+    /// Gives an assembly's components to change in place.
+    /// @return The list (see Document::components()).
+    std::vector<Component>& components();
+
+    /// Adds an inside part to an assembly.
+    /// @param part The part. The assembly takes ownership.
+    /// @param index Where it goes in the list of parts; past the end means last.
+    void addPart(std::unique_ptr<Document> part, std::size_t index = static_cast<std::size_t>(-1));
+
+    /// Takes an inside part out of an assembly.
+    /// @param id The part's design id.
+    /// @return The part (the caller owns it now) and where it was, or nullptr if it isn't there.
+    std::pair<std::unique_ptr<Document>, std::size_t> removePart(const DocId& id);
 
 private:
     friend class Document;

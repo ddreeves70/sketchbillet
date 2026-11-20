@@ -3,7 +3,8 @@
 Opens a saved design, rebuilds it, and prints every step with its volume, and
 each finished body's mass and material. It can
 also export the finished shape for 3D printing or another CAD program, list a
-sketch as the solver left it, or list a body's edges, faces and points.
+sketch as the solver left it, or list a body's edges, faces and points. An
+[assembly](#an-assembly) lists its components and parts instead.
 
 ```text
 sketchbillet_cli open <file.sb> [--export <out.stl|out.3mf|out.step> [--step <name>]]
@@ -11,6 +12,7 @@ sketchbillet_cli open <file.sb> --sketch <name>
 sketchbillet_cli open <file.sb> --edges <name>
 sketchbillet_cli open <file.sb> --faces <name>
 sketchbillet_cli open <file.sb> --points <name>
+sketchbillet_cli open <file.sb> --components
 ```
 
 | Option | Meaning |
@@ -24,6 +26,7 @@ sketchbillet_cli open <file.sb> --points <name>
 | `--edges <name>` | Also list the edges of this step's body, numbered, as [fillet and chamfer](commands.md#featureadd_fillet) take them (see below) |
 | `--faces <name>` | Also list the faces of this step's body, numbered |
 | `--points <name>` | Also list the points (corners) of this step's body, numbered |
+| `--components` | For an [assembly](#an-assembly): also say which way each component faces |
 
 Each step shows one of these:
 
@@ -229,6 +232,43 @@ points of Tag: 10
    8  point                    at 11.50,15.00,4.00  corner of side of Hole and top of Plate
    9  point                    at 0.00,30.00,4.00  corner of back side of Plate, left side of Plate and top of Plate
   10  point                    at 60.00,30.00,4.00  corner of back side of Plate, right side of Plate and top of Plate
+```
+
+## An assembly
+
+An [assembly](commands.md#assemblynew) has no steps of its own, so `open` lists
+its components instead: each one's part, whether it's grounded (fixed where it
+is) or free, and where its part's origin is. Then its parts, each built once
+however many components use it, with its steps, mass and material, and how many
+are in the assembly. Last, the mass of everything together.
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save Wheel.sb feature.add_cylinder radius=12 height=6
+...
+$ sketchbillet_cli run --save Car.sb assembly.new
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.insert file=Wheel.sb count=4 step=25,0,0
+...
+$ sketchbillet_cli open Car.sb
+Car: assembly, 4 components, 1 part
+  Wheel 1      Wheel      grounded at 0, 0, 0 mm
+  Wheel 2      Wheel      free     at 25, 0, 0 mm
+  Wheel 3      Wheel      free     at 50, 0, 0 mm
+  Wheel 4      Wheel      free     at 75, 0, 0 mm
+Parts:
+  Wheel        1 step   ok        mass 3.37 g (PLA), 4 in the assembly
+Mass in all: 13.46 g
+```
+
+`--components` also says which way each component faces: where its part's x and
+z directions point. Exporting an assembly, and listing its parts' edges, faces
+and sketches, come in a later version:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli open Car.sb --export car.stl
+error: Car is an assembly. For now, list it with --components; exporting it and listing its edges, faces and sketches come in a later version.
 ```
 
 ## Files that can't be opened

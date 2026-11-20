@@ -45,6 +45,28 @@ wrote block.sb
 Steps that you don't name get names like `Box1` and `Cut1`. Later commands use
 those names, like `a=Box1`.
 
+## Build an assembly
+
+On an [assembly](../user-guide/assemblies.md), `run` prints its components and
+parts instead of steps:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save Wheel.sb feature.add_cylinder radius=12 height=6
+...
+$ sketchbillet_cli run --save Cart.sb assembly.new
+Cart: assembly, 0 components, 0 parts
+wrote Cart.sb
+$ sketchbillet_cli run --open Cart.sb --save Cart.sb component.insert file=Wheel.sb count=2 step=30,0,0
+Cart: assembly, 2 components, 1 part
+  Wheel 1      Wheel      grounded at 0, 0, 0 mm
+  Wheel 2      Wheel      free     at 30, 0, 0 mm
+Parts:
+  Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+Mass in all: 6.73 g
+wrote Cart.sb
+```
+
 ## Try a command without saving
 
 <!-- cli-example -->

@@ -4,6 +4,7 @@ sb_add_library(sb_kernel
   SOURCES
     MeshFiles.cpp
     MeshTools.cpp
+    Placement.cpp
     Unzip.cpp
     ShapeHandle.cpp
   DEPS

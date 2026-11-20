@@ -1,5 +1,7 @@
 #include "sb/model/CommandRegistry.h"
 
+#include "sb/model/AssemblyCommands.h"
+
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -1267,6 +1269,157 @@ CommandRegistry makeBuiltin() {
               return std::make_unique<DeleteFolderCommand>(argFolder(a, "folder"));
           });
 
+    // --- Assemblies ----------------------------------------------------------
+
+    r.add({"assembly.new",
+           "Make assembly",
+           "Makes this new, empty design an assembly: a design made of parts placed together, instead of "
+           "steps. Put parts in it with component.new or component.insert.",
+           {}},
+          [](const Document&, const Args&) -> std::unique_ptr<Command> {
+              return std::make_unique<MakeAssemblyCommand>();
+          });
+
+    r.add(
+        {"component.new",
+         "New part",
+         "Adds an empty part, made inside the assembly, and a component of it.",
+         {{"name", ArgType::Text, "The part's name, like Lid. Leave it out for Part1, Part2, ...", false, {}},
+          {"at",
+           ArgType::Vec3,
+           "Where the part's origin goes in the assembly (mm). Leave it out for 0,0,0.",
+           false,
+           {}}}},
+        [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+            std::string name = argText(a, "name");
+            if (name.empty()) {
+                for (int n = 1; name.empty() || doc.findPart(std::string_view(name)); ++n)
+                    name = "Part" + std::to_string(n);
+            }
+            if (doc.findPart(std::string_view(name))) {
+                return std::make_unique<ProblemCommand>(
+                    error("assembly.part_taken", doc.name() + " has a part called " + name +
+                                                     " already. Pick another name, or add more of it with "
+                                                     "component.add part=\"" +
+                                                     name + "\"."));
+            }
+            kernel::Placement at;
+            at.origin = argVec3(a, "at");
+            return std::make_unique<InsertPartCommand>(std::make_unique<Document>(DocKind::Part, name), 1,
+                                                       at);
+        });
+
+    // The components a command acts on, by name; or why it can't find one.
+    auto componentNamed = [](const Document& doc, const Args& a,
+                             const char* arg) -> std::pair<const Component*, std::unique_ptr<Command>> {
+        const std::string name = argText(a, arg);
+        if (const auto* c = doc.findComponent(std::string_view(name))) return {c, nullptr};
+        if (doc.kind() != DocKind::Assembly) {
+            return {nullptr,
+                    std::make_unique<ProblemCommand>(
+                        error("assembly.not_assembly",
+                              doc.name() + " is a part, not an assembly, so it has no components. Start an "
+                                           "assembly in a new design with assembly.new."))};
+        }
+        std::string names;
+        for (const auto& c : doc.components()) names += (names.empty() ? "" : ", ") + c.name;
+        return {nullptr,
+                std::make_unique<ProblemCommand>(
+                    error("assembly.no_component",
+                          doc.name() + " has no component called " + name + "." +
+                              (names.empty() ? std::string(" It has none yet: put one in with component.new.")
+                                             : " Its components are: " + names + ".")))};
+    };
+    auto count = [](const Args& a) {
+        const auto it = a.find("count");
+        if (it == a.end()) return 1;
+        const auto* n = std::get_if<std::int64_t>(&it->second);
+        return n ? static_cast<int>(std::clamp<std::int64_t>(*n, -1, 1000)) : 1;
+    };
+
+    r.add(
+        {"component.add",
+         "Add components",
+         "Puts more of a part the assembly has already in it, in a row.",
+         {{"part", ArgType::Text, "The part's name, like Wheel.", true, {}},
+          {"count", ArgType::Integer, "How many, from 1 to 100. Leave it out for 1.", false, {}},
+          {"at", ArgType::Vec3, "Where the first one's origin goes (mm). Leave it out for 0,0,0.", false, {}},
+          {"step", ArgType::Vec3, "How far each one is from the one before (mm), like 30,0,0.", false, {}}}},
+        [count](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+            const std::string name = argText(a, "part");
+            const auto* part = doc.findPart(std::string_view(name));
+            if (!part) {
+                std::string names;
+                for (const auto* p : doc.parts()) names += (names.empty() ? "" : ", ") + p->name();
+                return std::make_unique<ProblemCommand>(error(
+                    "assembly.no_part",
+                    doc.name() + " has no part called " + name + "." +
+                        (names.empty() ? std::string(" Put a part in with component.new or component.insert.")
+                                       : " Its parts are: " + names + ".")));
+            }
+            kernel::Placement at;
+            at.origin = argVec3(a, "at");
+            return std::make_unique<AddComponentsCommand>(part->id(), count(a), at, argVec3(a, "step"));
+        });
+
+    r.add({"component.ground",
+           "Ground",
+           "Fixes a component where it is, or lets it go. Other components are placed from grounded ones.",
+           {{"component", ArgType::Text, "The component, like Body 1.", true, {}},
+            {"grounded",
+             ArgType::Bool,
+             "true to fix it, false to let it go. Leave it out for true.",
+             false,
+             {}}}},
+          [componentNamed](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+              auto [c, problem] = componentNamed(doc, a, "component");
+              if (!c) return std::move(problem);
+              return std::make_unique<GroundComponentCommand>(c->id, argBool(a, "grounded", true));
+          });
+
+    r.add(
+        {"component.place",
+         "Move component",
+         "Puts a component somewhere else in the assembly, facing another way if you like.",
+         {{"component", ArgType::Text, "The component, like Wheel 2.", true, {}},
+          {"origin", ArgType::Vec3, "Where its part's origin goes (mm).", true, {}},
+          {"x", ArgType::Vec3, "Which way its part's x faces. Leave it out to keep it as it is.", false, {}},
+          {"z",
+           ArgType::Vec3,
+           "Which way its part's z faces. Leave it out to keep it as it is.",
+           false,
+           {}}}},
+        [componentNamed](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+            auto [c, problem] = componentNamed(doc, a, "component");
+            if (!c) return std::move(problem);
+            kernel::Placement p = c->placement;
+            p.origin = argVec3(a, "origin");
+            if (a.count("x")) p.xAxis = argVec3(a, "x");
+            if (a.count("z")) p.zAxis = argVec3(a, "z");
+            return std::make_unique<PlaceComponentCommand>(c->id, p);
+        });
+
+    r.add({"component.rename",
+           "Rename component",
+           "Gives a component a new name.",
+           {{"component", ArgType::Text, "The component, like Wheel 1.", true, {}},
+            {"name", ArgType::Text, "Its new name. No other component may have it.", true, {}}}},
+          [componentNamed](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+              auto [c, problem] = componentNamed(doc, a, "component");
+              if (!c) return std::move(problem);
+              return std::make_unique<RenameComponentCommand>(c->id, argText(a, "name"));
+          });
+
+    r.add({"component.delete",
+           "Delete component",
+           "Takes a component out of the assembly. Its part goes too when no other component uses it.",
+           {{"component", ArgType::Text, "The component, like Wheel 4.", true, {}}}},
+          [componentNamed](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+              auto [c, problem] = componentNamed(doc, a, "component");
+              if (!c) return std::move(problem);
+              return std::make_unique<DeleteComponentCommand>(c->id);
+          });
+
     // --- Sketches ------------------------------------------------------------
 
     r.add(
@@ -2251,6 +2404,17 @@ CreateResult CommandRegistry::create(std::string_view name, const Args& args, co
         return result;
     }
     const auto& info = it->second.info;
+    // An assembly's steps are in its parts.
+    if (doc.kind() == DocKind::Assembly) {
+        for (const std::string_view start : {"feature.", "sketch.", "folder."}) {
+            if (name.substr(0, start.size()) != start) continue;
+            result.issues.push_back(
+                error("assembly.steps",
+                      doc.name() + " is an assembly, so it has no steps of its own: they're in its "
+                                   "parts. Make the step in a part, or put a part in with component.new."));
+            return result;
+        }
+    }
 
     for (const auto& [argName, value] : args) {
         const auto spec = std::find_if(info.args.begin(), info.args.end(),

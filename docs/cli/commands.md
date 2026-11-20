@@ -53,6 +53,14 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`parameter.set`](#parameterset) | Adds a named value like `wall = 3 mm`, or changes one |
 | [`parameter.rename`](#parameterrename) | Renames a parameter, and every value that uses it |
 | [`parameter.delete`](#parameterdelete) | Removes a parameter nothing uses |
+| [`assembly.new`](#assemblynew) | Makes a new, empty design an assembly |
+| [`component.new`](#componentnew) | Adds an empty part to an assembly, and a component of it |
+| [`component.insert`](#componentinsert) | Puts a part from a `.sb` file into an assembly |
+| [`component.add`](#componentadd) | Puts more of a part an assembly has already in it |
+| [`component.ground`](#componentground) | Fixes a component where it is, or lets it go |
+| [`component.place`](#componentplace) | Moves and turns a component |
+| [`component.rename`](#componentrename) | Renames a component |
+| [`component.delete`](#componentdelete) | Takes a component out of an assembly |
 
 Plugins can add more commands. [`sketchbillet_cli help`](help.md) lists every command
 SketchBillet has right now.
@@ -2811,4 +2819,260 @@ box: 0 steps
 Parameters:
   thickness = 3 mm
 wrote box.sb
+```
+
+## assembly.new
+
+Makes a new, empty design an **assembly**: a design made of parts placed
+together, like a car made of a body and four wheels, instead of steps. Each
+part placed in it is a **component**: four wheels are four components of one
+part, Wheel, named Wheel 1 to Wheel 4. The first component put in is
+**grounded**, fixed where it is.
+
+Run it on a new design (with `--save` and no `--open`). A design with steps
+can't become an assembly: start the assembly in a new file, and put the part in
+it with [`component.insert`](#componentinsert). An assembly has no steps of its
+own, so step commands (`feature.`, `sketch.` and `folder.`) say so. The desktop
+app doesn't show assemblies yet: list one with
+[`sketchbillet_cli open Car.sb --components`](open.md#an-assembly).
+
+It has no settings.
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save Car.sb assembly.new
+Car: assembly, 0 components, 0 parts
+wrote Car.sb
+```
+
+## component.new
+
+Adds an empty part, made inside the assembly, and a component of it at the
+assembly's origin (or `at`). The part's steps come later: editing a part inside
+an assembly comes with the desktop app's assemblies.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `name` | text | no | The part's name, like `Lid`. Default `Part1`, `Part2`, ... |
+| `at` | x,y,z | no | Where the part's origin goes in the assembly, in mm. Default `0,0,0` |
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save Box.sb assembly.new
+...
+$ sketchbillet_cli run --open Box.sb --save Box.sb component.new name=Lid at=0,0,30
+Box: assembly, 1 component, 1 part
+  Lid 1        Lid        grounded at 0, 0, 30 mm
+Parts:
+  Lid          0 steps  ok        no bodies yet, 1 in the assembly
+Mass in all: 0.00 g
+wrote Box.sb
+```
+
+## component.insert
+
+Puts a part from a `.sb` file into the assembly, with one or more components of
+it in a row. The assembly keeps its own copy of the part, so it opens anywhere,
+even without the file; a later change to the file doesn't change the assembly.
+(Parts that follow their file come in a later version.) Putting in a part the
+assembly has already only adds components. A component's name is its part's
+name and a number, so name the part's file the way you want its components
+called: `Wheel.sb` gives Wheel 1, Wheel 2, ...
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `file` | text | yes | The part's `.sb` file, like `Wheel.sb` |
+| `count` | whole number | no | How many, from 1 to 100. Default 1 |
+| `at` | x,y,z | no | Where the first one's origin goes, in mm. Default `0,0,0` |
+| `step` | x,y,z | no | How far each one is from the one before, in mm, like `25,0,0`. Default `0,0,0` |
+
+A car: a body, and four wheels in a row beside it.
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save Body.sb feature.add_box size=80,40,10
+...
+$ sketchbillet_cli run --save Wheel.sb feature.add_cylinder radius=12 height=6
+...
+$ sketchbillet_cli run --save Car.sb assembly.new
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.insert file=Body.sb
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.insert file=Wheel.sb count=4 at=0,-20,0 step=25,0,0
+Car: assembly, 5 components, 2 parts
+  Body 1       Body       grounded at 0, 0, 0 mm
+  Wheel 1      Wheel      free     at 0, -20, 0 mm
+  Wheel 2      Wheel      free     at 25, -20, 0 mm
+  Wheel 3      Wheel      free     at 50, -20, 0 mm
+  Wheel 4      Wheel      free     at 75, -20, 0 mm
+Parts:
+  Body         1 step   ok        mass 39.68 g (PLA), 1 in the assembly
+  Wheel        1 step   ok        mass 3.37 g (PLA), 4 in the assembly
+Mass in all: 53.14 g
+wrote Car.sb
+```
+
+An assembly can't go inside another assembly yet:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --save Truck.sb assembly.new
+...
+$ sketchbillet_cli run --save Car.sb assembly.new
+...
+$ sketchbillet_cli run --open Car.sb component.insert file=Truck.sb
+error [assembly.sub]: Truck is an assembly. Assemblies inside assemblies come in a later version: insert its parts one at a time for now.
+```
+
+## component.add
+
+Puts more of a part the assembly has already in it, in a row, as
+[`component.insert`](#componentinsert) does, without its file.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `part` | text | yes | The part's name, like `Wheel` |
+| `count` | whole number | no | How many, from 1 to 100. Default 1 |
+| `at` | x,y,z | no | Where the first one's origin goes, in mm. Default `0,0,0` |
+| `step` | x,y,z | no | How far each one is from the one before, in mm. Default `0,0,0` |
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save Car.sb assembly.new
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.insert file=Wheel.sb
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.add part=Wheel count=3 at=0,30,0 step=0,30,0
+Car: assembly, 4 components, 1 part
+  Wheel 1      Wheel      grounded at 0, 0, 0 mm
+  Wheel 2      Wheel      free     at 0, 30, 0 mm
+  Wheel 3      Wheel      free     at 0, 60, 0 mm
+  Wheel 4      Wheel      free     at 0, 90, 0 mm
+Parts:
+  Wheel        1 step   ok        mass 3.37 g (PLA), 4 in the assembly
+Mass in all: 13.46 g
+wrote Car.sb
+```
+
+## component.ground
+
+Fixes a component where it is (**grounded**), or lets it go. Later, joints
+place the other components from the grounded ones.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `component` | text | yes | The component, like `Body 1` |
+| `grounded` | true or false | no | `true` to fix it, `false` to let it go. Default `true` |
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save Car.sb assembly.new
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.insert file=Wheel.sb count=2 step=30,0,0
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.ground component="Wheel 1" grounded=false
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.ground component="Wheel 2"
+Car: assembly, 2 components, 1 part
+  Wheel 1      Wheel      free     at 0, 0, 0 mm
+  Wheel 2      Wheel      grounded at 30, 0, 0 mm
+Parts:
+  Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+Mass in all: 6.73 g
+wrote Car.sb
+```
+
+## component.place
+
+Moves a component somewhere else in the assembly, and turns it if you like. Its
+part's origin goes to `origin`, and its part's x and z face along `x` and `z`
+(they're made square to each other, keeping `z`).
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `component` | text | yes | The component, like `Wheel 2` |
+| `origin` | x,y,z | yes | Where its part's origin goes, in mm |
+| `x` | x,y,z | no | Which way its part's x faces. Default: as it is |
+| `z` | x,y,z | no | Which way its part's z faces. Default: as it is |
+
+A wheel stood on its edge, facing out to the side (its z along -y):
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save Car.sb assembly.new
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.insert file=Wheel.sb count=2
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.place component="Wheel 2" origin=40,-32,12 z=0,-1,0
+...
+$ sketchbillet_cli open Car.sb --components
+Car: assembly, 2 components, 1 part
+  Wheel 1      Wheel      grounded at 0, 0, 0 mm
+    facing x 1, 0, 0, z 0, 0, 1
+  Wheel 2      Wheel      free     at 40, -32, 12 mm
+    facing x 1, 0, 0, z 0, -1, 0
+Parts:
+  Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+Mass in all: 6.73 g
+```
+
+## component.rename
+
+Gives a component a new name. No other component may have it.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `component` | text | yes | The component, like `Wheel 1` |
+| `name` | text | yes | Its new name |
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save Car.sb assembly.new
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.insert file=Wheel.sb count=2
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.rename component="Wheel 2" name="Spare wheel"
+Car: assembly, 2 components, 1 part
+  Wheel 1      Wheel      grounded at 0, 0, 0 mm
+  Spare wheel  Wheel      free     at 0, 0, 0 mm
+Parts:
+  Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+Mass in all: 6.73 g
+wrote Car.sb
+```
+
+## component.delete
+
+Takes a component out of the assembly. Its part goes too when no other
+component uses it.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `component` | text | yes | The component, like `Wheel 4` |
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save Car.sb assembly.new
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.insert file=Wheel.sb count=2
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.delete component="Wheel 2"
+Car: assembly, 1 component, 1 part
+  Wheel 1      Wheel      grounded at 0, 0, 0 mm
+Parts:
+  Wheel        1 step   ok        mass 3.37 g (PLA), 1 in the assembly
+Mass in all: 3.37 g
+wrote Car.sb
+```
+
+A name that isn't one of its components says which ones it has:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --save Car.sb assembly.new
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.insert file=Wheel.sb count=2
+...
+$ sketchbillet_cli run --open Car.sb component.delete component="Wheel 9"
+error [assembly.no_component]: Car has no component called Wheel 9. Its components are: Wheel 1, Wheel 2.
 ```

@@ -528,12 +528,15 @@ int runCommand(int argc, char** argv) {
         return 1;
     }
 
-    // Report every step, then what plugins logged.
+    // Report every step (or, for an assembly, every component and part), then what plugins logged.
     const auto& design = *docs.find(id);
     const auto* report = docs.lastRebuild(id);
-    std::printf("%s: %zu %s\n", design.name().c_str(), design.featureCount(),
-                design.featureCount() == 1 ? "step" : "steps");
-    for (std::size_t i = 0; i < design.featureCount(); ++i) {
+    const bool assembly = design.kind() == model::DocKind::Assembly;
+    bool built = assembly ? printAssembly(design, *report, *kernel, false) : report->ok();
+    if (!assembly)
+        std::printf("%s: %zu %s\n", design.name().c_str(), design.featureCount(),
+                    design.featureCount() == 1 ? "step" : "steps");
+    for (std::size_t i = 0; !assembly && i < design.featureCount(); ++i) {
         const auto& f = design.featureAt(i);
         const auto* r = report->result(f.id());
         // A folder's name comes before its first step, and its steps are indented.
@@ -563,7 +566,7 @@ int runCommand(int argc, char** argv) {
         printFormulas(f, design.lengthUnit(), folder ? "      " : "    ");
         printIssues(r->issues, "    ");
     }
-    printParameters(design);
+    if (!assembly) printParameters(design);
     for (const auto& p : host.plugins()) {
         for (const auto& line : p.messages) std::printf("[%s] %s\n", p.manifest.id.c_str(), line.c_str());
     }
@@ -577,7 +580,7 @@ int runCommand(int argc, char** argv) {
         docs.markSaved(id);
         std::printf("wrote %s\n", savePath->c_str());
     }
-    return report->ok() ? 0 : 1;
+    return built ? 0 : 1;
 }
 
 void printFormulas(const model::Feature& step, LengthUnit unit, const char* indent) {
@@ -645,6 +648,87 @@ std::string sketchSummary(const sketch::Sketch& sketch, int freedom) {
     add(count(static_cast<int>(sketch.constraints.size()), "constraint", "constraints"));
     add(freedom == 0 ? std::string("fully constrained") : "free to move " + count(freedom, "way", "ways"));
     return out;
+}
+
+namespace {
+
+// "40, -32, 12 mm": a point, or a direction with no unit.
+std::string pointText(const kernel::Vec3& v, LengthUnit unit, bool length) {
+    auto number = [&](double x) {
+        if (!length) {
+            char buf[32];
+            std::snprintf(buf, sizeof buf, "%.3g", std::abs(x) < 1e-12 ? 0.0 : x);
+            return std::string(buf);
+        }
+        const std::string t = lengthText(x, unit);
+        return t.substr(0, t.find(' '));
+    };
+    std::string out = number(v.x) + ", " + number(v.y) + ", " + number(v.z);
+    if (length) out += " " + std::string(unitSymbol(unit));
+    return out;
+}
+
+}  // namespace
+
+bool printAssembly(const model::Document& doc, const model::RebuildReport& report, kernel::IKernel& kernel,
+                   bool directions) {
+    const auto count = doc.components().size();
+    std::printf("%s: assembly, %zu %s, %zu %s\n", doc.name().c_str(), count,
+                count == 1 ? "component" : "components", doc.parts().size(),
+                doc.parts().size() == 1 ? "part" : "parts");
+    for (const auto& c : doc.components()) {
+        const auto* part = doc.findPart(c.part);
+        std::printf("  %-12s %-10s %-8s at %s\n", c.name.c_str(), part ? part->name().c_str() : "?",
+                    c.grounded ? "grounded" : "free",
+                    pointText(c.placement.origin, doc.lengthUnit(), true).c_str());
+        if (directions) {
+            std::printf("    facing x %s, z %s\n",
+                        pointText(c.placement.xAxis, doc.lengthUnit(), false).c_str(),
+                        pointText(c.placement.zAxis, doc.lengthUnit(), false).c_str());
+        }
+    }
+    // Each part, built once, however many components place it.
+    bool ok = true;
+    double total = 0;
+    if (!doc.parts().empty()) std::printf("Parts:\n");
+    for (const auto* part : doc.parts()) {
+        const auto* built = report.part(part->id());
+        const auto uses = std::count_if(doc.components().begin(), doc.components().end(),
+                                        [&](const model::Component& c) { return c.part == part->id(); });
+        double grams = 0;
+        std::string materials;
+        if (built) {
+            for (const auto& body : built->bodies()) {
+                const auto& material = part->materialOf(body);
+                grams += model::bodyMass(kernel, built->result(body)->shape, material).grams;
+                if (materials.find(material.name) == std::string::npos)
+                    materials += (materials.empty() ? "" : ", ") + material.name;
+            }
+        }
+        total += grams * static_cast<double>(uses);
+        const bool good = built && built->ok();
+        ok = ok && good;
+        std::printf("  %-12s %zu %-6s %-8s", part->name().c_str(), part->featureCount(),
+                    part->featureCount() == 1 ? "step" : "steps", good ? "ok" : "problem");
+        if (built && !built->bodies().empty()) {
+            std::printf("  mass %.2f g (%s), %ld in the assembly", grams, materials.c_str(),
+                        static_cast<long>(uses));
+        } else {
+            std::printf("  no bodies yet, %ld in the assembly", static_cast<long>(uses));
+        }
+        std::printf("\n");
+        // What's wrong in a part, under it, by step.
+        for (std::size_t i = 0; built && i < part->featureCount(); ++i) {
+            const auto& f = part->featureAt(i);
+            const auto* r = built->result(f.id());
+            if (!r || r->issues.empty()) continue;
+            std::printf("    %s:\n", f.name().c_str());
+            printIssues(r->issues, "      ");
+        }
+    }
+    if (count > 0) std::printf("Mass in all: %.2f g\n", total);
+    printParameters(doc);
+    return ok;
 }
 
 }  // namespace sb::cli
