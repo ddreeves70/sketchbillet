@@ -68,8 +68,10 @@ pick it: three arrows and a small square appear in its middle.
 The arrow under the mouse turns yellow, so you can see which one you'll grab.
 Arrows are drawn over the body, so you can always grab them, even from inside.
 The body moves as you drag, in steps of 1 mm (0.1 in in a design shown in
-inches or feet), and the whole drag is one step of Undo. Press **Escape**
-before you let go to put it back.
+inches or feet). While you drag, only its picture moves, so even a big body
+with thousands of faces (like an imported mesh) follows the mouse smoothly.
+When you let go, the design changes, in one step of Undo; any step that uses the
+body catches up then. Press **Escape** before you let go to put it back.
 
 What a drag changes depends on the body:
 

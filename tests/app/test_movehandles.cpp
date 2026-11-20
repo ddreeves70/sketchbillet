@@ -106,22 +106,30 @@ TEST_CASE("handles show on one picked body, and not on a sketch, nothing or two 
     CHECK(k.viewer->handles().empty());
 }
 
-TEST_CASE("dragging an arrow slides the box in whole mm, follows it, and undoes in one step",
+TEST_CASE("dragging an arrow previews the box moved in whole mm, and dropping slides it as one step",
           "[movehandles]") {
     SketchBillet k;
     const auto box = k.run("feature.add_box", {{"size", kernel::Vec3{40, 20, 10}}});
     k.pick({box});
+    const auto before = k.design().undoLabel();
     auto* user = k.viewer->handleUser();
     REQUIRE(user);
     user->dragged("x", {2.3, 0, 0});
-    CHECK(k.box(box).corner().x == 2);
+    // Only the drawing moves while dragging, so it's quick however big the body is.
+    REQUIRE(k.viewer->preview());
+    CHECK(k.viewer->preview()->body == box);
+    CHECK(k.viewer->preview()->motion.offset.x == 2);
+    CHECK(k.box(box).corner().x == 0);
+    CHECK(k.design().undoLabel() == before);
     user->dragged("x", {6.8, 0, 0});
-    CHECK(k.box(box).corner().x == 7);
-    CHECK(k.viewer->handles()[0].at.x == Approx(27));  // the handles follow the body
-    user->dragged("x", {7.1, 0, 0});                   // still 7: nothing to do
+    CHECK(k.viewer->preview()->motion.offset.x == 7);
+    CHECK(k.viewer->handles()[0].at.x == Approx(27));  // the handles follow the drawing
+    user->dragged("x", {7.1, 0, 0});                   // still 7
     user->dropped("x", {7.1, 0, 0});
+    CHECK_FALSE(k.viewer->preview());
     CHECK(k.box(box).corner().x == 7);
     CHECK(k.design().undoLabel() == "Move Box1");
+    CHECK(k.viewer->handles()[0].at.x == Approx(27));  // where it is now
 
     // A second drag is its own undo step.
     user->dragged("xy", {1, 2, 0});
@@ -132,9 +140,14 @@ TEST_CASE("dragging an arrow slides the box in whole mm, follows it, and undoes 
     CHECK(k.box(box).corner().y == 0);
     REQUIRE(k.host.documents().undo(k.doc));  // the whole first drag
     CHECK(k.box(box).corner().x == 0);
+
+    // A drag that ends where it started changes nothing.
+    user->dragged("x", {0.3, 0, 0});
+    user->dropped("x", {0.3, 0, 0});
+    CHECK(k.design().undoLabel() == before);
 }
 
-TEST_CASE("dragging another body adds a Move step, which is then what's picked and dragged",
+TEST_CASE("dragging another body adds a Move step on dropping, which is then what's picked",
           "[movehandles]") {
     SketchBillet k;
     const auto a = k.run("feature.add_box", {{"size", kernel::Vec3{10, 10, 10}}});
@@ -144,20 +157,21 @@ TEST_CASE("dragging another body adds a Move step, which is then what's picked a
     REQUIRE(k.viewer->handles().size() == 4);
     auto* user = k.viewer->handleUser();
     user->dragged("z", {0, 0, 3});
+    CHECK(k.design().featureCount() == 3);  // not yet
+    CHECK(k.viewer->preview()->body == cut);
+    user->dragged("z", {0, 0, 5});
+    user->dropped("z", {0, 0, 5});
     REQUIRE(k.design().featureCount() == 4);
     const auto& move = k.design().featureAt(3);
     CHECK(move.type() == model::FeatureType::Move);
+    CHECK(static_cast<const model::MoveFeature&>(move).motion().offset.z == 5);
     CHECK(k.host.selection().features() == std::vector<FeatureId>{move.id()});
-    user->dragged("z", {0, 0, 5});
-    user->dropped("z", {0, 0, 5});
-    CHECK(static_cast<const model::MoveFeature&>(k.design().featureAt(3)).motion().offset.z == 5);
-    CHECK(k.design().featureCount() == 4);     // still one Move
     REQUIRE(k.viewer->handles().size() == 4);  // on the Move now
     REQUIRE(k.host.documents().undo(k.doc));
     CHECK(k.design().featureCount() == 3);  // the drag, Move step and all, was one step
 }
 
-TEST_CASE("Escape during a drag puts the body back, and what was picked", "[movehandles]") {
+TEST_CASE("Escape during a drag puts the drawing back; the design never changed", "[movehandles]") {
     SketchBillet k;
     const auto a = k.run("feature.add_box", {{"size", kernel::Vec3{10, 10, 10}}});
     const auto b = k.run("feature.add_cylinder", {{"radius", 2.0}, {"height", 20.0}});
@@ -166,17 +180,20 @@ TEST_CASE("Escape during a drag puts the body back, and what was picked", "[move
     auto* user = k.viewer->handleUser();
     user->dragged("x", {4, 0, 0});
     user->dragged("x", {9, 0, 0});
-    REQUIRE(k.design().featureCount() == 4);
+    CHECK(k.viewer->preview());
     user->cancelled();
+    CHECK_FALSE(k.viewer->preview());
     CHECK(k.design().featureCount() == 3);
     CHECK(k.host.selection().features() == std::vector<FeatureId>{cut});
-    CHECK(k.viewer->handles().size() == 4);
+    REQUIRE(k.viewer->handles().size() == 4);
+    CHECK(k.viewer->handles()[0].at.x == Approx(5));  // back on the body
 
-    // On a box: back where it was.
     k.pick({a});
     user->dragged("y", {0, 6, 0});
-    CHECK(k.box(a).corner().y == 6);
     user->cancelled();
     CHECK(k.box(a).corner().y == 0);
-    CHECK(k.design().redoLabel() == "Move Box1");  // undone, not left half-done
+    CHECK_FALSE(k.design().canRedo());  // nothing was done, so nothing to redo
+    // Dropping after Escape does nothing.
+    user->dropped("y", {0, 6, 0});
+    CHECK(k.box(a).corner().y == 0);
 }

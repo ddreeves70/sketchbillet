@@ -97,6 +97,46 @@ TEST_CASE("unchanged bodies are kept, changed ones redrawn, unusable ones skippe
     CHECK(f.view.shownCount() == 0);
 }
 
+TEST_CASE("a preview draws a body moved, and picking follows it, until it's cleared", "[view][gl]") {
+    Fixture f;
+    f.view.setContent({{{f.boxId, f.box, false}}, {}});
+    settle(f.view);
+    const auto middleIsBox = [&] {
+        const QImage img = f.view.grabFramebuffer();
+        return !isBackground(img.pixelColor(img.width() / 2, img.height() / 2));
+    };
+    REQUIRE(middleIsBox());
+
+    // Slid far off to the side (and turned, which a box doesn't show): the middle is sky.
+    f.view.setPreview(f.boxId, kernel::Motion{{500, 0, 0}, {0, 0, 0}, {0, 0, 1}, 0.5});
+    settle(f.view);
+    CHECK_FALSE(middleIsBox());
+    int picks = 0;
+    std::vector<FeatureId> last{f.boxId};
+    QObject::connect(&f.view, &ViewWidget::picked, [&](const std::vector<FeatureId>& ids) {
+        last = ids;
+        ++picks;
+    });
+    // Clicking where it was picks nothing: it isn't there.
+    auto c = f.view.content();
+    c.selected = {f.boxId};
+    f.view.setContent(c);
+    settle(f.view);
+    f.view.clickAt(QPoint(f.view.width() / 2, f.view.height() / 2));
+    REQUIRE(waitFor([&] { return picks == 1; }));
+    CHECK(last.empty());
+
+    // A new drawing of the same body (the design rebuilt) is still moved.
+    auto bigger = f.kernel->makeBox({-15, -15, 0}, 30, 30, 30).shape;
+    f.view.setContent({{{f.boxId, bigger, false}}, {}});
+    settle(f.view);
+    CHECK_FALSE(middleIsBox());
+
+    f.view.clearPreview();
+    settle(f.view);
+    CHECK(middleIsBox());
+}
+
 TEST_CASE("standard views turn the camera", "[view][gl]") {
     Fixture f;
     for (auto v : allViews()) {

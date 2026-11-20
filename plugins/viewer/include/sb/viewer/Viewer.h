@@ -21,9 +21,11 @@
 /// viewer->face({{0, 0, 0}, {1, 0, 0}, {0, 1, 0}});            // look straight down at it
 /// @endcode
 
+#include <optional>
 #include <string>
 #include <vector>
 
+#include "sb/core/Id.h"
 #include "sb/kernel/Types.h"
 
 namespace sb::viewer {
@@ -181,6 +183,12 @@ public:
     virtual void cancelled() = 0;
 };
 
+/// A body drawn moved, without the design changing: see IViewer::previewMove().
+struct BodyPreview {
+    FeatureId body{};         ///< The step whose body is drawn moved.
+    kernel::Motion motion{};  ///< How it's moved: turned, then slid (mm, radians).
+};
+
 /// The viewers, as other plugins see them.
 class IViewer {
 public:
@@ -188,8 +196,9 @@ public:
     /// Version 2 added dragged(), dropped() and ToolPoint::add. Version 3 added
     /// handles (setHandles(), clearHandles()). Version 4 added choices
     /// (offerChoices(), clearChoices()). Version 5 added boxes to type numbers in
-    /// (askNumbers(), clearNumbers()).
-    static constexpr const char* kServiceName = "sb.viewer/5";
+    /// (askNumbers(), clearNumbers()). Version 6 added previews of a moved body
+    /// (previewMove(), clearPreview(), preview()).
+    static constexpr const char* kServiceName = "sb.viewer/6";
 
     /// Destroys the service.
     virtual ~IViewer() = default;
@@ -231,6 +240,23 @@ public:
     /// Gives who put the handles there.
     /// @return It, or nullptr if none are shown.
     virtual IHandleUser* handleUser() const = 0;
+
+    /// Draws one body moved in every pane of every viewer, without changing the
+    /// design: a preview while it's dragged. It's instant, however many faces the
+    /// body has, because the body's drawing is moved, not made again. Clicking
+    /// picks it where it's drawn. It stays until clearPreview(), or another
+    /// previewMove() in its place. Clear it before changing the design to put the
+    /// body there, so it isn't moved twice.
+    /// @param body The step whose body is drawn moved.
+    /// @param motion How it's moved: turned about a line, then slid (mm, radians).
+    virtual void previewMove(const FeatureId& body, const kernel::Motion& motion) = 0;
+
+    /// Draws every body where the design has it again.
+    virtual void clearPreview() = 0;
+
+    /// Gives the body drawn moved.
+    /// @return It and its motion, or nullopt if there's no preview.
+    virtual std::optional<BodyPreview> preview() const = 0;
     /// Shows squares to click in every pane of every viewer, in place of the
     /// ones shown (yours or another plugin's). The one under the mouse lights up.
     /// Clicks anywhere else pick as usual, and a drag still turns the view.

@@ -39,6 +39,7 @@
 #include <Standard_Version.hxx>
 #include <StdSelect_BRepOwner.hxx>
 #include <TopExp.hxx>
+#include <TopLoc_Location.hxx>
 #include <TopTools_IndexedMapOfShape.hxx>
 #include <TopoDS_Compound.hxx>
 #include <TopoDS_Shape.hxx>
@@ -46,8 +47,11 @@
 #include <V3d_DirectionalLight.hxx>
 #include <V3d_View.hxx>
 #include <V3d_Viewer.hxx>
+#include <gp_Ax1.hxx>
 #include <gp_Dir.hxx>
 #include <gp_Pnt.hxx>
+#include <gp_Trsf.hxx>
+#include <gp_Vec.hxx>
 
 #include <algorithm>
 #include <cmath>
@@ -321,7 +325,18 @@ struct ViewWidget::Impl {
     double dimensionScale = 0;               // mm per pixel the dimensions were last drawn at
     ScreenAxes dimensionScreen;              // which way the screen faced when they were
     bool ready = false;
-    bool clickAdds = false;  // the last click had Ctrl or Shift held
+    bool clickAdds = false;                // the last click had Ctrl or Shift held
+    std::optional<FeatureId> previewBody;  // a body drawn moved (setPreview())
+    gp_Trsf previewMove;                   // how
+
+    // Draws the previewed body moved, and every other body where it is.
+    void applyPreview() {
+        for (auto& [id, s] : shown) {
+            const bool moved = previewBody && *previewBody == id;
+            if (moved || s.object->HasTransformation())
+                context->SetLocation(s.object, moved ? TopLoc_Location(previewMove) : TopLoc_Location());
+        }
+    }
     DisplayStyle style = DisplayStyle::ShadedWithEdges;
 
     // Draws a body in the display style. Ghosts (bodies used up by a later
@@ -792,6 +807,7 @@ void ViewWidget::setContent(const SceneContent& content) {
         }
         for (auto& [id, s] : d.shown) d.context->Remove(s.object, false);
         d.shown = std::move(next);
+        d.applyPreview();  // a new drawing of the previewed body is moved too
 
         // Clicking picks whole bodies, or edges or faces of the bodies (not of ghosts),
         // or, to measure, any face, edge or point.
@@ -942,6 +958,42 @@ void ViewWidget::setHandles(const std::vector<ViewHandle>& handles) {
 
 const std::vector<ViewHandle>& ViewWidget::handles() const {
     return impl_->handles;
+}
+
+void ViewWidget::setPreview(const FeatureId& body, const kernel::Motion& motion) {
+    auto& d = *impl_;
+    // Turned about the line, then slid: as kernel::IKernel::transform() moves it.
+    gp_Trsf turn;
+    const auto& a = motion.axis;
+    if (motion.angle != 0 && a.x * a.x + a.y * a.y + a.z * a.z > 1e-18) {
+        turn.SetRotation(
+            gp_Ax1(gp_Pnt(motion.center.x, motion.center.y, motion.center.z), gp_Dir(a.x, a.y, a.z)),
+            motion.angle);
+    }
+    gp_Trsf slide;
+    slide.SetTranslation(gp_Vec(motion.offset.x, motion.offset.y, motion.offset.z));
+    d.previewBody = body;
+    d.previewMove = slide * turn;
+    if (!d.context) return;
+    try {
+        d.applyPreview();
+    } catch (const Standard_Failure& e) {
+        d.fail(*this, drawFailed(d.where(QStringLiteral("showing a moved body: ") + failureText(e))));
+    }
+    update();
+}
+
+void ViewWidget::clearPreview() {
+    auto& d = *impl_;
+    if (!d.previewBody) return;
+    d.previewBody.reset();
+    if (!d.context) return;
+    try {
+        d.applyPreview();
+    } catch (const Standard_Failure& e) {
+        d.fail(*this, drawFailed(d.where(QStringLiteral("showing a moved body: ") + failureText(e))));
+    }
+    update();
 }
 
 void ViewWidget::setChoices(const std::vector<ViewChoice>& choices) {

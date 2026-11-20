@@ -21,7 +21,8 @@ constexpr const char* kManifest = R"({
   "tier": "ui"
 })";
 
-// Puts the handles on the picked body, and slides it as they're dragged.
+// Puts the handles on the picked body. Dragging them shows the body moved (a
+// preview: instant, however big the body is); dropping slides it, as one step.
 class Handles final : public viewer::IHandleUser {
 public:
     Handles(plugin::PluginContext& ctx, viewer::IViewer& viewer) : ctx_(ctx), viewer_(viewer) {}
@@ -29,7 +30,8 @@ public:
     // No clearHandles() when it goes: that's only when SketchBillet closes, and the
     // viewer may already be gone then.
 
-    // Shows handles on the picked body (or the body being dragged), or none.
+    // Shows handles on the picked body (or the body being dragged, where it's
+    // drawn), or none.
     void refresh() {
         const DocId docId = ctx_.documents().active();
         const auto* doc = ctx_.documents().find(docId);
@@ -47,76 +49,68 @@ public:
             viewer_.clearHandles(*this);
             return;
         }
-        viewer_.setHandles(*this, moveHandles(kernel->bounds(*shape)));
+        auto box = kernel->bounds(*shape);
+        for (auto* p : {&box.min, &box.max}) {  // where the preview draws it
+            p->x += shown_.x;
+            p->y += shown_.y;
+            p->z += shown_.z;
+        }
+        viewer_.setHandles(*this, moveHandles(box));
     }
 
     void dragged(const std::string&, const kernel::Vec3& by) override {
-        const DocId docId = ctx_.documents().active();
-        const auto* doc = ctx_.documents().find(docId);
+        const auto* doc = ctx_.documents().find(ctx_.documents().active());
         if (!doc) return;
         if (!dragging_) {
             // The drag starts: it slides the picked body.
             if (ctx_.selection().features().size() != 1) return;
             dragging_ = true;
-            started_ = false;
             target_ = ctx_.selection().features().front();
-            moveId_ = FeatureId::generate();
-            applied_ = {};
+            shown_ = {};
         }
-        if (failed_) return;
         const auto snapped = snapSlide(by, doc->lengthUnit());
-        const kernel::Vec3 step{snapped.x - applied_.x, snapped.y - applied_.y, snapped.z - applied_.z};
-        if (step.x == 0 && step.y == 0 && step.z == 0) return;
-        // The rest of the drag joins the first part into one undo step.
-        auto problems = ctx_.documents().execute(
-            docId, std::make_unique<model::SlideBodyCommand>(target_, step, started_, moveId_));
-        if (!problems.empty()) {
-            failed_ = true;  // say nothing more until the drag ends
-            ctx_.log(problems.front().message);
-            return;
-        }
-        started_ = true;
-        applied_ = snapped;
-        if (doc->find(moveId_) && target_ != moveId_) {
-            // It added a Move step: the rest of the drag moves that, and it's what's picked now.
-            target_ = moveId_;
-            ctx_.selection().set(docId, {moveId_});
-        }
-        refresh();
+        if (snapped.x == shown_.x && snapped.y == shown_.y && snapped.z == shown_.z) return;
+        // Only the drawing moves while dragging; the design changes once, on dropping.
+        shown_ = snapped;
+        viewer_.previewMove(target_, kernel::Motion{shown_});
+        refresh();  // the handles follow the body
     }
 
     void dropped(const std::string&, const kernel::Vec3&) override {
-        dragging_ = failed_ = false;
+        if (!dragging_) return;
+        const auto slide = shown_;
+        dragging_ = false;
+        shown_ = {};
+        viewer_.clearPreview();  // before the design moves it, so it isn't moved twice
+        const DocId docId = ctx_.documents().active();
+        if (ctx_.documents().find(docId) && (slide.x != 0 || slide.y != 0 || slide.z != 0)) {
+            const FeatureId moveId = FeatureId::generate();
+            auto problems = ctx_.documents().execute(
+                docId, std::make_unique<model::SlideBodyCommand>(target_, slide, false, moveId));
+            if (!problems.empty()) {
+                ctx_.log(problems.front().message);
+            } else if (const auto* doc = ctx_.documents().find(docId); doc && doc->find(moveId)) {
+                // It added a Move step: that's the body now, so it's what's picked.
+                ctx_.selection().set(docId, {moveId});
+            }
+        }
         refresh();
     }
 
     void cancelled() override {
-        if (dragging_ && started_) {
-            const DocId docId = ctx_.documents().active();
-            const FeatureId picked = target_ == moveId_ ? original_ : target_;
-            ctx_.documents().undo(docId);  // the whole drag is one step
-            if (ctx_.documents().find(docId)) ctx_.selection().set(docId, {picked});
-        }
-        dragging_ = failed_ = false;
+        // Escape: the design never changed, so only the drawing goes back.
+        dragging_ = false;
+        shown_ = {};
+        viewer_.clearPreview();
         refresh();
-    }
-
-    // Remembers what was picked when a drag starts, for Escape.
-    void rememberPick() {
-        if (!dragging_ && ctx_.selection().features().size() == 1)
-            original_ = ctx_.selection().features().front();
     }
 
 private:
     plugin::PluginContext& ctx_;
     viewer::IViewer& viewer_;
     bool dragging_ = false;  // a drag has started
-    bool started_ = false;   // it has changed the design
-    bool failed_ = false;    // the design refused it
     FeatureId target_;       // the step being slid
-    FeatureId original_;     // what was picked before the drag
-    FeatureId moveId_;       // the Move step a slide may add
-    kernel::Vec3 applied_{};
+    kernel::Vec3 shown_{};   // how far the preview draws it, snapped (mm)
 };
 
 void registerMoveHandles(plugin::PluginContext& ctx) {
@@ -127,10 +121,7 @@ void registerMoveHandles(plugin::PluginContext& ctx) {
     }
     // Lives as long as the plugin: the listeners below hold it.
     auto handles = std::make_shared<Handles>(ctx, *viewer);
-    auto refresh = [handles](const auto&) {
-        handles->rememberPick();
-        handles->refresh();
-    };
+    auto refresh = [handles](const auto&) { handles->refresh(); };
     ctx.listen<plugin::SelectionChanged>(refresh);
     ctx.listen<plugin::RebuildFinished>(refresh);
     ctx.listen<plugin::ActiveDocumentChanged>(refresh);

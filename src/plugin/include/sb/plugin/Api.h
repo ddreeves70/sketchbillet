@@ -170,7 +170,10 @@ class PluginContext;
 /// clearNumbers()), which the sketcher uses to change a dimension that's clicked.
 /// Version 58 added ui::PanelSpec::icon: a panel with a picture gets a button in the
 /// Panels group of the View tab.
-inline constexpr int kPluginApiVersion = 58;
+/// Version 59 added previews of a moved body in the viewers (sb.viewer/6:
+/// viewer::BodyPreview, IViewer::previewMove(), clearPreview() and preview()),
+/// which the move handles use while a body is dragged.
+inline constexpr int kPluginApiVersion = 59;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.
