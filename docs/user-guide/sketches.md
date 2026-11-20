@@ -42,15 +42,31 @@ dimensions, and the solver makes it exact.
 
 | Tool | Click |
 | --- | --- |
-| **Line** | Where it starts, then where it ends. The next line starts where this one ended, so a few clicks draw a closed shape. |
-| **Rectangle** | One corner, then the opposite corner. Its four lines come joined at the corners, with **Horizontal** and **Vertical** on its sides, so it stays a rectangle: add a width and a height with **Dimension**, and it's sized. |
+| **Line** | Where it starts, then where it ends. The next line starts where this one ended, so a few clicks draw a closed shape. Or type its length and angle (see below). |
+| **Rectangle** | One corner, then the opposite corner. Its four lines come joined at the corners, with **Horizontal** and **Vertical** on its sides, so it stays a rectangle. Type its width and height as you draw it (see below), or add them later with **Dimension**. |
 | **Round corner** | A corner where two lines meet. Both lines are cut back and an arc joins them, tangent to both, with a **Radius** dimension: the cursor is in its number in the Sketch panel, so type the size you want and press **Enter**. The sharp corner stays as a helper point, so dimensions to the corner still measure to it. |
 | **Trim** | The piece of a line, circle or arc to cut away: it shows red under the mouse first. It's cut back to where other lines, circles or arcs cross it, and the cut end stays on the one that cut it. A line cut in the middle becomes two pieces in line; a circle cut in two places becomes an arc; something nothing crosses is deleted. |
-| **Circle** | Its center, then a point on its edge. |
+| **Circle** | Its center, then a point on its edge. Or type its diameter (see below). |
 | **Arc** | Its center, where it starts, then where it ends. It goes counterclockwise. |
 | **Point** | Where it goes. |
 
 ![A rectangle's corner rounded to 6 mm: the arc, and the helper point where the sharp corner was, kept On both lines](images/app-sketch-rounded.png)
+
+**Typing sizes as you draw.** After the first click of a **Rectangle**, a
+**Line** or a **Circle**, boxes follow the shape with its sizes: a rectangle's
+width and height, a line's length and angle, or a circle's diameter. The first
+box is ready to type in:
+
+- Type a size, and the shape keeps it however you move the mouse. The mouse
+  still says which way it goes (a rectangle to the left of its first corner, say).
+- **Tab** goes to the next box, and **Shift+Tab** back.
+- **Enter** (or a click) finishes the shape. Each size you typed becomes a
+  dimension on it, so it stays that size, and it's all one step to undo. A line's
+  angle is counted counterclockwise from the sketch's x, in degrees, like `30`;
+  it places the line, but doesn't add a dimension.
+- A plain number is in the design's unit, like `40`. You can type another unit
+  (`2 in`) too. Something that isn't a size is left out, and the mouse sets it.
+- **Esc** in a box stops the shape, as it does in the view.
 
 3. **Escape** steps back one thing at a time: it stops the shape you're
    drawing, then switches to **Select**, then lets go of what's picked, then

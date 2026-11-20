@@ -4662,3 +4662,165 @@ TEST_CASE("Extrude's Operation and Body in Properties: join, then cut into the b
     CHECK_FALSE(app.field<QComboBox>("body")->isEnabled());
     CHECK(docs.lastRebuild(doc)->bodies() == std::vector{box, extrude});
 }
+
+namespace {
+
+// Types into one of the view's number boxes, as a student would.
+void typeIn(QLineEdit* box, const QString& text) {
+    REQUIRE(box);
+    box->setText(text);
+    emit box->textEdited(text);
+    settle();
+}
+
+void pressKey(QWidget* w, int key) {
+    QKeyEvent press(QEvent::KeyPress, key, Qt::NoModifier);
+    QApplication::sendEvent(w, &press);
+    settle();
+}
+
+const sketch::Constraint* firstOf(const sketch::Sketch& s, sketch::ConstraintKind kind) {
+    for (const auto& c : s.constraints) {
+        if (c.kind == kind) return &c;
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+TEST_CASE("type a rectangle's width and height while drawing it, Tab between them",
+          "[app][sketcher][sizes]") {
+    App app;
+    app.menu("sb.sketcher.auto")->trigger();  // off: no H or V snapping to think about
+    app.click("sb.sketcher.new_xy");
+    app.click("sb.sketcher.rectangle");
+    auto* flat = app.flat();
+    REQUIRE(flat);
+    CHECK_FALSE(flat->input("width"));  // nothing until the first corner
+
+    clickAt(flat, {0, 0, 0});
+    hoverAt(flat, {30, 20, 0});
+    auto* width = flat->input("width");
+    auto* height = flat->input("height");
+    REQUIRE(width);
+    REQUIRE(height);
+    CHECK(width->text() == QStringLiteral("30.00 mm"));  // the size now, from the mouse
+    CHECK(height->text() == QStringLiteral("20.00 mm"));
+    CHECK(width->hasFocus());  // ready to type
+    // Its sizes are drawn as dimension lines while it follows the mouse.
+    REQUIRE(app.host.overlays().find("sb.sketcher.edit.size.1"));
+    CHECK(app.host.overlays().find("sb.sketcher.edit.size.1")->shape == plugin::OverlayShape::Dimension);
+
+    // Typing the width locks it; the mouse still sets the height.
+    typeIn(width, QStringLiteral("70"));
+    hoverAt(flat, {30, 30, 0});
+    CHECK(width->text() == QStringLiteral("70"));  // what was typed stays
+    CHECK(height->text() == QStringLiteral("30.00 mm"));
+    const auto* preview = app.host.overlays().find("sb.sketcher.edit.preview");
+    REQUIRE(preview);
+    CHECK(std::ranges::any_of(preview->points,
+                              [](const kernel::Vec3& p) { return std::abs(p.x - 70) < 1e-9; }));
+
+    // Tab to the height, type it, Enter: the rectangle, with both sizes as dimensions, in one undo step.
+    pressKey(width, Qt::Key_Tab);
+    CHECK(height->hasFocus());
+    typeIn(height, QStringLiteral("4 cm"));
+    emit height->returnPressed();
+    settle();
+    const auto& s = sketchAt(app, 0).sketch();
+    REQUIRE(s.entities.size() == 4);
+    const auto* w = firstOf(s, sketch::ConstraintKind::HorizontalDistance);
+    const auto* h = firstOf(s, sketch::ConstraintKind::VerticalDistance);
+    REQUIRE(w);
+    REQUIRE(h);
+    CHECK(w->value == Approx(70));
+    CHECK(h->value == Approx(40));
+    CHECK(app.doc().undoLabel().rfind("Add rectangle", 0) == 0);
+    const auto& top = std::get<sketch::LineShape>(s.entities[1].shape);
+    CHECK(top.end.x == Approx(70));
+    CHECK(top.end.y == Approx(40));
+    CHECK_FALSE(flat->input("width"));  // the boxes go with the shape
+    CHECK_FALSE(app.host.overlays().find("sb.sketcher.edit.size.1"));
+
+    // The mouse says which way: down and to the left.
+    clickAt(flat, {-10, -10, 0});
+    hoverAt(flat, {-20, -20, 0});
+    typeIn(flat->input("width"), QStringLiteral("30"));
+    emit flat->input("width")->returnPressed();
+    settle();
+    const auto& s2 = sketchAt(app, 0).sketch();
+    REQUIRE(s2.entities.size() == 8);
+    const auto& corner = std::get<sketch::LineShape>(s2.entities[5].shape).end;  // the opposite corner
+    CHECK(corner.x == Approx(-40));
+    CHECK(corner.y == Approx(-20));
+    std::vector<double> widths;
+    for (const auto& c : s2.constraints)
+        if (c.kind == sketch::ConstraintKind::HorizontalDistance) widths.push_back(c.value);
+    CHECK(widths == std::vector<double>{70, -30});  // to the left of its first corner
+
+    // Escape in a box stops the shape, as in the view.
+    clickAt(flat, {100, 100, 0});
+    hoverAt(flat, {120, 110, 0});
+    REQUIRE(flat->input("width"));
+    pressKey(flat->input("width"), Qt::Key_Escape);
+    CHECK_FALSE(flat->input("width"));
+    CHECK(sketchAt(app, 0).sketch().entities.size() == 8);
+}
+
+TEST_CASE("type a line's length and angle, and a circle's diameter, while drawing",
+          "[app][sketcher][sizes]") {
+    App app;
+    app.menu("sb.sketcher.auto")->trigger();  // off: no H or V snapping to think about
+    app.click("sb.sketcher.new_xy");
+    app.click("sb.sketcher.line");
+    auto* flat = app.flat();
+    clickAt(flat, {0, 0, 0});
+    hoverAt(flat, {10, 10, 0});
+    REQUIRE(flat->input("length"));
+    REQUIRE(flat->input("angle"));
+    CHECK(flat->input("angle")->text() == QStringLiteral("45.0°"));
+    typeIn(flat->input("length"), QStringLiteral("50"));
+    pressKey(flat->input("length"), Qt::Key_Tab);
+    CHECK(flat->input("angle")->hasFocus());
+    typeIn(flat->input("angle"), QStringLiteral("30"));  // degrees
+    emit flat->input("angle")->returnPressed();
+    settle();
+    const auto& s = sketchAt(app, 0).sketch();
+    REQUIRE(s.entities.size() == 1);
+    const auto& line = std::get<sketch::LineShape>(s.entities[0].shape);
+    CHECK(line.end.x == Approx(50 * std::sqrt(3.0) / 2));
+    CHECK(line.end.y == Approx(25));
+    REQUIRE(firstOf(s, sketch::ConstraintKind::Length));
+    CHECK(firstOf(s, sketch::ConstraintKind::Length)->value == Approx(50));
+    // Lines keep going from the end, with fresh boxes.
+    hoverAt(flat, {80, 50, 0});
+    REQUIRE(flat->input("length"));
+    CHECK(flat->input("length")->text() != QStringLiteral("50"));
+    CHECK(flat->input("length")->hasFocus());
+    pressKey(flat->input("length"), Qt::Key_Escape);
+
+    // A circle: its diameter.
+    app.click("sb.sketcher.circle");
+    clickAt(flat, {100, 0, 0});
+    hoverAt(flat, {110, 0, 0});
+    REQUIRE(flat->input("diameter"));
+    CHECK(flat->input("diameter")->text() == QStringLiteral("Ø20.00 mm"));
+    typeIn(flat->input("diameter"), QStringLiteral("16"));
+    emit flat->input("diameter")->returnPressed();
+    settle();
+    const auto& s2 = sketchAt(app, 0).sketch();
+    const auto* circle = std::get_if<sketch::CircleShape>(&s2.entities.back().shape);
+    REQUIRE(circle);
+    CHECK(circle->radius == Approx(8));
+    REQUIRE(firstOf(s2, sketch::ConstraintKind::Diameter));
+    CHECK(firstOf(s2, sketch::ConstraintKind::Diameter)->value == Approx(16));
+
+    // Something that isn't a size is ignored: the mouse sets it.
+    clickAt(flat, {200, 0, 0});
+    hoverAt(flat, {230, 0, 0});
+    typeIn(flat->input("diameter"), QStringLiteral("big"));
+    clickAt(flat, {230, 0, 0});
+    const auto* last = std::get_if<sketch::CircleShape>(&sketchAt(app, 0).sketch().entities.back().shape);
+    REQUIRE(last);
+    CHECK(last->radius == Approx(30));
+}
