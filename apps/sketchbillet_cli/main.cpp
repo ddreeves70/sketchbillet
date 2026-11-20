@@ -341,6 +341,7 @@ int openDesign(int argc, char** argv) {
         printIssues(opened.issues);
         return 1;
     }
+    printIssues(opened.notes);  // an assembly's linked parts: updated, moved or not found
     const auto& doc = *opened.document;
     auto kernel = sb::kernel::makeOcctKernel();
     auto solver = sb::sketch::makePlaneGcsSolver();

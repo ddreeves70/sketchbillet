@@ -240,7 +240,19 @@ An [assembly](commands.md#assemblynew) has no steps of its own, so `open` lists
 its components instead: each one's part, whether it's grounded (fixed where it
 is) or free, and where its part's origin is. Then its parts, each built once
 however many components use it, with its steps, mass and material, and how many
-are in the assembly. Last, the mass of everything together.
+are in the assembly, and the file each linked part is linked to. Last, the mass
+of everything together.
+
+Opening an assembly first updates its [linked parts](../user-guide/assemblies.md#linked-and-inside-parts)
+from their files, and says what changed, before the list:
+
+```text
+note [part.updated]: Wheel changed in Wheel.sb, so Car uses the new Wheel.
+```
+
+A linked part whose file can't be found says so, and the assembly uses the copy
+it keeps. `open` doesn't save anything: to keep updated parts, save the assembly
+with [`run --open Car.sb --save Car.sb`](run.md#save-an-assembly-with-its-parts-updated).
 
 <!-- cli-example -->
 ```console
@@ -258,6 +270,7 @@ Car: assembly, 4 components, 1 part
   Wheel 4      Wheel      free     at 75, 0, 0 mm
 Parts:
   Wheel        1 step   ok        mass 3.37 g (PLA), 4 in the assembly
+    linked to Wheel.sb
 Mass in all: 13.46 g
 ```
 

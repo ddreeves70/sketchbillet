@@ -1,4 +1,5 @@
 #include "sb/io/SketchBilletFile.h"
+#include "sb/io/LinkedParts.h"
 #include "sb/io/Steps.h"
 
 #include "Zip.h"
@@ -1355,13 +1356,35 @@ void partEntries(const Document& doc, Entries& entries) {
     entries.emplace_front("manifest.json", dump(manifest));
 }
 
+std::filesystem::path fromUtf8(const std::string& text) {
+    return std::filesystem::path(std::u8string(text.begin(), text.end()));
+}
+
+std::string toUtf8(const std::filesystem::path& p) {
+    const auto text = p.generic_u8string();
+    return std::string(text.begin(), text.end());
+}
+
+// A linked part's link.json. Its path is relative to the assembly's folder when
+// that's known, with forward slashes on every system.
+json linkJson(const DocId& part, const model::PartLink& link, const std::filesystem::path& folder) {
+    auto path = fromUtf8(link.path);
+    if (!folder.empty() && path.is_absolute()) {
+        if (auto relative = path.lexically_relative(folder); !relative.empty()) path = relative;
+    }
+    return {{"path", toUtf8(path)},
+            {"documentId", part.toString()},
+            {"sha256", link.sha256},
+            {"updated", link.updated}};
+}
+
 json placementJson(const kernel::Placement& p) {
     return {{"origin", vec3(p.origin)}, {"xAxis", vec3(p.xAxis)}, {"zAxis", vec3(p.zAxis)}};
 }
 
 // An assembly's files (schema 2): its components, and each inside part's files
 // under parts/<the part's design id>/, as a part's .sb file has them.
-void assemblyEntries(const Document& doc, Entries& entries) {
+void assemblyEntries(const Document& doc, Entries& entries, const std::filesystem::path& folder) {
     json files = json::array({"components.json"});
     json components = json::array();
     for (const auto& c : doc.components()) {
@@ -1377,11 +1400,16 @@ void assemblyEntries(const Document& doc, Entries& entries) {
         files.push_back("parameters.json");
     }
     for (const auto* part : doc.parts()) {
-        const std::string folder = "parts/" + part->id().toString() + "/";
+        const std::string where = "parts/" + part->id().toString() + "/";
         Entries inside;
         partEntries(*part, inside);
-        for (auto& [name, text] : inside) entries.emplace_back(folder + name, std::move(text));
-        files.push_back(folder + "manifest.json");  // in the order of the assembly's parts
+        for (auto& [name, text] : inside) entries.emplace_back(where + name, std::move(text));
+        files.push_back(where + "manifest.json");  // in the order of the assembly's parts
+        if (const auto* link = doc.partLink(part->id())) {
+            // A linked part: where its file is, as well as its copy as last used.
+            entries.emplace_back(where + "link.json", dump(linkJson(part->id(), *link, folder)));
+            files.push_back(where + "link.json");
+        }
     }
     const json manifest{
         {"format", "sketchbillet"},      {"schema", kFileSchemaVersion},
@@ -1393,11 +1421,11 @@ void assemblyEntries(const Document& doc, Entries& entries) {
 
 }  // namespace
 
-Diagnostics writeBytes(const Document& doc, Bytes& out) {
+Diagnostics writeBytes(const Document& doc, Bytes& out, const std::filesystem::path& folder) {
     // Build every entry's text first.
     Entries entries;
     if (doc.kind() == model::DocKind::Assembly) {
-        assemblyEntries(doc, entries);
+        assemblyEntries(doc, entries, folder);
     } else {
         partEntries(doc, entries);
     }
@@ -1422,7 +1450,11 @@ Diagnostics writeFile(const Document& doc, const std::filesystem::path& path) {
     };
 
     Bytes bytes;
-    if (auto issues = writeBytes(doc, bytes); !issues.empty()) return issues;
+    std::error_code ec;
+    const auto full = std::filesystem::absolute(path, ec);
+    if (auto issues = writeBytes(doc, bytes, ec ? std::filesystem::path() : full.parent_path());
+        !issues.empty())
+        return issues;
 
     // Written next to the target, then moved into place, so a failed save never
     // leaves a half-written design behind.
@@ -1437,7 +1469,8 @@ namespace {
 
 // Reads a design whose files start with `prefix` in the zip: "" for the file's
 // own design, "parts/<id>/" for one of an assembly's parts.
-OpenResult readDesign(zip_t* za, const std::string& prefix, std::string_view displayName) {
+OpenResult readDesign(zip_t* za, const std::string& prefix, std::string_view displayName,
+                      const std::filesystem::path& folder) {
     OpenResult result;
     auto fail = [&](Diagnostic d) {
         result.issues.push_back(std::move(d));
@@ -1534,11 +1567,31 @@ OpenResult readDesign(zip_t* za, const std::string& prefix, std::string_view dis
             if (file.size() <= start.size() + end.size() || file.rfind(start, 0) != 0 ||
                 file.compare(file.size() - end.size(), end.size(), end) != 0)
                 continue;
-            const std::string folder = file.substr(0, file.size() - end.size() + 1);  // "parts/<id>/"
-            auto part = readDesign(za, folder, displayName);
+            const std::string where = file.substr(0, file.size() - end.size() + 1);  // "parts/<id>/"
+            auto part = readDesign(za, where, displayName, {});
             if (!part.ok()) return part;  // what's wrong with the part
             const auto name = part.document->name();
-            if (auto issues = doc->execute(std::make_unique<model::AddPartCommand>(std::move(part.document)));
+            // A linked part: where its file is. Its path is relative to the assembly.
+            std::optional<model::PartLink> link;
+            if (const auto lj = readJson(where + "link.json")) {
+                const auto linked = DocId::parse(lj->is_object() ? lj->value("documentId", "") : "");
+                if (!lj->is_object() || !lj->value("path", json()).is_string() || !linked) {
+                    return fail(damaged(displayName, where + "link.json is missing its path or documentId"));
+                }
+                if (*linked != part.document->id()) {
+                    return fail(damaged(displayName, where + "link.json is for another design"));
+                }
+                auto path = fromUtf8((*lj)["path"].get<std::string>());
+                if (!folder.empty() && path.is_relative()) path = (folder / path).lexically_normal();
+                link = model::PartLink{toUtf8(path), lj->value("sha256", ""), lj->value("updated", ""), true};
+                // Not found: the copy is used, and the part is marked. (openFile() then
+                // updates parts whose files changed.)
+                if (!folder.empty()) link->found = findLinkedFile(*link, *linked, folder).has_value();
+            } else if (why.rfind("missing", 0) != 0) {
+                return fail(damaged(displayName, why));
+            }
+            if (auto issues = doc->execute(
+                    std::make_unique<model::AddPartCommand>(std::move(part.document), std::move(link)));
                 !issues.empty()) {
                 return fail(damaged(displayName, "part " + name + ": " + issues.front().code));
             }
@@ -1702,7 +1755,7 @@ OpenResult readDesign(zip_t* za, const std::string& prefix, std::string_view dis
 
 }  // namespace
 
-OpenResult readBytes(const Bytes& data, std::string_view displayName) {
+OpenResult readBytes(const Bytes& data, std::string_view displayName, const std::filesystem::path& folder) {
     OpenResult result;
     auto fail = [&](Diagnostic d) {
         result.issues.push_back(std::move(d));
@@ -1719,13 +1772,43 @@ OpenResult readBytes(const Bytes& data, std::string_view displayName) {
         return fail(notSketchBillet(displayName, zipErrorText(&err)));
     }
 
-    return readDesign(za.get(), "", displayName);
+    return readDesign(za.get(), "", displayName, folder);
+}
+
+std::optional<DocId> readDesignId(const Bytes& data) {
+    zip_error_t err;
+    zip_error_init(&err);
+    zip_source_t* raw = zip_source_buffer_create(data.data(), data.size(), 0, &err);
+    if (!raw) {
+        zip_error_fini(&err);
+        return std::nullopt;
+    }
+    ZipPtr za(zip_open_from_source(raw, ZIP_RDONLY, &err));
+    if (!za) {
+        zip_source_free(raw);
+        zip_error_fini(&err);
+        return std::nullopt;
+    }
+    std::string why;
+    const auto text = readEntry(za.get(), "manifest.json", why);
+    if (!text) return std::nullopt;
+    const json manifest = json::parse(*text, nullptr, false);
+    if (!manifest.is_object() || manifest.value("format", "") != "sketchbillet") return std::nullopt;
+    const json document = manifest.value("document", json::object());
+    return document.is_object() ? DocId::parse(document.value("id", "")) : std::nullopt;
+}
+
+bool readFileBytes(const std::filesystem::path& path, Bytes& out) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return false;
+    out.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+    return !f.bad();
 }
 
 OpenResult openFile(const std::filesystem::path& path) {
     const std::string name = path.filename().string();
-    std::ifstream f(path, std::ios::binary);
-    if (!f) {
+    Bytes data;
+    if (!readFileBytes(path, data)) {
         OpenResult r;
         r.issues.push_back(
             problem("file.cant_read",
@@ -1734,8 +1817,21 @@ OpenResult openFile(const std::filesystem::path& path) {
                     path.string()));
         return r;
     }
-    Bytes data((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    return readBytes(data, name);
+    std::error_code ec;
+    const auto full = std::filesystem::absolute(path, ec);
+    const auto folder = ec ? std::filesystem::path() : full.parent_path();
+    auto result = readBytes(data, name, folder);
+    if (!result.ok() || result.document->kind() != model::DocKind::Assembly) return result;
+    // Its linked parts, brought up to date with their files: one undo step.
+    auto updates = updateLinkedParts(*result.document, folder);
+    result.notes = std::move(updates.notes);
+    if (updates.command) {
+        for (auto& d : result.document->execute(std::move(updates.command))) {
+            d.severity = Severity::Warning;
+            result.notes.push_back(std::move(d));
+        }
+    }
+    return result;
 }
 
 // ---------------------------------------------------------------------------

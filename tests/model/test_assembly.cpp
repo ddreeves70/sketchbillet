@@ -251,3 +251,123 @@ TEST_CASE("rebuilding an assembly builds each part once, and again only when it 
     CHECK(kernel.calls == 2);
     CHECK(second.part(car.findPart("Axle")->id())->reused().size() == 1);
 }
+
+TEST_CASE("a linked part keeps its link; undo and redo take it out and put it back",
+          "[model][assembly][link]") {
+    Document car(DocKind::Part, "Car");
+    makeAssembly(car);
+    auto w = wheel();
+    const DocId id = w->id();
+    const PartLink link{"/class/wheel.sb", std::string(64, 'a'), "2026-11-13T23:40:00Z"};
+    REQUIRE(car.execute(std::make_unique<InsertPartCommand>(std::move(w), 2, kernel::Placement{},
+                                                            kernel::Vec3{}, link))
+                .empty());
+    REQUIRE(car.partLink(id));
+    CHECK(car.partLink(id)->path == "/class/wheel.sb");
+    CHECK(car.partLink(id)->found);
+    REQUIRE(car.undo());
+    CHECK_FALSE(car.partLink(id));
+    REQUIRE(car.redo());
+    REQUIRE(car.partLink(id));
+    CHECK(car.partLink(id)->sha256 == link.sha256);
+
+    // Inserting it again adds components; it stays linked as it was.
+    REQUIRE(car.execute(std::make_unique<InsertPartCommand>(wheel(), 1)).empty());  // another design
+    auto again = std::make_unique<Document>(id, DocKind::Part, "Wheel");
+    REQUIRE(car.execute(std::make_unique<InsertPartCommand>(std::move(again), 1)).empty());
+    REQUIRE(car.partLink(id));
+
+    // Deleting its last components takes the part and its link out; undo puts both back.
+    for (const auto* name : {"Wheel 1", "Wheel 2", "Wheel 4"}) {
+        REQUIRE(run(car, "component.delete", {{"component", std::string(name)}}).empty());
+    }
+    CHECK_FALSE(car.findPart(id));
+    CHECK_FALSE(car.partLink(id));
+    REQUIRE(car.undo());
+    REQUIRE(car.partLink(id));
+    CHECK(car.partLink(id)->path == "/class/wheel.sb");
+}
+
+TEST_CASE("updating a linked part swaps its design and link; the components stay; undo puts it back",
+          "[model][assembly][link]") {
+    Document car(DocKind::Part, "Car");
+    makeAssembly(car);
+    auto w = wheel();
+    const DocId id = w->id();
+    REQUIRE(car.execute(std::make_unique<InsertPartCommand>(
+                            std::move(w), 2, kernel::Placement{}, kernel::Vec3{},
+                            PartLink{"/a/wheel.sb", "old", "2026-11-13T00:00:00Z"}))
+                .empty());
+    const auto components = car.components();
+
+    // The new Wheel: the same design id, with two steps.
+    auto changed = std::make_unique<Document>(id, DocKind::Part, "Wheel");
+    for (const auto* name : {"Box1", "Box2"}) {
+        REQUIRE(changed
+                    ->execute(std::make_unique<AddFeatureCommand>(
+                        std::make_unique<BoxFeature>(name, kernel::Vec3{}, kernel::Vec3{1, 1, 1})))
+                    .empty());
+    }
+    std::vector<PartUpdate> changes;
+    changes.push_back({id, std::move(changed), PartLink{"/b/wheel.sb", "new", "2026-11-20T00:00:00Z"}});
+    REQUIRE(car.execute(std::make_unique<UpdatePartsCommand>(std::move(changes), "Update Wheel")).empty());
+    CHECK(car.undoLabel() == "Update Wheel");
+    CHECK(car.findPart(id)->featureCount() == 2);
+    CHECK(car.partLink(id)->path == "/b/wheel.sb");
+    CHECK(car.components().size() == components.size());
+    CHECK(car.components()[1].name == components[1].name);
+
+    FakeKernel kernel;
+    CHECK(car.regenerate(kernel).part(id)->bodies().size() == 2);
+
+    REQUIRE(car.undo());
+    CHECK(car.findPart(id)->featureCount() == 1);
+    CHECK(car.partLink(id)->path == "/a/wheel.sb");
+    CHECK(car.partLink(id)->sha256 == "old");
+    CHECK(car.regenerate(kernel).part(id)->bodies().size() == 1);
+    REQUIRE(car.redo());
+    CHECK(car.findPart(id)->featureCount() == 2);
+    CHECK(car.partLink(id)->sha256 == "new");
+
+    // Another design can't take its place, and an assembly can't.
+    std::vector<PartUpdate> wrong;
+    wrong.push_back({id, wheel("Tire"), std::nullopt});
+    auto issues = car.execute(std::make_unique<UpdatePartsCommand>(std::move(wrong), "Update Wheel"));
+    REQUIRE(issues.size() == 1);
+    CHECK(issues[0].code == "part.other_design");
+    CHECK(issues[0].message ==
+          "Tire is a different design from Wheel, so it can't take its place. Pick the file "
+          "Wheel was saved in.");
+    std::vector<PartUpdate> sub;
+    sub.push_back({id, std::make_unique<Document>(id, DocKind::Assembly, "Wheel"), std::nullopt});
+    issues = car.execute(std::make_unique<UpdatePartsCommand>(std::move(sub), "Update Wheel"));
+    REQUIRE(issues.size() == 1);
+    CHECK(issues[0].code == "assembly.sub");
+    CHECK(car.findPart(id)->featureCount() == 2);  // unchanged
+}
+
+TEST_CASE("part.make_inside stops following the file, as one undo step", "[model][assembly][link]") {
+    Document car(DocKind::Part, "Car");
+    makeAssembly(car);
+    auto w = wheel();
+    const DocId id = w->id();
+    REQUIRE(
+        car.execute(std::make_unique<InsertPartCommand>(std::move(w), 1, kernel::Placement{}, kernel::Vec3{},
+                                                        PartLink{"/a/wheel.sb", "x", "2026-11-13T00:00:00Z"}))
+            .empty());
+    REQUIRE(run(car, "part.make_inside", {{"part", std::string("Wheel")}}).empty());
+    CHECK(car.undoLabel() == "Make Wheel inside");
+    CHECK_FALSE(car.partLink(id));
+    CHECK(car.findPart(id)->featureCount() == 1);  // its copy, as it was
+    REQUIRE(car.undo());
+    CHECK(car.partLink(id));
+    REQUIRE(car.redo());
+
+    auto issues = run(car, "part.make_inside", {{"part", std::string("Wheel")}});
+    REQUIRE(issues.size() == 1);
+    CHECK(issues[0].code == "part.inside_already");
+    CHECK(issues[0].message == "Wheel is an inside part already: it isn't linked to a file.");
+    issues = run(car, "part.make_inside", {{"part", std::string("Tire")}});
+    REQUIRE(issues.size() == 1);
+    CHECK(issues[0].message == "Car has no part called Tire. Its parts are: Wheel.");
+}

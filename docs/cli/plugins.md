@@ -84,6 +84,10 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command parameter.delete
            command parameter.rename
            command parameter.set
+           command part.make_inside
+           command part.relink
+           command part.save_as
+           command part.update
            command sketch.add_arc
            command sketch.add_circle
            command sketch.add_line
@@ -188,6 +192,10 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command parameter.delete
            command parameter.rename
            command parameter.set
+           command part.make_inside
+           command part.relink
+           command part.save_as
+           command part.update
            command sketch.add_arc
            command sketch.add_circle
            command sketch.add_line

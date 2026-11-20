@@ -380,11 +380,12 @@ car.sb
 ├── components.json                  each component: its part, where it is, grounded or free
 ├── parameters.json                  the assembly's own named values (only if it has any)
 └── parts/
-    ├── 017e13e9-....                one folder per part, named after the part's id
+    ├── 017e13e9-....                an inside part: one folder per part, named after its id
     │   ├── manifest.json            laid out exactly like a part's .sb file (schema 1)
     │   ├── timeline.json
     │   └── features/...
-    └── 1305cf0c-....
+    └── 1305cf0c-....                a linked part: its copy as last used, plus link.json
+        ├── link.json                where its own .sb file is
         └── ...
 ```
 
@@ -396,6 +397,35 @@ open in.
 
 Each part folder holds what a part's `.sb` file holds, with the same names and a
 schema 1 manifest. You can copy a folder out, zip it, and open it as a part.
+
+### link.json
+
+A **linked part** follows its own `.sb` file (see
+[Linked and inside parts](user-guide/assemblies.md#linked-and-inside-parts)).
+Its folder still holds its copy as last used, so the assembly opens without the
+file, plus `link.json` saying where the file is. The manifest's `files` lists it
+right after the part's `manifest.json`. An inside part has no `link.json`.
+
+```json
+{
+  "documentId": "1305cf0c-6a3e-4c5b-9b1d-2f7e8a4d9c10",
+  "path": "parts/wheel.sb",
+  "sha256": "9f2c0d1e...",
+  "updated": "2026-11-13T23:40:00Z"
+}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `documentId` | The part's design id: the same as its folder's name, and the id in the file's own manifest. |
+| `path` | The file, relative to the assembly's folder, with `/` between folders on every computer. A file on another drive is written as a full path. |
+| `sha256` | The file's fingerprint as last used: SHA-256 of its bytes, as 64 lowercase hex digits. A file with another fingerprint has changed. |
+| `updated` | When the assembly last took its copy from the file, in UTC. |
+
+The path is relative so that a folder holding an assembly and its parts can be
+moved or copied as a whole. A SketchBillet that doesn't know about `link.json`
+(the first one to read schema 2) opens the part as an inside part, from its
+copy.
 
 ### components.json
 
@@ -435,7 +465,22 @@ order the manifest lists them (each one opened the same way as a part file), the
 `components.json`. Each part and each component is added through a command, so
 the same checks run as when a student builds the assembly.
 
+Then it looks for each linked part's file: at its `path`; then by its file name
+in the assembly's folder; then by its `documentId` among the `.sb` files in the
+assembly's folder and the folders in it, three deep. A file only counts if its
+manifest has the same design id.
+
+| What it finds | What happens |
+| --- | --- |
+| The file, with the same fingerprint | Nothing. |
+| The file, with another fingerprint | The part is read from the file, in place of the copy, and its fingerprint and `updated` change. One undo step, and the assembly is changed (not saved). |
+| The file, somewhere else | The link's `path` changes to where it is now, and the part is updated as above if it changed. |
+| Nothing | The copy is used, and the part is marked as not found (that isn't saved). |
+
+Each of these but the first leaves a note saying what happened.
+
 An assembly is `file.damaged` if a part listed in the manifest has no folder, a
+part's `link.json` has no `path` or `documentId` or is for another design, a
 part in it is itself an assembly, a component is missing its id, name, part or
 placement, or a component's part isn't in `parts/`. An assembly that says it is
 schema 1 is damaged too. A SketchBillet that only knows schema 1 says the file is

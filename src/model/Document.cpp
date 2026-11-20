@@ -114,6 +114,27 @@ void DocumentEditor::addPart(std::unique_ptr<Document> part, std::size_t index) 
     doc_.parts_.insert(doc_.parts_.begin() + static_cast<std::ptrdiff_t>(index), std::move(part));
 }
 
+std::unique_ptr<Document> DocumentEditor::replacePart(std::unique_ptr<Document> part) {
+    if (!part) return nullptr;
+    for (auto& p : doc_.parts_) {
+        if (p->id() == part->id()) {
+            std::swap(p, part);
+            return part;
+        }
+    }
+    return nullptr;
+}
+
+std::optional<PartLink> DocumentEditor::setPartLink(const DocId& part, std::optional<PartLink> link) {
+    std::optional<PartLink> old;
+    if (auto it = doc_.links_.find(part); it != doc_.links_.end()) {
+        old = std::move(it->second);
+        doc_.links_.erase(it);
+    }
+    if (link) doc_.links_.emplace(part, std::move(*link));
+    return old;
+}
+
 std::pair<std::unique_ptr<Document>, std::size_t> DocumentEditor::removePart(const DocId& id) {
     for (std::size_t i = 0; i < doc_.parts_.size(); ++i) {
         if (doc_.parts_[i]->id() != id) continue;
@@ -315,6 +336,12 @@ const Document* Document::findPart(std::string_view name) const {
         if (p->name() == name) return p.get();
     }
     return nullptr;
+}
+
+const PartLink* Document::partLink(const DocId& part) const {
+    if (!findPart(part)) return nullptr;  // a link left behind by a deleted part (undo brings it back)
+    auto it = links_.find(part);
+    return it == links_.end() ? nullptr : &it->second;
 }
 
 std::string Document::uniqueFolderName(const std::string& base) const {

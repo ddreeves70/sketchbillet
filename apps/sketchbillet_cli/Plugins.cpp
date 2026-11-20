@@ -12,8 +12,10 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
+#include "sb/io/LinkedParts.h"
 #include "sb/io/SketchBilletFile.h"
 #include "sb/kernel_occt/OcctKernel.h"
 #include "sb/plugin/PluginHost.h"
@@ -447,11 +449,58 @@ bool geometryArgs(const model::CommandInfo& info, model::Args& values, const mod
     return true;
 }
 
+// Runs the command in `args` (its name, then name=value settings) on a design.
+// Returns false, having said why, if it couldn't.
+bool runOne(plugin::PluginHost& host, const DocId& id, const std::vector<std::string_view>& args,
+            kernel::IKernel& kernel, sketch::ISketchSolver& solver) {
+    auto& docs = host.documents();
+    const std::string name(args[0]);
+    const auto* info = host.commands().info(name);
+    if (!info) {
+        std::fprintf(stderr,
+                     "error: there is no command called %s. Run \"sketchbillet_cli plugins\" to see them.\n",
+                     name.c_str());
+        return false;
+    }
+    model::Args values;
+    for (std::size_t i = 1; i < args.size(); ++i) {
+        const std::string arg(args[i]);
+        const auto eq = arg.find('=');
+        const auto argName = arg.substr(0, eq);
+        const model::ArgSpec* spec = nullptr;
+        for (const auto& s : info->args) {
+            if (s.name == argName) spec = &s;
+        }
+        if (eq == std::string::npos || !spec) {
+            std::fprintf(stderr, "error: %s has no setting called %s.", info->label.c_str(), argName.c_str());
+            std::fprintf(stderr, " Its settings are:");
+            for (const auto& s : info->args) std::fprintf(stderr, " %s", s.name.c_str());
+            std::fprintf(stderr, "\n");
+            return false;
+        }
+        std::string why;
+        auto value = parseArg(*spec, arg.substr(eq + 1), *docs.find(id), why);
+        if (!value) {
+            std::fprintf(stderr, "error: %s\n", why.c_str());
+            return false;
+        }
+        values[argName] = *value;
+    }
+
+    if (!geometryArgs(*info, values, *docs.find(id), kernel, solver)) return false;
+
+    if (auto issues = docs.run(id, name, values); !issues.empty()) {
+        printIssues(issues);
+        return false;
+    }
+    return true;
+}
+
 int runCommand(int argc, char** argv) {
     auto usage = [] {
         std::fprintf(stderr,
                      "usage: sketchbillet_cli run [--plugins <folder>]... [--open <in.sb>] [--save <out.sb>] "
-                     "<command> [name=value]...\n");
+                     "[<command> [name=value]...]\n");
         return 2;
     };
     std::vector<std::string_view> args(argv + 2, argv + argc);
@@ -461,7 +510,8 @@ int runCommand(int argc, char** argv) {
     if (!loadPlugins(host, args)) return 2;
     const auto openPath = takeOption(args, "--open");
     const auto savePath = takeOption(args, "--save");
-    if (args.empty()) return usage();
+    // No command: open and save again (an assembly's linked parts, updated as it opened).
+    if (args.empty() && !(openPath && savePath)) return usage();
 
     for (const auto& p : host.plugins()) {
         if (p.state != plugin::PluginState::Loaded) {
@@ -478,6 +528,7 @@ int runCommand(int argc, char** argv) {
             printIssues(opened.issues);
             return 1;
         }
+        printIssues(opened.notes);  // an assembly's linked parts: updated, moved or not found
         doc = std::move(opened.document);
     } else {
         const auto name =
@@ -487,46 +538,7 @@ int runCommand(int argc, char** argv) {
     auto& docs = host.documents();
     const DocId id = docs.add(std::move(doc));
 
-    // The command and its arguments.
-    const std::string name(args[0]);
-    const auto* info = host.commands().info(name);
-    if (!info) {
-        std::fprintf(stderr,
-                     "error: there is no command called %s. Run \"sketchbillet_cli plugins\" to see them.\n",
-                     name.c_str());
-        return 1;
-    }
-    model::Args values;
-    for (std::size_t i = 1; i < args.size(); ++i) {
-        const std::string arg(args[i]);
-        const auto eq = arg.find('=');
-        const auto argName = arg.substr(0, eq);
-        const model::ArgSpec* spec = nullptr;
-        for (const auto& s : info->args) {
-            if (s.name == argName) spec = &s;
-        }
-        if (eq == std::string::npos || !spec) {
-            std::fprintf(stderr, "error: %s has no setting called %s.", info->label.c_str(), argName.c_str());
-            std::fprintf(stderr, " Its settings are:");
-            for (const auto& s : info->args) std::fprintf(stderr, " %s", s.name.c_str());
-            std::fprintf(stderr, "\n");
-            return 1;
-        }
-        std::string why;
-        auto value = parseArg(*spec, arg.substr(eq + 1), *docs.find(id), why);
-        if (!value) {
-            std::fprintf(stderr, "error: %s\n", why.c_str());
-            return 1;
-        }
-        values[argName] = *value;
-    }
-
-    if (!geometryArgs(*info, values, *docs.find(id), *kernel, *solver)) return 1;
-
-    if (auto issues = docs.run(id, name, values); !issues.empty()) {
-        printIssues(issues);
-        return 1;
-    }
+    if (!args.empty() && !runOne(host, id, args, *kernel, *solver)) return 1;
 
     // Report every step (or, for an assembly, every component and part), then what plugins logged.
     const auto& design = *docs.find(id);
@@ -717,6 +729,19 @@ bool printAssembly(const model::Document& doc, const model::RebuildReport& repor
             std::printf("  no bodies yet, %ld in the assembly", static_cast<long>(uses));
         }
         std::printf("\n");
+        // A linked part: its file, from here.
+        if (const auto* link = doc.partLink(part->id())) {
+            const auto path = std::filesystem::path(std::u8string(link->path.begin(), link->path.end()));
+            std::error_code ec;
+            auto shown = path.lexically_relative(std::filesystem::current_path(ec));
+            if (ec || shown.empty()) shown = path;
+            const auto text = shown.generic_u8string();
+            std::printf("    linked to %s", std::string(text.begin(), text.end()).c_str());
+            if (!link->found)
+                std::printf(", which can't be found: using the copy saved on %s",
+                            io::linkDate(link->updated).c_str());
+            std::printf("\n");
+        }
         // What's wrong in a part, under it, by step.
         for (std::size_t i = 0; built && i < part->featureCount(); ++i) {
             const auto& f = part->featureAt(i);

@@ -2,8 +2,9 @@
 
 > **Draft, for review.** Phase 4's first item (see the [roadmap](roadmap.md)).
 > Building it, step 1 (several designs open at once) is built (Nov 19, 2026),
-> and step 2 (assembly documents, from the command line) is built (Nov 20, 2026);
-> the rest isn't yet. Two choices were made on Nov 13, 2026: an
+> step 2 (assembly documents, from the command line) is built (Nov 20, 2026),
+> and step 3 (linked parts, from the command line) is built (Nov 20, 2026); the
+> rest isn't yet. Two choices were made on Nov 13, 2026: an
 > assembly's parts can live **inside** the assembly file or be **linked** to
 > other files, from the start; and parts move along **chains** of joints first,
 > with loops (like a four-bar linkage) later. Changes to `sb_model`, naming and
@@ -18,7 +19,7 @@ This page covers what the student gets, in the order it gets built:
 
 | Part | What the student gets | Status |
 | --- | --- | --- |
-| 1. Where parts live | Parts made inside the assembly, or linked to their own `.sb` files | Inside parts built; links planned |
+| 1. Where parts live | Parts made inside the assembly, or linked to their own `.sb` files | Built, from the command line |
 | 2. Components | Parts placed in the assembly, the same part more than once, one part fixed in place | Built, from the command line |
 | 3. Joints | Rigid, hinge (revolute) and slider joints that place parts and say how they move | Planned |
 | 4. Placing parts along chains | Exact, instant placement from joint to joint, smooth enough to drag | Planned |
@@ -411,7 +412,14 @@ Each line is one pull request, in this order:
    and [the file format](../file-format.md#assemblies-schema-2)). The desktop app
    says to use the command line for an assembly until step 4.
 3. **Linked parts:** links, finding files, fingerprints, updating, the saved
-   copy, Find Linked File, switching between inside and linked.
+   copy, Find Linked File, switching between inside and linked. **Built** (Nov
+   20, 2026), from the command line: `component.insert` links by default
+   (`link=false` for an inside part), `part.update`, `part.relink` (Find Linked
+   File), `part.make_inside` and `part.save_as`; opening an assembly updates its
+   linked parts, with notes and one undo step; and `run --open a.sb --save a.sb`
+   with no command saves the updates (see [the user's guide](../user-guide/assemblies.md#linked-and-inside-parts)
+   and [the file format](../file-format.md#linkjson)). Saving `wheel.sb` in the
+   desktop app updating an open assembly at once comes with step 4.
 4. **Assemblies in the app:** the tree, inserting parts, moving components,
    shared shapes in the viewer, Edit Part.
 5. **Joints:** rigid, revolute and slider; placing along chains; loops checked;

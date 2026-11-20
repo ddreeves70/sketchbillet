@@ -55,12 +55,16 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`parameter.delete`](#parameterdelete) | Removes a parameter nothing uses |
 | [`assembly.new`](#assemblynew) | Makes a new, empty design an assembly |
 | [`component.new`](#componentnew) | Adds an empty part to an assembly, and a component of it |
-| [`component.insert`](#componentinsert) | Puts a part from a `.sb` file into an assembly |
+| [`component.insert`](#componentinsert) | Puts a part from a `.sb` file into an assembly, linked to the file |
 | [`component.add`](#componentadd) | Puts more of a part an assembly has already in it |
 | [`component.ground`](#componentground) | Fixes a component where it is, or lets it go |
 | [`component.place`](#componentplace) | Moves and turns a component |
 | [`component.rename`](#componentrename) | Renames a component |
 | [`component.delete`](#componentdelete) | Takes a component out of an assembly |
+| [`part.update`](#partupdate) | Updates linked parts from their files |
+| [`part.relink`](#partrelink) | Links a part to its file where it is now |
+| [`part.make_inside`](#partmake_inside) | Makes a linked part an inside part |
+| [`part.save_as`](#partsave_as) | Saves a part to its own file, and links it |
 
 Plugins can add more commands. [`sketchbillet_cli help`](help.md) lists every command
 SketchBillet has right now.
@@ -2872,10 +2876,12 @@ wrote Box.sb
 ## component.insert
 
 Puts a part from a `.sb` file into the assembly, with one or more components of
-it in a row. The assembly keeps its own copy of the part, so it opens anywhere,
-even without the file; a later change to the file doesn't change the assembly.
-(Parts that follow their file come in a later version.) Putting in a part the
-assembly has already only adds components. A component's name is its part's
+it in a row. The part stays **linked** to its file: change `Wheel.sb`, and the
+assembly uses the new Wheel the next time it opens. The assembly keeps a copy of
+the part too, so it still opens if the file goes missing. With `link=false` the
+part goes in as an **inside part** instead: only the copy, which doesn't follow
+the file. See [Linked and inside parts](../user-guide/assemblies.md#linked-and-inside-parts).
+Putting in a part the assembly has already only adds components. A component's name is its part's
 name and a number, so name the part's file the way you want its components
 called: `Wheel.sb` gives Wheel 1, Wheel 2, ...
 
@@ -2885,8 +2891,10 @@ called: `Wheel.sb` gives Wheel 1, Wheel 2, ...
 | `count` | whole number | no | How many, from 1 to 100. Default 1 |
 | `at` | x,y,z | no | Where the first one's origin goes, in mm. Default `0,0,0` |
 | `step` | x,y,z | no | How far each one is from the one before, in mm, like `25,0,0`. Default `0,0,0` |
+| `link` | true or false | no | `true` to follow the file (a linked part), `false` to keep only a copy (an inside part). Default `true` |
 
-A car: a body, and four wheels in a row beside it.
+A car: a body, and four wheels in a row beside it. Each part says which file
+it's linked to.
 
 <!-- cli-example -->
 ```console
@@ -2907,7 +2915,9 @@ Car: assembly, 5 components, 2 parts
   Wheel 4      Wheel      free     at 75, -20, 0 mm
 Parts:
   Body         1 step   ok        mass 39.68 g (PLA), 1 in the assembly
+    linked to Body.sb
   Wheel        1 step   ok        mass 3.37 g (PLA), 4 in the assembly
+    linked to Wheel.sb
 Mass in all: 53.14 g
 wrote Car.sb
 ```
@@ -2950,6 +2960,7 @@ Car: assembly, 4 components, 1 part
   Wheel 4      Wheel      free     at 0, 90, 0 mm
 Parts:
   Wheel        1 step   ok        mass 3.37 g (PLA), 4 in the assembly
+    linked to Wheel.sb
 Mass in all: 13.46 g
 wrote Car.sb
 ```
@@ -2978,6 +2989,7 @@ Car: assembly, 2 components, 1 part
   Wheel 2      Wheel      grounded at 30, 0, 0 mm
 Parts:
   Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+    linked to Wheel.sb
 Mass in all: 6.73 g
 wrote Car.sb
 ```
@@ -3013,6 +3025,7 @@ Car: assembly, 2 components, 1 part
     facing x 1, 0, 0, z 0, -1, 0
 Parts:
   Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+    linked to Wheel.sb
 Mass in all: 6.73 g
 ```
 
@@ -3037,6 +3050,7 @@ Car: assembly, 2 components, 1 part
   Spare wheel  Wheel      free     at 0, 0, 0 mm
 Parts:
   Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+    linked to Wheel.sb
 Mass in all: 6.73 g
 wrote Car.sb
 ```
@@ -3061,6 +3075,7 @@ Car: assembly, 1 component, 1 part
   Wheel 1      Wheel      grounded at 0, 0, 0 mm
 Parts:
   Wheel        1 step   ok        mass 3.37 g (PLA), 1 in the assembly
+    linked to Wheel.sb
 Mass in all: 3.37 g
 wrote Car.sb
 ```
@@ -3075,4 +3090,141 @@ $ sketchbillet_cli run --open Car.sb --save Car.sb component.insert file=Wheel.s
 ...
 $ sketchbillet_cli run --open Car.sb component.delete component="Wheel 9"
 error [assembly.no_component]: Car has no component called Wheel 9. Its components are: Wheel 1, Wheel 2.
+```
+
+## part.update
+
+Checks the files of the assembly's linked parts, and uses the new part from
+each file that changed. Opening an assembly does this already, and says so, so
+on the command line this command finds nothing to do; it's for when a file
+changes while an assembly stays open. To keep the updated parts in the
+assembly's file, open it and save it again, with no command:
+[`run --open Cart.sb --save Cart.sb`](run.md#save-an-assembly-with-its-parts-updated).
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `part` | text | no | Just this part, like `Axle`. Leave it out for every linked part |
+
+A cart with an axle; then the axle gets a box on it. Opening the cart uses the
+new axle, and saving keeps it:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save Axle.sb feature.add_cylinder radius=3 height=50
+...
+$ sketchbillet_cli run --save Cart.sb assembly.new
+...
+$ sketchbillet_cli run --open Cart.sb --save Cart.sb component.insert file=Axle.sb
+...
+$ sketchbillet_cli run --open Axle.sb --save Axle.sb feature.add_box size=10,10,10
+...
+$ sketchbillet_cli run --open Cart.sb --save Cart.sb
+note [part.updated]: Axle changed in Axle.sb, so Cart uses the new Axle.
+Cart: assembly, 1 component, 1 part
+  Axle 1       Axle       grounded at 0, 0, 0 mm
+Parts:
+  Axle         2 steps  ok        mass 2.99 g (PLA), 1 in the assembly
+    linked to Axle.sb
+Mass in all: 2.99 g
+wrote Cart.sb
+```
+
+With nothing changed, it says so:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open Cart.sb part.update
+error [part.up_to_date]: Every linked part is the same as its file already, so there's nothing to update.
+```
+
+## part.relink
+
+Links a part to its file where it is now. Use it when the assembly can't find
+the file (it was moved or renamed somewhere SketchBillet doesn't look), or to
+link to another copy of the same part. The file must hold the same design: the
+part saved from it, or a copy of that file. If the file changed, the assembly
+uses the new part.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `part` | text | yes | The part, like `Axle` |
+| `file` | text | yes | Its file where it is now, like `parts/Axle.sb` |
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open Cart.sb --save Cart.sb part.save_as part=Axle file=Spare-axle.sb
+...
+$ sketchbillet_cli run --open Cart.sb --save Cart.sb part.relink part=Axle file=Axle.sb
+Cart: assembly, 1 component, 1 part
+  Axle 1       Axle       grounded at 0, 0, 0 mm
+Parts:
+  Axle         2 steps  ok        mass 2.99 g (PLA), 1 in the assembly
+    linked to Axle.sb
+Mass in all: 2.99 g
+wrote Cart.sb
+```
+
+A file with another design in it can't take the part's place:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open Cart.sb part.relink part=Axle file=Wheel.sb
+error [part.other_design]: Wheel.sb holds Wheel, a different design from Axle, so it can't take its place. Pick the file Axle was saved in.
+```
+
+## part.make_inside
+
+Makes a linked part an inside part: the assembly keeps its copy of the part, and
+stops following the file. Later changes to the file don't change the assembly.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `part` | text | yes | The part, like `Axle` |
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open Cart.sb --save Cart.sb part.make_inside part=Axle
+Cart: assembly, 1 component, 1 part
+  Axle 1       Axle       grounded at 0, 0, 0 mm
+Parts:
+  Axle         2 steps  ok        mass 2.99 g (PLA), 1 in the assembly
+Mass in all: 2.99 g
+wrote Cart.sb
+```
+
+## part.save_as
+
+Saves one of the assembly's parts to its own `.sb` file, and links the part to
+it. Then the part can be opened and changed on its own, or used in other
+assemblies. It won't save over a file that's there.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `part` | text | yes | The part, like `Lid` |
+| `file` | text | yes | The new file, like `Lid.sb` |
+
+A lid made inside a box, then saved as a file of its own:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save Box.sb assembly.new
+...
+$ sketchbillet_cli run --open Box.sb --save Box.sb component.new name=Lid
+...
+$ sketchbillet_cli run --open Box.sb --save Box.sb part.save_as part=Lid file=Lid.sb
+Box: assembly, 1 component, 1 part
+  Lid 1        Lid        grounded at 0, 0, 0 mm
+Parts:
+  Lid          0 steps  ok        no bodies yet, 1 in the assembly
+    linked to Lid.sb
+Mass in all: 0.00 g
+wrote Box.sb
+```
+
+Saving it again would replace the file, so it doesn't:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open Box.sb part.save_as part=Lid file=Lid.sb
+error [part.file_there]: Lid.sb is there already. Pick another name, or link Lid to it with part.relink.
 ```

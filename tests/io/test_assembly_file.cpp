@@ -241,3 +241,74 @@ TEST_CASE("the checked-in schema 2 car still opens", "[io][assembly][compat]") {
     const auto report = doc.regenerate(kernel);
     CHECK(report.ok());
 }
+
+TEST_CASE("a damaged link.json says what's wrong", "[io][assembly][link]") {
+    auto doc = std::make_unique<model::Document>(model::DocKind::Part, "Car");
+    REQUIRE(doc->execute(std::make_unique<model::MakeAssemblyCommand>()).empty());
+    REQUIRE(doc->execute(std::make_unique<model::InsertPartCommand>(
+                             boxPart("Wheel"), 1, kernel::Placement{}, kernel::Vec3{},
+                             model::PartLink{"parts/wheel.sb", std::string(64, '0'), "2026-11-13T23:40:00Z"}))
+                .empty());
+    io::Bytes bytes;
+    REQUIRE(io::writeBytes(*doc, bytes).empty());
+    const auto good = readZip(bytes);
+    const std::string link = "parts/" + doc->parts()[0]->id().toString() + "/link.json";
+    REQUIRE(good.count(link));
+    CHECK(good.at(link).find(R"("path": "parts/wheel.sb")") != std::string::npos);
+    // It opens, linked, when nothing is wrong (without a folder, the path stays as it is).
+    auto r = io::readBytes(bytes, "car.sb");
+    REQUIRE(r.ok());
+    REQUIRE(r.document->partLink(r.document->parts()[0]->id()));
+    CHECK(r.document->partLink(r.document->parts()[0]->id())->path == "parts/wheel.sb");
+
+    auto broken = [&](auto change) {
+        auto entries = good;
+        change(entries[link]);
+        return io::readBytes(makeZip(entries), "car.sb");
+    };
+    r = broken([&](std::string& text) {
+        const std::string id = doc->parts()[0]->id().toString();
+        text.replace(text.find(id), id.size(), DocId::generate().toString());
+    });
+    REQUIRE_FALSE(r.ok());
+    CHECK(r.issues[0].code == "file.damaged");
+    CHECK(r.issues[0].detail.find("link.json is for another design") != std::string::npos);
+    r = broken([](std::string& text) { text.replace(text.find(R"("path")"), 6, R"("road")"); });
+    REQUIRE_FALSE(r.ok());
+    CHECK(r.issues[0].detail.find("link.json is missing its path or documentId") != std::string::npos);
+    r = broken([](std::string& text) { text = "{not json"; });
+    REQUIRE_FALSE(r.ok());
+    CHECK(r.issues[0].code == "file.damaged");
+}
+
+// A schema-2 file with a linked part, checked into the repo. Its linked file
+// (parts/Wheel.sb next to it) is left out on purpose: it opens from its copy,
+// with the part marked. Every future version must still open it. Never regenerate it.
+TEST_CASE("the checked-in schema 2 car with a linked part still opens", "[io][assembly][link][compat]") {
+    auto r = io::openFile(std::filesystem::path(SB_TEST_FILES_DIR) / "schema2-linked-car.sb");
+    REQUIRE(r.ok());
+    const auto& doc = *r.document;
+    CHECK(doc.id().toString() == "e8a2dbfe-053b-48ee-bee3-ebf74535b40b");
+    REQUIRE(doc.parts().size() == 2);
+    const auto* body = doc.findPart(std::string_view("Body"));
+    const auto* wheel = doc.findPart(std::string_view("Wheel"));
+    REQUIRE(body);
+    REQUIRE(wheel);
+    CHECK(wheel->id().toString() == "07c45ad1-0eee-4bfe-b317-11a66c5767e1");
+    CHECK_FALSE(doc.partLink(body->id()));  // an inside part
+    const auto* link = doc.partLink(wheel->id());
+    REQUIRE(link);
+    CHECK(std::filesystem::path(link->path) ==
+          (std::filesystem::absolute(SB_TEST_FILES_DIR) / "parts" / "Wheel.sb").lexically_normal());
+    CHECK(link->sha256 == "07775b71b71d3648493210cf095cc858ab512f99de1f4580cebad134a4203805");
+    CHECK(link->updated == "2026-11-20T16:32:32Z");
+    CHECK_FALSE(link->found);
+    CHECK_FALSE(doc.isModified());
+    REQUIRE(r.notes.size() == 1);
+    CHECK(r.notes[0].code == "part.not_found");
+    CHECK(r.notes[0].message.find("the copy of Wheel saved on Nov 20, 2026") != std::string::npos);
+    CHECK(doc.components().size() == 3);
+
+    test::FakeKernel kernel;
+    CHECK(doc.regenerate(kernel).ok());
+}
