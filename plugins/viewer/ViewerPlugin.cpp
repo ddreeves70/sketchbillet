@@ -81,6 +81,9 @@ public:
 
     std::vector<viewer::Handle> handles() const override { return given_; }
     viewer::IHandleUser* handleUser() const override { return handleUser_; }
+    void previewMove(const FeatureId& body, const kernel::Motion& motion) override;
+    void clearPreview() override;
+    std::optional<viewer::BodyPreview> preview() const override { return preview_; }
     void offerChoices(viewer::IChoiceUser& user, std::vector<viewer::Choice> choices) override;
     void clearChoices(const viewer::IChoiceUser& user) override;
     std::vector<viewer::Choice> choices() const override { return choices_; }
@@ -120,6 +123,7 @@ private:
     void applyAll();
 
     void showHandlesAll();
+    void showPreviewAll();
     void showChoicesAll();
     void showNumbersAll(const std::string& focus);
 
@@ -128,6 +132,7 @@ private:
     viewer::IHandleUser* handleUser_ = nullptr;
     std::vector<view::ViewHandle> handles_;
     std::vector<viewer::Handle> given_;
+    std::optional<viewer::BodyPreview> preview_;
     viewer::IChoiceUser* choiceUser_ = nullptr;
     std::vector<viewer::Choice> choices_;
     viewer::INumberUser* numberUser_ = nullptr;
@@ -272,6 +277,17 @@ public:
     // The handles in every pane.
     void applyHandles() {
         for (auto* pane : panes_) pane->setHandles(service_.viewHandles());
+    }
+
+    // The body drawn moved (or none) in every pane.
+    void applyPreview() {
+        for (auto* pane : panes_) showPreview(*pane);
+    }
+    void showPreview(view::ViewWidget& pane) {
+        if (const auto p = service_.preview())
+            pane.setPreview(p->body, p->motion);
+        else
+            pane.clearPreview();
     }
 
     // The number boxes in the active pane (and the flat view); none in the others.
@@ -719,6 +735,7 @@ private:
         forwardNumbers(pane);
         pane->setDrawingPlane(service_.plane());
         pane->setHandles(service_.viewHandles());
+        showPreview(*pane);
         pane->setChoices(service_.viewChoices());
         frames_.push_back(frame);
         panes_.push_back(pane);
@@ -912,6 +929,21 @@ void ViewerService::clearHandles(const viewer::IHandleUser& user) {
 
 void ViewerService::showHandlesAll() {
     for (auto* panel : panels_) panel->applyHandles();
+}
+
+void ViewerService::previewMove(const FeatureId& body, const kernel::Motion& motion) {
+    preview_ = viewer::BodyPreview{body, motion};
+    showPreviewAll();
+}
+
+void ViewerService::clearPreview() {
+    if (!preview_) return;
+    preview_.reset();
+    showPreviewAll();
+}
+
+void ViewerService::showPreviewAll() {
+    for (auto* panel : panels_) panel->applyPreview();
 }
 
 void ViewerService::offerChoices(viewer::IChoiceUser& user, std::vector<viewer::Choice> choices) {

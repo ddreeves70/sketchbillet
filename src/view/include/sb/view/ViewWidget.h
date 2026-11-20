@@ -68,6 +68,16 @@ public:
     /// @return The handles last given to setHandles().
     const std::vector<ViewHandle>& handles() const;
 
+    /// Draws one body moved, as a preview while it's dragged, without making its
+    /// drawing again: instant, however many faces it has. Picking follows it. It
+    /// stays until clearPreview(), even when setContent() remakes the body's drawing.
+    /// @param body The step whose body is drawn moved.
+    /// @param motion How: turned about a line, then slid (mm, radians).
+    void setPreview(const FeatureId& body, const kernel::Motion& motion);
+
+    /// Draws every body where setContent() put it again.
+    void clearPreview();
+
     /// Shows flat squares to click, like the three base planes offered when
     /// starting a sketch, in place of the ones shown. The one under the mouse
     /// lights up; clicking it sends choiceClicked(), Escape sends
