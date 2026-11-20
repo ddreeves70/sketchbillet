@@ -501,6 +501,7 @@ void registerTimeline(plugin::PluginContext& ctx) {
     }
     ui::PanelSpec spec{kPanelId, QObject::tr("Timeline"), ui::PanelArea::Bottom,
                        [&ctx, ui] { return new TimelineBar(ctx, *ui); }};
+    spec.icon = std::string(icons::timeline::timeline_svg);
     ui->addPanel(std::move(spec));
 }
 

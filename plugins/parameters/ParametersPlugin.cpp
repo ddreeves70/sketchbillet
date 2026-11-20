@@ -246,6 +246,7 @@ void registerParameters(plugin::PluginContext& ctx) {
                        [&ctx, ui] { return new ParametersPanel(ctx, *ui); }};
     spec.startHidden = true;     // Design > Parameters (Inspect tab) opens it
     spec.floatsOverView = true;  // see-through over the view, under the feature tree, like the other panels
+    spec.icon = std::string(icons::parameters::parameters_svg);
     ui->addPanel(std::move(spec));
     ctx.addAction(plugin::ActionSpec{.id = "sb.parameters.show",
                                      .text = "Parameters",

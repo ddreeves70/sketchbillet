@@ -453,6 +453,7 @@ void registerFeatureTree(plugin::PluginContext& ctx) {
     ui::PanelSpec spec{"sb.featuretree.panel", QObject::tr("Feature tree"), ui::PanelArea::Left,
                        [&ctx, ui] { return new FeatureTree(ctx, *ui); }};
     spec.floatsOverView = true;  // like Fusion's browser
+    spec.icon = std::string(icons::featuretree::feature_tree_svg);
     ui->addPanel(std::move(spec));
 }
 

@@ -208,3 +208,20 @@ TEST_CASE("Dragging a step in the timeline moves it, if the steps it uses come f
     CHECK(app.steps() == QStringList{"Peg", "Box1", "Pin", "Joined"});
     CHECK(app.doc().undoLabel() == before);
 }
+
+TEST_CASE("The timeline's button on the View tab closes and opens it", "[app][timeline][toolbar]") {
+    App app;
+    auto* panel = app.shell->panelWidget(QStringLiteral("sb.timeline.panel"));
+    auto* button = app.shell->findChild<QAction*>(QStringLiteral("sb.shell.panel.sb.timeline.panel"));
+    REQUIRE(button);
+    CHECK(button->isChecked());
+    CHECK(panel->isVisible());
+    button->trigger();
+    QCoreApplication::processEvents();
+    CHECK_FALSE(panel->isVisible());
+    CHECK_FALSE(button->isChecked());
+    button->trigger();
+    QCoreApplication::processEvents();
+    CHECK(panel->isVisible());
+    CHECK(button->isChecked());
+}

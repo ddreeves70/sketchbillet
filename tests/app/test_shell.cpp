@@ -283,8 +283,9 @@ TEST_CASE("every toolbar button has a picture", "[app][icons]") {
     }
     // The top row (5), Import, Export and Check print (3), sb.modeling (15),
     // sb.sketcher (2 on Model, 1 main, 5 drawing, 3 editing, 5 constraints), View
-    // options (1) and the grid (2).
-    CHECK(buttons == 5 + 3 + 15 + 16 + 1 + 2);
+    // options (1), the grid (2), the axes (2), the feature tree and Properties panels (2),
+    // and Save and Reset layout (2).
+    CHECK(buttons == 5 + 3 + 15 + 16 + 1 + 2 + 2 + 2 + 2);
     // The dropdown item shows the same picture as its button.
     CHECK_FALSE(app.shell->action("sb.modeling.box")->icon().isNull());
 }
@@ -3034,6 +3035,78 @@ TEST_CASE("a docked panel that's closed opens again floating over the view", "[a
     settle();
     CHECK_FALSE(app.shell->overView(sketch));
     CHECK(app.shell->panelWidget(sketch)->isVisible());
+}
+
+TEST_CASE("the View tab has buttons for panels, axes and the layout", "[app][overlay][toolbar]") {
+    App app;
+    auto* ribbon = app.shell->findChild<app::Ribbon*>(QStringLiteral("sb.ribbon"));
+    REQUIRE(ribbon);
+    ribbon->showTab(QStringLiteral("View"));
+    settle();
+    const auto button = [&](const QString& name) {
+        auto* b = app.shell->findChild<QToolButton*>(name + QStringLiteral(".tool"));
+        REQUIRE(b);
+        CHECK(b->isVisible());
+        CHECK_FALSE(b->icon().isNull());
+        return b;
+    };
+    // A button for each panel with a picture, checked while the panel's open.
+    auto* tree = button(QStringLiteral("sb.shell.panel.sb.featuretree.panel"));
+    auto* props = button(QStringLiteral("sb.shell.panel.sb.properties.panel"));
+    CHECK(tree->text() == QStringLiteral("Feature tree"));
+    CHECK(tree->isChecked());
+    CHECK(props->isChecked());
+    // Panels without a picture (the Sketch panel) are only in the dropdown.
+    CHECK_FALSE(app.shell->findChild<QToolButton*>(QStringLiteral("sb.shell.panel.sb.sketcher.panel.tool")));
+
+    // Clicking one closes its panel, and clicking again opens it.
+    const QString treeId = QStringLiteral("sb.featuretree.panel");
+    tree->click();
+    settle();
+    CHECK_FALSE(app.shell->overlay(treeId)->isVisible());
+    CHECK_FALSE(tree->isChecked());
+    CHECK_FALSE(app.menu("sb.shell.show.sb.featuretree.panel")->isChecked());
+    tree->click();
+    settle();
+    CHECK(app.shell->overlay(treeId)->isVisible());
+    CHECK(tree->isChecked());
+    props->click();
+    settle();
+    CHECK_FALSE(app.shell->overlay(QStringLiteral("sb.properties.panel"))->isVisible());
+    CHECK_FALSE(props->isChecked());
+
+    // A docked panel too; closed from the menu, its button opens it floating over the view.
+    app.shell->overlay(treeId)->findChild<QToolButton*>(QStringLiteral("sb.shell.overlay.dock"))->click();
+    settle();
+    REQUIRE_FALSE(app.shell->overView(treeId));
+    CHECK(tree->isChecked());
+    app.menu("sb.shell.dock.sb.featuretree.panel")->trigger();
+    settle();
+    CHECK_FALSE(tree->isChecked());
+    tree->click();
+    settle();
+    CHECK(app.shell->overView(treeId));
+    CHECK(app.tree()->isVisible());
+    CHECK(tree->isChecked());
+
+    // Layout: Save layout and Reset layout, which opens the panels that start open.
+    button(QStringLiteral("sb.shell.save_layout"));
+    auto* reset = button(QStringLiteral("sb.shell.reset_layout"));
+    tree->click();
+    settle();
+    reset->click();
+    settle();
+    CHECK(tree->isChecked());
+    CHECK(props->isChecked());
+    CHECK(app.shell->overlay(treeId)->isVisible());
+
+    // Axes: Show axes and Show axis labels.
+    auto* axes = button(QStringLiteral("sb.axes.show.button"));
+    button(QStringLiteral("sb.axes.labels.button"));
+    CHECK(axes->isChecked());
+    axes->click();
+    settle();
+    CHECK_FALSE(axes->isChecked());
 }
 
 TEST_CASE("Document settings in the feature tree shows the design's settings in Properties",

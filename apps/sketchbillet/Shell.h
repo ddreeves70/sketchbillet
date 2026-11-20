@@ -196,6 +196,9 @@ private:
     void rebuildLayoutMenu();
     void showPanel(const QString& id, bool show = true);
     void showOverlay(const QString& id, bool show);  // a floating panel's frame
+    void openPanel(const QString& id, bool open);    // its button on the View tab, Panels
+    void syncPanelButton(const QString& id);         // that button checked while the panel's open
+    void saveLayoutAs();                             // asks for a name, then saves the layout
     void placeOverlaysAfter(const QString& id);      // the floating panels under it on its side
     void keepOverlaysOut();                          // docks of panels floating over the view stay closed
 
@@ -211,8 +214,10 @@ private:
         QAction* show = nullptr;  // View > Panels > Feature tree, while it floats
         QAction* over = nullptr;  // View > Panels > Feature tree over the view
         bool shown = true;        // open (floating or docked), as opposed to closed
+        bool startsShown = true;  // open when SketchBillet starts (not ui::PanelSpec::startHidden)
     };
     std::map<QString, Overlay> overlays_;
+    std::map<QString, QAction*> panelButtons_;  // panel id -> its button on the View tab, Panels
     std::vector<QString> overlayOrder_;  // as the plugins added them: the order they stack in  // panel id ->
                                          // how many copies were opened
     QLabel* problemLabel_ = nullptr;

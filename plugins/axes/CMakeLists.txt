@@ -8,3 +8,5 @@ sb_add_library(sb_plugin_axes
     sb::plugin_viewoptions
     sb::kernel
 )
+sb_embed_files(sb_plugin_axes HEADER AxesIcons.h NAMESPACE sb::icons::axes
+  FILES icons/axes.svg icons/axis_labels.svg)

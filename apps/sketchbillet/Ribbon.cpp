@@ -336,6 +336,17 @@ void Ribbon::addTool(const QString& tabName, const QString& panelName, QAction* 
     showTools();
 }
 
+void Ribbon::addButton(const QString& tabName, const QString& panelName, QAction* action) {
+    auto& p = panel(tab(tabName), panelName);
+    auto* b = new QToolButton(p.box);
+    b->setDefaultAction(action);
+    b->setAutoRaise(true);
+    b->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+    b->setIconSize(QSize(24, 24));
+    if (!action->objectName().isEmpty()) b->setObjectName(action->objectName() + QStringLiteral(".tool"));
+    p.buttons->addWidget(b);
+}
+
 void Ribbon::addPinHints() {
     for (auto& t : tabs_) {
         for (auto& p : t.panelList) {

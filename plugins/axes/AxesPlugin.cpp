@@ -4,6 +4,7 @@
 #include <set>
 #include <string>
 
+#include "AxesIcons.h"
 #include "sb/plugin/Events.h"
 
 namespace sb::plugins {
@@ -140,13 +141,17 @@ std::vector<viewoptions::OptionSpec> axesOptions() {
              .group = "Axes",
              .tip = "Show or hide the x, y and z axes on the view cube.",
              .kind = viewoptions::OptionKind::Flag,
-             .initial = true},
+             .initial = true,
+             .button = true,
+             .icon = std::string(icons::axes::axes_svg)},
             {.id = "sb.axes.labels",
              .text = "Show axis labels",
              .group = "Axes",
              .tip = "Write X, Y and Z at the ends of the axes.",
              .kind = viewoptions::OptionKind::Flag,
-             .initial = true},
+             .initial = true,
+             .button = true,
+             .icon = std::string(icons::axes::axis_labels_svg)},
             {.id = "sb.axes.origin",
              .text = "Show axes at the origin",
              .group = "Axes",

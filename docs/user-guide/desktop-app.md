@@ -54,7 +54,7 @@ grid** on the View tab.
 | **Model** | **Sketch** (new sketch, edit sketch, planes), **Create** (box, extrude, revolve, hole, cylinder), **Modify** (move, shell, fillet, chamfer, linked copy, change edges), **Combine** (union, cut, intersect), **Pattern** (row, around, mirror), **Inspect** (measure), **Select** (pick edges), **Insert** (import), **Make** (export, check for printing), **Steps** (copy, paste, duplicate, turn off and on, folders, delete) |
 | **Sketch** | **Draw** (line, rectangle, circle, arc, spline, point), **Edit** (select, trim, round corner, delete), **Constrain** (coincident, horizontal, vertical, equal and the rest), **Dimension**, and the green **Finish sketch** at the right. It only shows while you edit a sketch |
 | **Inspect** | **Measure** (measure, check for printing), **Design** (parameters) |
-| **View** | **Display** (view options), **Grid** (show, snap, style, spacing), **Axes**, **Panels** (show and hide panels, a new viewer), **Layout** (saved layouts) |
+| **View** | **Display** (view options), **Grid** (show, snap, style, spacing), **Axes** (show the axes and their letters), **Panels** (open and close panels, a new viewer), **Layout** (save a layout, reset it, saved layouts) |
 
 ## Starting it
 
@@ -553,8 +553,10 @@ Every panel can be moved:
   share its space as a tab.
 - **Drag it out** of the window to make it a window of its own, for example on a
   second monitor.
-- **Panels** on the View tab lists every panel: tick one to show it again after
-  closing it.
+- **Panels** on the View tab has a button for the feature tree, Properties,
+  Parameters and the timeline: click one to close that panel, and again to open
+  it. The buttons stay highlighted while their panel is open. Click **Panels** at
+  the bottom for every panel, ticked when it's open.
 - The feature tree, Properties, the Sketch panel and View options float over the
   viewer until you dock them; see [Panels over the viewer](#panels-over-the-viewer).
 
@@ -563,10 +565,11 @@ was on a monitor that's no longer plugged in, it comes back onto your main scree
 
 **Layout** keeps named layouts:
 
-- **Save layout as...** saves the current arrangement under a name.
+- **Save layout** (a button, or **Save layout as...** in the dropdown) saves the
+  current arrangement under a name.
 - Pick a saved name to switch to it.
-- **Reset layout** puts every panel back where it started, with the floating
-  panels over the viewer again.
+- **Reset layout** (a button too) puts every panel back where it started, open
+  or closed, with the floating panels over the viewer again.
 - **Reset toolbar buttons** takes away your [pins](#the-toolbar), so each panel
   has the buttons it started with.
 
