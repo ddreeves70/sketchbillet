@@ -1,7 +1,8 @@
 # Assemblies
 
 > **Draft, for review.** Phase 4's first item (see the [roadmap](roadmap.md)).
-> Building it, step 1 (several designs open at once) is built (Nov 19, 2026);
+> Building it, step 1 (several designs open at once) is built (Nov 19, 2026),
+> and step 2 (assembly documents, from the command line) is built (Nov 20, 2026);
 > the rest isn't yet. Two choices were made on Nov 13, 2026: an
 > assembly's parts can live **inside** the assembly file or be **linked** to
 > other files, from the start; and parts move along **chains** of joints first,
@@ -17,8 +18,8 @@ This page covers what the student gets, in the order it gets built:
 
 | Part | What the student gets | Status |
 | --- | --- | --- |
-| 1. Where parts live | Parts made inside the assembly, or linked to their own `.sb` files | Planned |
-| 2. Components | Parts placed in the assembly, the same part more than once, one part fixed in place | Planned |
+| 1. Where parts live | Parts made inside the assembly, or linked to their own `.sb` files | Inside parts built; links planned |
+| 2. Components | Parts placed in the assembly, the same part more than once, one part fixed in place | Built, from the command line |
 | 3. Joints | Rigid, hinge (revolute) and slider joints that place parts and say how they move | Planned |
 | 4. Placing parts along chains | Exact, instant placement from joint to joint, smooth enough to drag | Planned |
 | 5. In the app | The assembly tree, inserting parts, joining, dragging, editing a part | Planned |
@@ -404,7 +405,11 @@ Each line is one pull request, in this order:
    [the user's guide](../user-guide/desktop-app.md#several-designs-at-once)).
 2. **Assembly documents** with inside parts and free or grounded components:
    `sb_model`, `sb_io` (schema 2), `assembly.new`, `component.new`,
-   `component.insert`, `open --components`.
+   `component.insert`, `open --components`. **Built** (Nov 20, 2026), with
+   `component.add`, `component.ground`, `component.place`, `component.rename`
+   and `component.delete` too (see [the user's guide](../user-guide/assemblies.md)
+   and [the file format](../file-format.md#assemblies-schema-2)). The desktop app
+   says to use the command line for an assembly until step 4.
 3. **Linked parts:** links, finding files, fingerprints, updating, the saved
    copy, Find Linked File, switching between inside and linked.
 4. **Assemblies in the app:** the tree, inserting parts, moving components,

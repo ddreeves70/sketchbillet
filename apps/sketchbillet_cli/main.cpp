@@ -4,6 +4,7 @@
 //   sketchbillet_cli demo <out.stl|out.3mf|out.step|out.sb> box with a hole, as a toolchain smoke test
 //   sketchbillet_cli open <file.sb> [--export out [--step name]]  open a design, rebuild it, report each step
 //   sketchbillet_cli open <file.sb> --sketch <name>               ... and list a sketch, solved
+//   sketchbillet_cli open <file.sb> --components                  ... and list an assembly's components
 //   sketchbillet_cli open <file.sb> --edges|--faces|--points <name>  ... and list a body's edges, faces
 //                                       or points, numbered
 //   sketchbillet_cli check <file.sb> [--step <name>] [--min-wall <mm>]  check a part is ready to 3D print
@@ -53,6 +54,7 @@ int usage() {
         "       sketchbillet_cli open <file.sb> --edges <name>\n"
         "       sketchbillet_cli open <file.sb> --faces <name>\n"
         "       sketchbillet_cli open <file.sb> --points <name>\n"
+        "       sketchbillet_cli open <file.sb> --components\n"
         "       sketchbillet_cli check <file.sb> [--step <name>] [--min-wall <mm>]\n"
         "       sketchbillet_cli measure <file.sb> <name> face|edge|point <n> [<name> face|edge|point <n>]\n"
         "       sketchbillet_cli materials [<file.sb>]\n"
@@ -329,8 +331,9 @@ int openDesign(int argc, char** argv) {
     const bool showEdges = argc == 5 && std::string_view(argv[3]) == "--edges";
     const bool showFaces = argc == 5 && std::string_view(argv[3]) == "--faces";
     const bool showPoints = argc == 5 && std::string_view(argv[3]) == "--points";
+    const bool showComponents = argc == 4 && std::string_view(argv[3]) == "--components";
     if (argc != 3 && !(argc == 5 && exporting) && !oneStep && !showSketch && !showEdges && !showFaces &&
-        !showPoints) {
+        !showPoints && !showComponents) {
         return usage();
     }
     auto opened = sb::io::openFile(argv[2]);
@@ -342,6 +345,23 @@ int openDesign(int argc, char** argv) {
     auto kernel = sb::kernel::makeOcctKernel();
     auto solver = sb::sketch::makePlaneGcsSolver();
     const auto report = doc.regenerate(*kernel, solver.get());
+
+    // An assembly: its components and parts. Its steps are in its parts.
+    if (doc.kind() == sb::model::DocKind::Assembly) {
+        if (argc != 3 && !showComponents) {
+            std::fprintf(stderr,
+                         "error: %s is an assembly. For now, list it with --components; exporting it and "
+                         "listing its edges, faces and sketches come in a later version.\n",
+                         doc.name().c_str());
+            return 1;
+        }
+        return sb::cli::printAssembly(doc, report, *kernel, showComponents) ? 0 : 1;
+    }
+    if (showComponents) {
+        std::fprintf(stderr, "error: %s is a part, not an assembly, so it has no components.\n",
+                     doc.name().c_str());
+        return 1;
+    }
 
     std::printf("%s: %zu %s\n", doc.name().c_str(), doc.featureCount(),
                 doc.featureCount() == 1 ? "step" : "steps");

@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "ModelingIcons.h"
+#include "sb/io/PartCommands.h"
 #include "sb/kernel/Types.h"
 #include "sb/model/CommandRegistry.h"
 #include "sb/plugin/Actions.h"
@@ -123,6 +124,10 @@ void registerModeling(plugin::PluginContext& ctx) {
     for (const auto* info : builtin.commands()) {
         ctx.addCommand(*info, *builtin.factory(info->name));
     }
+    // And the ones that read parts from .sb files (sb_io's).
+    model::CommandRegistry files;
+    io::addPartCommands(files);
+    for (const auto* info : files.commands()) ctx.addCommand(*info, *files.factory(info->name));
 
     // Toolbar buttons and dropdown items. New shapes start at a sensible size; the
     // student changes the numbers in the Properties panel.

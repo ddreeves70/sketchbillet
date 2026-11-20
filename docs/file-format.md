@@ -1,4 +1,4 @@
-# The .sb file format (schema 1)
+# The .sb file format (schemas 1 and 2)
 
 A `.sb` file is a design. It is an ordinary zip file holding JSON text files, so
 you can rename it to `.zip`, open it and read every step. The code that reads and
@@ -7,6 +7,10 @@ writes it is `sb_io` (`src/io/SketchBilletFile.cpp`).
 The file holds the **recipe** (the steps and their numbers), not the finished
 geometry. SketchBillet rebuilds the shape every time it opens a file, the same way it does
 when you change a number.
+
+A part (one design with steps) is saved as schema 1. An assembly (parts put
+together) is saved as schema 2, with each of its parts inside it as a schema 1
+part; see [Assemblies (schema 2)](#assemblies-schema-2).
 
 ## What's inside
 
@@ -55,7 +59,7 @@ which can be binary.
 | Key | Meaning |
 | --- | --- |
 | `format` | Always `"sketchbillet"`. A file without it is not a SketchBillet design. |
-| `schema` | The format version, a whole number. This document describes schema 1. |
+| `schema` | The format version, a whole number. A part is schema 1; an assembly is schema 2. |
 | `app` | The SketchBillet version that saved the file. For information only. |
 | `units` | Units of every number in the file: lengths in millimeters, angles in radians. |
 | `document.id` | The design's UUID. It never changes, even when the file is renamed. |
@@ -362,6 +366,83 @@ If something is wrong, SketchBillet opens nothing and explains why:
 Saving writes `<name>.saving` first and then renames it over the old file, so a
 failed save never damages the last good copy.
 
+## Assemblies (schema 2)
+
+An assembly is a design made of parts put together, like a car made of a body
+and four wheels. Each part it uses is saved inside it, so the assembly opens on
+any computer, even one without the parts' own files. A **component** is one
+copy of a part, placed somewhere: four wheels are four components of one Wheel
+part, and the Wheel part is saved once.
+
+```text
+car.sb
+├── manifest.json                    kind "assembly", schema 2
+├── components.json                  each component: its part, where it is, grounded or free
+├── parameters.json                  the assembly's own named values (only if it has any)
+└── parts/
+    ├── 017e13e9-....                one folder per part, named after the part's id
+    │   ├── manifest.json            laid out exactly like a part's .sb file (schema 1)
+    │   ├── timeline.json
+    │   └── features/...
+    └── 1305cf0c-....
+        └── ...
+```
+
+The assembly's `manifest.json` is the same as a part's, with `"kind": "assembly"`
+and `"schema": 2`. Its `files` lists `components.json`, `parameters.json` if
+there is one, and each part's `parts/<id>/manifest.json`. The parts are listed
+in the assembly's order (the order they were put in), and that is the order they
+open in.
+
+Each part folder holds what a part's `.sb` file holds, with the same names and a
+schema 1 manifest. You can copy a folder out, zip it, and open it as a part.
+
+### components.json
+
+```json
+{
+  "components": [
+    {
+      "grounded": true,
+      "id": "0a40363b-e9b6-4fed-bdbc-89b401ada34f",
+      "name": "Body 1",
+      "part": "017e13e9-3138-437a-ac92-a865b700afd2",
+      "placement": {
+        "origin": [0.0, 0.0, 0.0],
+        "xAxis": [1.0, 0.0, 0.0],
+        "zAxis": [0.0, 0.0, 1.0]
+      }
+    }
+  ]
+}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `id` | The component's UUID. It never changes, even when the component is renamed. |
+| `name` | Its name in the assembly, like `Wheel 2`. No two components have the same name. |
+| `part` | The id of the part it is a copy of: one of the folders in `parts/`. |
+| `grounded` | `true` if it's fixed where it is, `false` if it's free to move. |
+| `placement` | Where the part's origin goes (`origin`, in mm), and which way the part's own x and z axes point in the assembly (`xAxis`, `zAxis`, each one unit long and at right angles to each other). The y axis is z × x. |
+
+Components are listed in the assembly's order, which is the order a list or the
+feature tree shows them in.
+
+### Opening an assembly
+
+SketchBillet reads the manifest, then `parameters.json`, then each part in the
+order the manifest lists them (each one opened the same way as a part file), then
+`components.json`. Each part and each component is added through a command, so
+the same checks run as when a student builds the assembly.
+
+An assembly is `file.damaged` if a part listed in the manifest has no folder, a
+part in it is itself an assembly, a component is missing its id, name, part or
+placement, or a component's part isn't in `parts/`. An assembly that says it is
+schema 1 is damaged too. A SketchBillet that only knows schema 1 says the file is
+`file.too_new` and to update SketchBillet.
+
+Joints between components (`joints.json`) come in a later version of schema 2.
+
 ## Changing the format
 
 - Adding a step type, or an optional key that older SketchBillet can ignore, keeps schema 1.
@@ -391,6 +472,10 @@ failed save never damages the last good copy.
   steps and the `imports/` folder (Nov 2026) are a new step type too: an older
   SketchBillet won't open a design that has one, and says the design has a step
   of a kind it doesn't know.
+- Assemblies (Nov 2026) are schema 2, because an older SketchBillet would read an
+  assembly as an empty part. A part is still saved as schema 1, so a part saved
+  by a newer SketchBillet still opens in an older one. A part inside an assembly
+  is saved as schema 1 too.
 - Anything an older SketchBillet would read wrongly bumps `schema` (in
   `src/core/include/sb/core/Version.h`) and adds a migration from the old schema.
 - `tests/files/` holds files saved with each schema. They are checked in and never
@@ -398,11 +483,11 @@ failed save never damages the last good copy.
   changes.
 - Format changes need a line-by-line human review (see CLAUDE.md).
 
-## Not in schema 1 yet
+## Not in the format yet
 
 From the design document's file format plan, these come later:
 
-- Assemblies (schema 2: `components.json`, `joints.json` and `parts/`), planned on
+- Joints between an assembly's components (`joints.json`), planned on
   [Assemblies](design/assemblies.md#file-format), Phase 4.
 - A `cache/` folder with built geometry for faster opening.
 - Keeping keys this SketchBillet doesn't understand when it saves a file from a newer

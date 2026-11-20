@@ -40,6 +40,14 @@ Only the built-in plugins:
 $ sketchbillet_cli plugins
 loaded   sb.modeling 0.1.0  Modeling (built in)
            tier    foundation
+           command assembly.new
+           command component.add
+           command component.delete
+           command component.ground
+           command component.insert
+           command component.new
+           command component.place
+           command component.rename
            command document.set_units
            command feature.add_boolean
            command feature.add_box
@@ -136,6 +144,14 @@ loaded   example.tape 1.0.0  Tape
            log: A 25.4 mm box is 1.00 in long.
 loaded   sb.modeling 0.1.0  Modeling (built in)
            tier    foundation
+           command assembly.new
+           command component.add
+           command component.delete
+           command component.ground
+           command component.insert
+           command component.new
+           command component.place
+           command component.rename
            command document.set_units
            command feature.add_boolean
            command feature.add_box

@@ -2,6 +2,7 @@ add_executable(sb_tests
   core/test_id.cpp
   core/test_units.cpp
   model/test_document.cpp
+  model/test_assembly.cpp
   model/test_commands.cpp
   model/test_rebuild.cpp
   model/test_registry.cpp
@@ -18,8 +19,10 @@ add_executable(sb_tests
   model/test_incremental.cpp model/test_used_twice.cpp
   model/test_print_check.cpp
   io/test_sketchbillet_file.cpp
+  io/test_assembly_file.cpp
   io/test_three_mf.cpp
   kernel/test_mesh_tools.cpp
+  kernel/test_placement.cpp
   plugin/test_event_bus.cpp
   plugin/test_manifest.cpp
   plugin/test_document_list.cpp
@@ -120,6 +123,8 @@ if(TARGET sketchbillet_cli)
   endif()
   add_test(NAME cli.open_schema1 COMMAND sketchbillet_cli open "${CMAKE_CURRENT_SOURCE_DIR}/files/schema1-keychain-tag.sb")
   set_tests_properties(cli.open_schema1 PROPERTIES PASS_REGULAR_EXPRESSION "Tag +ok +volume 7121.46 mm\\^3")
+  add_test(NAME cli.open_schema2 COMMAND sketchbillet_cli open "${CMAKE_CURRENT_SOURCE_DIR}/files/schema2-car.sb" --components)
+  set_tests_properties(cli.open_schema2 PROPERTIES PASS_REGULAR_EXPRESSION "Car: assembly, 3 components, 2 parts.*Mass in all: 46.41 g")
 endif()
 
 # PRE_TEST discovery waits until ctest runs, after vcpkg has copied DLLs next to

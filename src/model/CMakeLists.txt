@@ -6,6 +6,7 @@ sb_add_library(sb_model
     Naming.cpp
     Document.cpp
     Commands.cpp
+    AssemblyCommands.cpp
     CommandRegistry.cpp
     Material.cpp
     Expression.cpp

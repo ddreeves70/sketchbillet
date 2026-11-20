@@ -38,6 +38,7 @@ works in either.
 | Check a part is ready to print: closed all round, no walls too thin | Overhang checks |
 | Measure a face, edge or point, or between two: sizes, distances, angles, hole spacing, in the app (Inspect > Measure) or with `sketchbillet_cli` | |
 | Import parts from other programs: STEP, STL and 3MF files, kept inside the design, with Reload from file | |
+| Assemblies: put parts together, more than one of a part, each placed and turned, one grounded; with `sketchbillet_cli` | Assemblies in the app; joints that hold parts together and move them |
 | Add plugins | |
 
 ## Contents
@@ -66,9 +67,10 @@ works in either.
 22. [Importing parts](importing.md): parts from other CAD programs, from STEP files.
 23. [Getting ready to print](printing.md): check for gaps and walls too thin to print.
 24. [Measuring](measuring.md): sizes, distances and angles, like how far apart two holes are.
-25. [Plugins](plugins.md): adding features to SketchBillet.
-26. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
-27. [Reference parts](reference-parts.md): twenty real parts to build, from brackets to knobs.
+25. [Assemblies](assemblies.md): put parts together, like a car's body and wheels.
+26. [Plugins](plugins.md): adding features to SketchBillet.
+27. [When something goes wrong](troubleshooting.md): what SketchBillet's messages mean.
+28. [Reference parts](reference-parts.md): twenty real parts to build, from brackets to knobs.
 
 ## Other guides
 

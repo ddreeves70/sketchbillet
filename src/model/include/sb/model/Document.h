@@ -15,6 +15,7 @@
 #include "sb/core/Id.h"
 #include "sb/core/Units.h"
 #include "sb/kernel/IKernel.h"
+#include "sb/model/Assembly.h"
 #include "sb/model/Command.h"
 #include "sb/model/Feature.h"
 #include "sb/model/Folder.h"
@@ -50,6 +51,12 @@ public:
     /// @return True if every active (not suppressed) feature built successfully.
     bool ok() const;
 
+    /// Gives how one of an assembly's parts built: each part is built once, however
+    /// many components place it.
+    /// @param id The part's design id.
+    /// @return Its rebuild, or nullptr if it isn't one of the assembly's parts.
+    const RebuildReport* part(const DocId& id) const;
+
     /// Lists the steps whose results were taken from the previous rebuild instead
     /// of being built again, because neither they nor anything they use changed.
     /// @return The reused steps, in document order (empty for a full rebuild).
@@ -66,6 +73,7 @@ private:
     // How many of a result's issues, at the end, are worked out on every rebuild
     // (formula warnings, a body used twice).
     std::map<FeatureId, std::size_t> formulaIssues_;
+    std::map<DocId, std::shared_ptr<const RebuildReport>> parts_;  // an assembly's parts, built
     const kernel::IKernel* kernel_ = nullptr;
     const sketch::ISketchSolver* solver_ = nullptr;
     LengthUnit unit_ = LengthUnit::Millimeter;
@@ -116,6 +124,42 @@ public:
     /// Gives the document's name.
     /// @return The name.
     const std::string& name() const { return name_; }
+
+    /// Gives an assembly's components: its parts, placed. A part has none.
+    /// Change them with the component commands (InsertPartCommand, ...).
+    /// @return The components, in the order they were added.
+    const std::vector<Component>& components() const { return components_; }
+
+    /// Finds a component by id.
+    /// @param id The component.
+    /// @return It, or nullptr if the assembly has none with that id.
+    const Component* findComponent(const ComponentId& id) const;
+
+    /// Finds a component by name (exact).
+    /// @param name For example "Wheel 1".
+    /// @return It, or nullptr if the assembly has none by that name.
+    const Component* findComponent(std::string_view name) const;
+
+    /// Makes a name for a new component of a part that no component uses yet.
+    /// @param part The part's name, like "Wheel".
+    /// @return The first free one of "Wheel 1", "Wheel 2", ...
+    std::string uniqueComponentName(const std::string& part) const;
+
+    /// Gives an assembly's inside parts: designs of their own, kept in the
+    /// assembly. Each is built once, however many components place it. A part
+    /// has none.
+    /// @return The parts, in the order they were added.
+    std::vector<const Document*> parts() const;
+
+    /// Finds one of an assembly's parts by its design id.
+    /// @param id The part's design id.
+    /// @return It, or nullptr if it isn't one of the assembly's parts.
+    const Document* findPart(const DocId& id) const;
+
+    /// Finds one of an assembly's parts by name (exact).
+    /// @param name For example "Wheel".
+    /// @return It, or nullptr if no part has that name.
+    const Document* findPart(std::string_view name) const;
 
     /// Counts the features.
     /// @return The number of features, suppressed ones included.
@@ -339,6 +383,8 @@ private:
     DocKind kind_;
     std::string name_;
     std::vector<std::unique_ptr<Feature>> features_;
+    std::vector<Component> components_;               // an assembly's components
+    std::vector<std::unique_ptr<Document>> parts_;    // an assembly's inside parts
     std::map<FeatureId, std::uint64_t> revisions_;    // see revision(); set by DocumentEditor
     void touch(const FeatureId& id);                  // gives a step a new revision
     LengthUnit lengthUnit_ = LengthUnit::Millimeter;  // what lengths are shown in

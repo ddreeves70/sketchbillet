@@ -18,6 +18,14 @@ sketchbillet_cli help [--plugins <folder>]... [<command>]
 ```console
 $ sketchbillet_cli help
 Commands for sketchbillet_cli run:
+  assembly.new             Make assembly
+  component.add            Add components
+  component.delete         Delete component
+  component.ground         Ground
+  component.insert         Insert copy of part
+  component.new            New part
+  component.place          Move component
+  component.rename         Rename component
   document.set_units       Set units
   feature.add_boolean      Combine bodies
   feature.add_box          Add box

@@ -21,6 +21,7 @@
 #include <nlohmann/json.hpp>
 
 #include "sb/core/Version.h"
+#include "sb/model/AssemblyCommands.h"
 #include "sb/model/Commands.h"
 #include "sb/model/ConstructionPlane.h"
 #include "sb/model/Holes.h"
@@ -1276,9 +1277,33 @@ std::string dump(const json& j) {
 // Writing
 // ---------------------------------------------------------------------------
 
-Diagnostics writeBytes(const Document& doc, Bytes& out) {
-    // Build every entry's text first.
-    std::deque<std::pair<std::string, std::string>> entries;  // deque: stable addresses for libzip
+namespace {
+
+using Entries = std::deque<std::pair<std::string, std::string>>;  // deque: stable addresses for libzip
+
+json parametersJson(const Document& doc) {
+    json list = json::array();
+    for (const auto& p : doc.parameters().parameters()) {
+        json pj{{"id", p.id.toString()}, {"name", p.name}, {"expression", p.expression}};
+        if (!p.note.empty()) pj["note"] = p.note;
+        list.push_back(std::move(pj));
+    }
+    return json{{"parameters", list}};
+}
+
+json documentJson(const Document& doc) {
+    json document{{"id", doc.id().toString()}, {"kind", kindName(doc.kind())}, {"name", doc.name()}};
+    if (doc.lengthUnit() != LengthUnit::Millimeter) {
+        // The unit the design shows lengths in. Only designs that changed it get
+        // this, so other designs save exactly as before. (The numbers in the file
+        // are still in mm: see "units".)
+        document["lengthUnit"] = std::string(unitSymbol(doc.lengthUnit()));
+    }
+    return document;
+}
+
+// A part's files, as a part's .sb file has them (schema 1).
+void partEntries(const Document& doc, Entries& entries) {
     json timeline = json::array();
     json files = json::array({"timeline.json"});
     if (!doc.customMaterials().empty()) {
@@ -1291,13 +1316,7 @@ Diagnostics writeBytes(const Document& doc, Bytes& out) {
     }
     if (!doc.parameters().empty()) {
         // Only designs with parameters get this file, so other designs save exactly as before.
-        json list = json::array();
-        for (const auto& p : doc.parameters().parameters()) {
-            json pj{{"id", p.id.toString()}, {"name", p.name}, {"expression", p.expression}};
-            if (!p.note.empty()) pj["note"] = p.note;
-            list.push_back(std::move(pj));
-        }
-        entries.emplace_back("parameters.json", dump(json{{"parameters", list}}));
+        entries.emplace_back("parameters.json", dump(parametersJson(doc)));
         files.push_back("parameters.json");
     }
     for (std::size_t i = 0; i < doc.featureCount(); ++i) {
@@ -1323,17 +1342,10 @@ Diagnostics writeBytes(const Document& doc, Bytes& out) {
         entries.emplace_back("folders.json", dump(json{{"folders", list}}));
         files.push_back("folders.json");
     }
-    json document{{"id", doc.id().toString()}, {"kind", kindName(doc.kind())}, {"name", doc.name()}};
-    if (doc.lengthUnit() != LengthUnit::Millimeter) {
-        // The unit the design shows lengths in. Only designs that changed it get
-        // this, so other designs save exactly as before. (The numbers in the file
-        // are still in mm: see "units".)
-        document["lengthUnit"] = std::string(unitSymbol(doc.lengthUnit()));
-    }
     const json manifest{
-        {"format", "sketchbillet"},      {"schema", kFileSchemaVersion},
+        {"format", "sketchbillet"},      {"schema", kPartSchemaVersion},
         {"app", std::string(version())}, {"units", {{"length", "mm"}, {"angle", "rad"}}},
-        {"document", document},          {"files", files},
+        {"document", documentJson(doc)}, {"files", files},
     };
     json timelineJson{{"features", timeline}};
     // Only a rolled-back design says where the marker is, so others save exactly as before.
@@ -1341,7 +1353,54 @@ Diagnostics writeBytes(const Document& doc, Bytes& out) {
         timelineJson["rollback"] = marker->isNil() ? "start" : marker->toString();
     entries.emplace_front("timeline.json", dump(timelineJson));
     entries.emplace_front("manifest.json", dump(manifest));
+}
 
+json placementJson(const kernel::Placement& p) {
+    return {{"origin", vec3(p.origin)}, {"xAxis", vec3(p.xAxis)}, {"zAxis", vec3(p.zAxis)}};
+}
+
+// An assembly's files (schema 2): its components, and each inside part's files
+// under parts/<the part's design id>/, as a part's .sb file has them.
+void assemblyEntries(const Document& doc, Entries& entries) {
+    json files = json::array({"components.json"});
+    json components = json::array();
+    for (const auto& c : doc.components()) {
+        components.push_back({{"id", c.id.toString()},
+                              {"name", c.name},
+                              {"part", c.part.toString()},
+                              {"grounded", c.grounded},
+                              {"placement", placementJson(c.placement)}});
+    }
+    entries.emplace_back("components.json", dump(json{{"components", components}}));
+    if (!doc.parameters().empty()) {
+        entries.emplace_back("parameters.json", dump(parametersJson(doc)));
+        files.push_back("parameters.json");
+    }
+    for (const auto* part : doc.parts()) {
+        const std::string folder = "parts/" + part->id().toString() + "/";
+        Entries inside;
+        partEntries(*part, inside);
+        for (auto& [name, text] : inside) entries.emplace_back(folder + name, std::move(text));
+        files.push_back(folder + "manifest.json");  // in the order of the assembly's parts
+    }
+    const json manifest{
+        {"format", "sketchbillet"},      {"schema", kFileSchemaVersion},
+        {"app", std::string(version())}, {"units", {{"length", "mm"}, {"angle", "rad"}}},
+        {"document", documentJson(doc)}, {"files", files},
+    };
+    entries.emplace_front("manifest.json", dump(manifest));
+}
+
+}  // namespace
+
+Diagnostics writeBytes(const Document& doc, Bytes& out) {
+    // Build every entry's text first.
+    Entries entries;
+    if (doc.kind() == model::DocKind::Assembly) {
+        assemblyEntries(doc, entries);
+    } else {
+        partEntries(doc, entries);
+    }
     return zip::pack(entries, out,
                      problem("file.cant_write", "SketchBillet couldn't put the design into a file."));
 }
@@ -1374,26 +1433,20 @@ Diagnostics writeFile(const Document& doc, const std::filesystem::path& path) {
 // Reading
 // ---------------------------------------------------------------------------
 
-OpenResult readBytes(const Bytes& data, std::string_view displayName) {
+namespace {
+
+// Reads a design whose files start with `prefix` in the zip: "" for the file's
+// own design, "parts/<id>/" for one of an assembly's parts.
+OpenResult readDesign(zip_t* za, const std::string& prefix, std::string_view displayName) {
     OpenResult result;
     auto fail = [&](Diagnostic d) {
         result.issues.push_back(std::move(d));
         return std::move(result);
     };
 
-    zip_error_t err;
-    zip_error_init(&err);
-    zip_source_t* raw = zip_source_buffer_create(data.data(), data.size(), 0, &err);
-    if (!raw) return fail(notSketchBillet(displayName, zipErrorText(&err)));
-    ZipPtr za(zip_open_from_source(raw, ZIP_RDONLY, &err));
-    if (!za) {
-        zip_source_free(raw);
-        return fail(notSketchBillet(displayName, zipErrorText(&err)));
-    }
-
     std::string why;
     auto readJson = [&](const std::string& entry) -> std::optional<json> {
-        auto text = readEntry(za.get(), entry, why);
+        auto text = readEntry(za, prefix + entry, why);
         if (!text) return std::nullopt;
         json j = json::parse(*text, nullptr, false);
         if (j.is_discarded()) {
@@ -1407,6 +1460,8 @@ OpenResult readBytes(const Bytes& data, std::string_view displayName) {
     // Manifest: is this a SketchBillet file, and can this version read it?
     const auto manifest = readJson("manifest.json");
     if (!manifest) {
+        if (!prefix.empty())
+            return fail(damaged(displayName, "the part in " + prefix + " is missing: " + why));
         return fail(why.rfind("missing", 0) == 0 ? notSketchBillet(displayName, why)
                                                  : damaged(displayName, why));
     }
@@ -1466,6 +1521,62 @@ OpenResult readBytes(const Bytes& data, std::string_view displayName) {
         return fail(damaged(displayName, why));  // there, but not readable
     }
 
+    // An assembly: its parts, then its components. (Parts inside an assembly are
+    // parts: an assembly in one is damage.)
+    if (kind == model::DocKind::Assembly) {
+        if (!prefix.empty()) return fail(damaged(displayName, "a part in it is an assembly"));
+        if (schema < 2) return fail(damaged(displayName, "an assembly needs schema 2"));
+        // The parts, in the order the manifest lists them.
+        const json files = manifest->value("files", json::array());
+        for (const auto& f : files.is_array() ? files : json::array()) {
+            const std::string file = f.is_string() ? f.get<std::string>() : std::string();
+            constexpr std::string_view start = "parts/", end = "/manifest.json";
+            if (file.size() <= start.size() + end.size() || file.rfind(start, 0) != 0 ||
+                file.compare(file.size() - end.size(), end.size(), end) != 0)
+                continue;
+            const std::string folder = file.substr(0, file.size() - end.size() + 1);  // "parts/<id>/"
+            auto part = readDesign(za, folder, displayName);
+            if (!part.ok()) return part;  // what's wrong with the part
+            const auto name = part.document->name();
+            if (auto issues = doc->execute(std::make_unique<model::AddPartCommand>(std::move(part.document)));
+                !issues.empty()) {
+                return fail(damaged(displayName, "part " + name + ": " + issues.front().code));
+            }
+        }
+        const auto components = readJson("components.json");
+        if (!components) return fail(damaged(displayName, why));
+        const json list = components->value("components", json());
+        if (!list.is_array()) return fail(damaged(displayName, "components.json has no component list"));
+        for (const auto& cj : list) {
+            const auto id = cj.is_object() ? model::ComponentId::parse(cj.value("id", "")) : std::nullopt;
+            const auto part = cj.is_object() ? DocId::parse(cj.value("part", "")) : std::nullopt;
+            const json place = cj.is_object() ? cj.value("placement", json()) : json();
+            const auto origin = place.is_object() ? readVec3(place.value("origin", json())) : std::nullopt;
+            const auto xAxis = place.is_object() ? readVec3(place.value("xAxis", json())) : std::nullopt;
+            const auto zAxis = place.is_object() ? readVec3(place.value("zAxis", json())) : std::nullopt;
+            if (!id || !part || !cj.contains("name") || !cj["name"].is_string() || !origin || !xAxis ||
+                !zAxis) {
+                return fail(
+                    damaged(displayName,
+                            "a component in components.json is missing its id, name, part or placement"));
+            }
+            model::Component c{*id,
+                               cj["name"].get<std::string>(),
+                               *part,
+                               {*origin, *xAxis, *zAxis},
+                               cj.value("grounded", false)};
+            const auto name = c.name;
+            if (auto issues = doc->execute(std::make_unique<model::AddComponentCommand>(std::move(c)));
+                !issues.empty()) {
+                return fail(damaged(displayName, "component " + name + ": " + issues.front().code));
+            }
+        }
+        doc->clearHistory();
+        doc->markSaved();
+        result.document = std::move(doc);
+        return result;
+    }
+
     // The design's own materials, before the steps that use them.
     // (A design without materials of its own has no materials.json.)
     if (const auto materials = readJson("materials.json"); materials) {
@@ -1516,7 +1627,7 @@ OpenResult readBytes(const Bytes& data, std::string_view displayName) {
             auto& im = static_cast<model::ImportFeature&>(*feature);
             const json where = fj->value("params", json::object()).value("data", json());
             const auto text =
-                where.is_string() ? readEntry(za.get(), where.get<std::string>(), why) : std::nullopt;
+                where.is_string() ? readEntry(za, prefix + where.get<std::string>(), why) : std::nullopt;
             if (!text) return fail(damaged(displayName, "step " + im.name() + ": " + why));
             im.setContent(im.format(), std::make_shared<const std::string>(*text), im.source());
         }
@@ -1587,6 +1698,28 @@ OpenResult readBytes(const Bytes& data, std::string_view displayName) {
     doc->markSaved();
     result.document = std::move(doc);
     return result;
+}
+
+}  // namespace
+
+OpenResult readBytes(const Bytes& data, std::string_view displayName) {
+    OpenResult result;
+    auto fail = [&](Diagnostic d) {
+        result.issues.push_back(std::move(d));
+        return std::move(result);
+    };
+
+    zip_error_t err;
+    zip_error_init(&err);
+    zip_source_t* raw = zip_source_buffer_create(data.data(), data.size(), 0, &err);
+    if (!raw) return fail(notSketchBillet(displayName, zipErrorText(&err)));
+    ZipPtr za(zip_open_from_source(raw, ZIP_RDONLY, &err));
+    if (!za) {
+        zip_source_free(raw);
+        return fail(notSketchBillet(displayName, zipErrorText(&err)));
+    }
+
+    return readDesign(za.get(), "", displayName);
 }
 
 OpenResult openFile(const std::filesystem::path& path) {

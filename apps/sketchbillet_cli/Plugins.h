@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "sb/kernel/IKernel.h"
 #include "sb/model/Document.h"
 #include "sb/sketch/Sketch.h"
 
@@ -34,5 +35,12 @@ void printFormulas(const model::Feature& step, LengthUnit unit, const char* inde
 // Lists the design's parameters, if it has any, after its steps: each with its
 // formula and, if that isn't just the value, what it works out to.
 void printParameters(const model::Document& doc);
+
+// Lists an assembly: its components (each with its part, grounded or free, and
+// where it sits; with `directions`, which way its x and z face too), its parts
+// (each built once: steps, mass), and the mass of everything together. Returns
+// false if a part has a problem.
+bool printAssembly(const model::Document& doc, const model::RebuildReport& report, kernel::IKernel& kernel,
+                   bool directions);
 
 }  // namespace sb::cli

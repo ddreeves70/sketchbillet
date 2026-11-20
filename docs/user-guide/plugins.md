@@ -11,6 +11,14 @@ and file formats. SketchBillet's own modeling commands come from a built-in plug
 $ sketchbillet_cli plugins
 loaded   sb.modeling 0.1.0  Modeling (built in)
            tier    foundation
+           command assembly.new
+           command component.add
+           command component.delete
+           command component.ground
+           command component.insert
+           command component.new
+           command component.place
+           command component.rename
            command document.set_units
            command feature.add_boolean
            command feature.add_box

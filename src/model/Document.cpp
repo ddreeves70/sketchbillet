@@ -100,6 +100,30 @@ void DocumentEditor::setLengthUnit(LengthUnit unit) {
     doc_.lengthUnit_ = unit;
 }
 
+void DocumentEditor::setKind(DocKind kind) {
+    doc_.kind_ = kind;
+}
+
+std::vector<Component>& DocumentEditor::components() {
+    return doc_.components_;
+}
+
+void DocumentEditor::addPart(std::unique_ptr<Document> part, std::size_t index) {
+    if (!part) return;
+    index = std::min(index, doc_.parts_.size());
+    doc_.parts_.insert(doc_.parts_.begin() + static_cast<std::ptrdiff_t>(index), std::move(part));
+}
+
+std::pair<std::unique_ptr<Document>, std::size_t> DocumentEditor::removePart(const DocId& id) {
+    for (std::size_t i = 0; i < doc_.parts_.size(); ++i) {
+        if (doc_.parts_[i]->id() != id) continue;
+        auto part = std::move(doc_.parts_[i]);
+        doc_.parts_.erase(doc_.parts_.begin() + static_cast<std::ptrdiff_t>(i));
+        return {std::move(part), i};
+    }
+    return {nullptr, 0};
+}
+
 // ---------------------------------------------------------------------------
 // RebuildReport
 // ---------------------------------------------------------------------------
@@ -116,10 +140,18 @@ const kernel::ShapeHandle* RebuildReport::shapeOf(const FeatureId& id) const {
 }
 
 bool RebuildReport::ok() const {
-    return std::all_of(results_.begin(), results_.end(), [](const auto& kv) {
-        return kv.second.status == FeatureStatus::Ok || kv.second.status == FeatureStatus::Suppressed ||
-               kv.second.status == FeatureStatus::RolledBack;
-    });
+    return std::all_of(results_.begin(), results_.end(),
+                       [](const auto& kv) {
+                           return kv.second.status == FeatureStatus::Ok ||
+                                  kv.second.status == FeatureStatus::Suppressed ||
+                                  kv.second.status == FeatureStatus::RolledBack;
+                       }) &&
+           std::all_of(parts_.begin(), parts_.end(), [](const auto& kv) { return kv.second->ok(); });
+}
+
+const RebuildReport* RebuildReport::part(const DocId& id) const {
+    const auto it = parts_.find(id);
+    return it == parts_.end() ? nullptr : it->second.get();
 }
 
 // ---------------------------------------------------------------------------
@@ -242,6 +274,47 @@ FolderId Document::folderOf(const FeatureId& id) const {
         if (std::find(f.steps.begin(), f.steps.end(), id) != f.steps.end()) return f.id;
     }
     return {};
+}
+
+const Component* Document::findComponent(const ComponentId& id) const {
+    for (const auto& c : components_) {
+        if (c.id == id) return &c;
+    }
+    return nullptr;
+}
+
+const Component* Document::findComponent(std::string_view name) const {
+    for (const auto& c : components_) {
+        if (c.name == name) return &c;
+    }
+    return nullptr;
+}
+
+std::string Document::uniqueComponentName(const std::string& part) const {
+    for (int n = 1;; ++n) {
+        std::string candidate = part + " " + std::to_string(n);
+        if (!findComponent(std::string_view(candidate))) return candidate;
+    }
+}
+
+std::vector<const Document*> Document::parts() const {
+    std::vector<const Document*> out;
+    for (const auto& p : parts_) out.push_back(p.get());
+    return out;
+}
+
+const Document* Document::findPart(const DocId& id) const {
+    for (const auto& p : parts_) {
+        if (p->id() == id) return p.get();
+    }
+    return nullptr;
+}
+
+const Document* Document::findPart(std::string_view name) const {
+    for (const auto& p : parts_) {
+        if (p->name() == name) return p.get();
+    }
+    return nullptr;
 }
 
 std::string Document::uniqueFolderName(const std::string& base) const {
@@ -413,6 +486,13 @@ RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolve
     report.kernel_ = &kernel;
     report.solver_ = solver;
     report.unit_ = lengthUnit_;
+    // An assembly builds each of its parts once, keeping a part's last build
+    // where nothing in it changed.
+    for (const auto& part : parts_) {
+        const RebuildReport* last = previous ? previous->part(part->id()) : nullptr;
+        report.parts_[part->id()] =
+            std::make_shared<const RebuildReport>(part->regenerate(kernel, solver, last));
+    }
     std::set<FeatureId> usedAsInput;
     std::map<FeatureId, FeatureId> changedBy;  // a body, and the first step that took it as its input
     const ParameterValues values = parameters_.evaluate();  // before any step, as the design says
