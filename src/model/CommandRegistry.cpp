@@ -1346,17 +1346,9 @@ CommandRegistry makeBuiltin() {
           {"at", ArgType::Vec3, "Where the first one's origin goes (mm). Leave it out for 0,0,0.", false, {}},
           {"step", ArgType::Vec3, "How far each one is from the one before (mm), like 30,0,0.", false, {}}}},
         [count](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
-            const std::string name = argText(a, "part");
-            const auto* part = doc.findPart(std::string_view(name));
-            if (!part) {
-                std::string names;
-                for (const auto* p : doc.parts()) names += (names.empty() ? "" : ", ") + p->name();
-                return std::make_unique<ProblemCommand>(error(
-                    "assembly.no_part",
-                    doc.name() + " has no part called " + name + "." +
-                        (names.empty() ? std::string(" Put a part in with component.new or component.insert.")
-                                       : " Its parts are: " + names + ".")));
-            }
+            Diagnostic problem;
+            const auto* part = partNamed(doc, argText(a, "part"), problem);
+            if (!part) return std::make_unique<ProblemCommand>(problem);
             kernel::Placement at;
             at.origin = argVec3(a, "at");
             return std::make_unique<AddComponentsCommand>(part->id(), count(a), at, argVec3(a, "step"));
@@ -1418,6 +1410,26 @@ CommandRegistry makeBuiltin() {
               auto [c, problem] = componentNamed(doc, a, "component");
               if (!c) return std::move(problem);
               return std::make_unique<DeleteComponentCommand>(c->id);
+          });
+
+    r.add({"part.make_inside",
+           "Make part inside",
+           "Makes a linked part an inside part: the assembly keeps its copy of the part and stops "
+           "following the file. Later changes to the file don't change the assembly.",
+           {{"part", ArgType::Text, "The part, like Wheel.", true, {}}}},
+          [](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+              Diagnostic problem;
+              const auto* part = partNamed(doc, argText(a, "part"), problem);
+              if (!part) return std::make_unique<ProblemCommand>(problem);
+              if (!doc.partLink(part->id())) {
+                  return std::make_unique<ProblemCommand>(
+                      error("part.inside_already", part->name() + " is an inside part already: it isn't "
+                                                                  "linked to a file."));
+              }
+              std::vector<PartUpdate> changes;
+              changes.push_back({part->id(), nullptr, std::nullopt});
+              return std::make_unique<UpdatePartsCommand>(std::move(changes),
+                                                          "Make " + part->name() + " inside");
           });
 
     // --- Sketches ------------------------------------------------------------

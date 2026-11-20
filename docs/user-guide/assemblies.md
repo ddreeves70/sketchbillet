@@ -42,7 +42,9 @@ Car: assembly, 3 components, 2 parts
   Wheel 2      Wheel      free     at 70, -6, 0 mm
 Parts:
   Body         1 step   ok        mass 39.68 g (PLA), 1 in the assembly
+    linked to Body.sb
   Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+    linked to Wheel.sb
 Mass in all: 46.41 g
 wrote Car.sb
 ```
@@ -71,7 +73,9 @@ Car: assembly, 3 components, 2 parts
     facing x 1, 0, 0, z 0, -1, 0
 Parts:
   Body         1 step   ok        mass 39.68 g (PLA), 1 in the assembly
+    linked to Body.sb
   Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+    linked to Wheel.sb
 Mass in all: 46.41 g
 ```
 
@@ -82,6 +86,49 @@ others are **free**. When joints come, they'll move the free components to fit
 the grounded ones, so a car usually has its body grounded and its wheels free.
 Fix or free a component with
 [`component.ground`](../cli/commands.md#componentground).
+
+## Linked and inside parts
+
+A part in an assembly is either **linked** to its own `.sb` file, or **inside**
+the assembly.
+
+- **Linked parts** follow their file. Put one in with `component.insert`: change
+  `Wheel.sb` later, and the car uses the new wheel the next time it opens. This is
+  how a team works: one student makes the wheel, another the car.
+- **Inside parts** live only in the assembly. Make one with `component.new`, or
+  insert a file with `link=false` to keep a copy that doesn't change.
+
+Either way, the assembly keeps a copy of every part, so `Car.sb` opens even on
+a computer that doesn't have `Wheel.sb`.
+
+Here the wheel gets a hub. Opening the car says it changed, and uses the new
+wheel; saving the car keeps it:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open Wheel.sb --save Wheel.sb feature.add_cylinder radius=4 height=10
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb
+note [part.updated]: Wheel changed in Wheel.sb, so Car uses the new Wheel.
+...
+```
+
+**When SketchBillet can't find a part's file**, it looks for it next to the
+assembly, then in the folders inside the assembly's folder, even under another
+name. If it finds it there, it says so, and links to it there from now on:
+
+```text
+note [part.moved]: Car found Wheel.sb in the parts folder, and links to it there now.
+```
+
+If the file is gone, the assembly uses the copy it kept, and says what to do:
+
+```text
+warning [part.not_found]: Wheel.sb can't be found, so Car uses the copy of Wheel saved on Nov 20, 2026. Put Wheel.sb back, or link Wheel to it where it is now with part.relink part="Wheel" file=<where it is>.
+```
+
+So keep an assembly and its parts' files in one folder (and the folders in
+it): you can move or copy the whole folder, and everything still links up.
 
 ## What you can do
 
@@ -95,15 +142,21 @@ Fix or free a component with
 | Fix a component or let it go | [`component.ground`](../cli/commands.md#componentground) |
 | Rename a component | [`component.rename`](../cli/commands.md#componentrename) |
 | Take a component out | [`component.delete`](../cli/commands.md#componentdelete) |
+| Update linked parts from their files | [`part.update`](../cli/commands.md#partupdate), or just open the assembly |
+| Link a part to its file where it is now | [`part.relink`](../cli/commands.md#partrelink) |
+| Stop following the file: make a part inside | [`part.make_inside`](../cli/commands.md#partmake_inside) |
+| Save an inside part to its own file, and link it | [`part.save_as`](../cli/commands.md#partsave_as) |
 | List the components and parts | [`open --components`](../cli/open.md#an-assembly) |
 
 Undo works for all of them in a script, like any other command.
 
 ## Tips
 
-- **An assembly keeps its own copy of each part.** Change `Wheel.sb` after
-  inserting it and the car still has the old wheel. Linking parts to their
-  files, so the car picks up changes, comes in a later version.
+- **Open and save to keep updates.** Opening an assembly updates its linked
+  parts, but only saving it keeps them: `sketchbillet_cli run --open Car.sb --save Car.sb`.
+- **A file only counts if it holds the same design.** A different `Wheel.sb`,
+  made from scratch, isn't the wheel the car uses, even with the same name.
+  Copies of the file are fine.
 - **Inserting the same file again adds more of the same part**, not a second
   Wheel part: you get Wheel 3, Wheel 4, ...
 - **Deleting the last component of a part takes the part out too.**

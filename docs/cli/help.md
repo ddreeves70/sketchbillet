@@ -22,7 +22,7 @@ Commands for sketchbillet_cli run:
   component.add            Add components
   component.delete         Delete component
   component.ground         Ground
-  component.insert         Insert copy of part
+  component.insert         Insert part from file
   component.new            New part
   component.place          Move component
   component.rename         Rename component
@@ -62,6 +62,10 @@ Commands for sketchbillet_cli run:
   parameter.delete         Delete parameter
   parameter.rename         Rename parameter
   parameter.set            Set parameter
+  part.make_inside         Make part inside
+  part.relink              Find linked file
+  part.save_as             Save part as file
+  part.update              Update linked parts
   sketch.add_arc           Add arc
   sketch.add_circle        Add circle
   sketch.add_line          Add line

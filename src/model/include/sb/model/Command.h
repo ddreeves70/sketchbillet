@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "sb/core/Diagnostic.h"
@@ -97,6 +98,19 @@ public:
     /// @param id The part's design id.
     /// @return The part (the caller owns it now) and where it was, or nullptr if it isn't there.
     std::pair<std::unique_ptr<Document>, std::size_t> removePart(const DocId& id);
+
+    /// Puts a new design in place of one of an assembly's parts with the same
+    /// design id, keeping its place in the list.
+    /// @param part The new design. The assembly takes ownership.
+    /// @return The design it replaced (the caller owns it now), or nullptr (and
+    ///         @p part is dropped) if no part has its id.
+    std::unique_ptr<Document> replacePart(std::unique_ptr<Document> part);
+
+    /// Links one of an assembly's parts to its own file, or makes it an inside part.
+    /// @param part The part's design id.
+    /// @param link The link, or nullopt for an inside part.
+    /// @return The link it had before, or nullopt if it had none.
+    std::optional<PartLink> setPartLink(const DocId& part, std::optional<PartLink> link);
 
 private:
     friend class Document;

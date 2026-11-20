@@ -75,6 +75,21 @@ std::string insertLabel(const std::string& name, int count) {
 
 }  // namespace
 
+const Document* partNamed(const Document& doc, const std::string& name, Diagnostic& problem) {
+    if (const auto* part = doc.findPart(std::string_view(name))) return part;
+    if (auto d = needAssembly(doc)) {
+        problem = *d;
+        return nullptr;
+    }
+    std::string names;
+    for (const auto* p : doc.parts()) names += (names.empty() ? "" : ", ") + p->name();
+    problem = error("assembly.no_part",
+                    doc.name() + " has no part called " + name + "." +
+                        (names.empty() ? std::string(" Put a part in with component.new or component.insert.")
+                                       : " Its parts are: " + names + "."));
+    return nullptr;
+}
+
 // --- MakeAssemblyCommand -----------------------------------------------------
 
 Diagnostics MakeAssemblyCommand::apply(DocumentEditor& editor) {
@@ -100,8 +115,8 @@ void MakeAssemblyCommand::revert(DocumentEditor& editor) {
 // --- InsertPartCommand -------------------------------------------------------
 
 InsertPartCommand::InsertPartCommand(std::unique_ptr<Document> part, int count, kernel::Placement at,
-                                     kernel::Vec3 step)
-    : part_(std::move(part)), count_(count), at_(at), step_(step) {
+                                     kernel::Vec3 step, std::optional<PartLink> link)
+    : part_(std::move(part)), count_(count), at_(at), step_(step), link_(std::move(link)) {
     if (part_) {
         partId_ = part_->id();
         partName_ = part_->name();
@@ -133,6 +148,7 @@ Diagnostics InsertPartCommand::apply(DocumentEditor& editor) {
     addedPart_ = !there;
     if (addedPart_) {
         editor.addPart(std::move(part_));
+        link_ = editor.setPartLink(partId_, std::move(link_));
     } else {
         partName_ = doc.findPart(partId_)->name();
     }
@@ -142,12 +158,16 @@ Diagnostics InsertPartCommand::apply(DocumentEditor& editor) {
 
 void InsertPartCommand::revert(DocumentEditor& editor) {
     removeCopies(editor, ids_);
-    if (addedPart_) part_ = editor.removePart(partId_).first;
+    if (addedPart_) {
+        link_ = editor.setPartLink(partId_, std::move(link_));
+        part_ = editor.removePart(partId_).first;
+    }
 }
 
 // --- AddPartCommand ----------------------------------------------------------
 
-AddPartCommand::AddPartCommand(std::unique_ptr<Document> part) : part_(std::move(part)) {
+AddPartCommand::AddPartCommand(std::unique_ptr<Document> part, std::optional<PartLink> link)
+    : part_(std::move(part)), link_(std::move(link)) {
     if (part_) {
         id_ = part_->id();
         name_ = part_->name();
@@ -173,11 +193,55 @@ Diagnostics AddPartCommand::apply(DocumentEditor& editor) {
         return {error("assembly.part_there", doc.name() + " has the part " + name_ + " already.")};
     }
     editor.addPart(std::move(part_));
+    link_ = editor.setPartLink(id_, std::move(link_));
     return {};
 }
 
 void AddPartCommand::revert(DocumentEditor& editor) {
+    link_ = editor.setPartLink(id_, std::move(link_));
     part_ = editor.removePart(id_).first;
+}
+
+// --- UpdatePartsCommand ------------------------------------------------------
+
+UpdatePartsCommand::UpdatePartsCommand(std::vector<PartUpdate> changes, std::string label)
+    : changes_(std::move(changes)), label_(std::move(label)) {}
+
+UpdatePartsCommand::~UpdatePartsCommand() = default;
+
+Diagnostics UpdatePartsCommand::apply(DocumentEditor& editor) {
+    const Document& doc = editor.document();
+    if (auto d = needAssembly(doc)) return {*d};
+    if (changes_.empty()) return {error("assembly.no_change", "There were no parts to change.")};
+    for (const auto& c : changes_) {
+        const auto* part = doc.findPart(c.part);
+        if (!part) return {error("assembly.no_part", "That part isn't in " + doc.name() + " any more.")};
+        if (c.design && c.design->id() != c.part) {
+            return {error("part.other_design", c.design->name() + " is a different design from " +
+                                                   part->name() +
+                                                   ", so it can't take its place. Pick the file " +
+                                                   part->name() + " was saved in.")};
+        }
+        if (c.design && c.design->kind() == DocKind::Assembly) {
+            return {error("assembly.sub", c.design->name() +
+                                              " is an assembly. Assemblies inside assemblies come in a later "
+                                              "version.")};
+        }
+    }
+    swap(editor);
+    return {};
+}
+
+void UpdatePartsCommand::revert(DocumentEditor& editor) {
+    swap(editor);
+}
+
+void UpdatePartsCommand::swap(DocumentEditor& editor) {
+    // Each change holds what the assembly doesn't have now: swapping twice puts it back.
+    for (auto& c : changes_) {
+        if (c.design) c.design = editor.replacePart(std::move(c.design));
+        c.link = editor.setPartLink(c.part, std::move(c.link));
+    }
 }
 
 // --- AddComponentCommand -----------------------------------------------------
@@ -343,6 +407,7 @@ Diagnostics DeleteComponentCommand::apply(DocumentEditor& editor) {
     const bool used = std::any_of(components.begin(), components.end(),
                                   [&](const Component& c) { return c.part == removed_->part; });
     if (!used) {
+        link_ = editor.setPartLink(removed_->part, std::nullopt);
         auto [part, at] = editor.removePart(removed_->part);
         part_ = std::move(part);
         partIndex_ = at;
@@ -352,7 +417,11 @@ Diagnostics DeleteComponentCommand::apply(DocumentEditor& editor) {
 
 void DeleteComponentCommand::revert(DocumentEditor& editor) {
     if (!removed_) return;
-    if (part_) editor.addPart(std::move(part_), partIndex_);
+    if (part_) {
+        editor.addPart(std::move(part_), partIndex_);
+        editor.setPartLink(removed_->part, std::move(link_));
+        link_.reset();
+    }
     auto& components = editor.components();
     components.insert(components.begin() + static_cast<std::ptrdiff_t>(std::min(index_, components.size())),
                       *removed_);

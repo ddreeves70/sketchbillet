@@ -161,6 +161,11 @@ public:
     /// @return It, or nullptr if no part has that name.
     const Document* findPart(std::string_view name) const;
 
+    /// Gives where one of an assembly's parts is linked to, if it's a linked part.
+    /// @param part The part's design id.
+    /// @return Its link, or nullptr if it's an inside part (or not one of the assembly's parts).
+    const PartLink* partLink(const DocId& part) const;
+
     /// Counts the features.
     /// @return The number of features, suppressed ones included.
     std::size_t featureCount() const { return features_.size(); }
@@ -384,7 +389,8 @@ private:
     std::string name_;
     std::vector<std::unique_ptr<Feature>> features_;
     std::vector<Component> components_;               // an assembly's components
-    std::vector<std::unique_ptr<Document>> parts_;    // an assembly's inside parts
+    std::vector<std::unique_ptr<Document>> parts_;    // an assembly's parts (inside and linked)
+    std::map<DocId, PartLink> links_;                 // the linked ones' links; see partLink()
     std::map<FeatureId, std::uint64_t> revisions_;    // see revision(); set by DocumentEditor
     void touch(const FeatureId& id);                  // gives a step a new revision
     LengthUnit lengthUnit_ = LengthUnit::Millimeter;  // what lengths are shown in

@@ -4,12 +4,12 @@ Runs one modeling command, such as "add a box" or "cut a hole", on a new or save
 design. Then it rebuilds the design, prints every step, and saves it.
 
 ```text
-sketchbillet_cli run [--plugins <folder>]... [--open <in.sb>] [--save <out.sb>] <command> [name=value]...
+sketchbillet_cli run [--plugins <folder>]... [--open <in.sb>] [--save <out.sb>] [<command> [name=value]...]
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `<command>` | The modeling command to run, e.g. `feature.add_box`. See [Modeling commands](commands.md), or run [`sketchbillet_cli help`](help.md) |
+| `<command>` | The modeling command to run, e.g. `feature.add_box`. See [Modeling commands](commands.md), or run [`sketchbillet_cli help`](help.md). Leave it out to open a design and save it again (with `--open` and `--save`) |
 | `name=value` | One setting for the command, e.g. `size=40,30,10`. Settings that aren't required can be left out |
 | `--open <in.sb>` | Start from this saved design. Without it, `run` starts a new, empty design |
 | `--save <out.sb>` | Save the result here. It may be the same file as `--open`. A new design is named after this file |
@@ -63,8 +63,24 @@ Cart: assembly, 2 components, 1 part
   Wheel 2      Wheel      free     at 30, 0, 0 mm
 Parts:
   Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+    linked to Wheel.sb
 Mass in all: 6.73 g
 wrote Cart.sb
+```
+
+## Save an assembly with its parts updated
+
+Opening an assembly updates its [linked parts](../user-guide/assemblies.md#linked-and-inside-parts)
+from their files. With no command, `run` opens a design and saves it again, so
+the updates are kept:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open Wheel.sb --save Wheel.sb feature.add_cylinder radius=4 height=10
+...
+$ sketchbillet_cli run --open Cart.sb --save Cart.sb
+note [part.updated]: Wheel changed in Wheel.sb, so Cart uses the new Wheel.
+...
 ```
 
 ## Try a command without saving

@@ -8,10 +8,14 @@
 
 namespace sb::io {
 
-/// Adds `component.insert` to a registry: puts a part from a `.sb` file into an
-/// assembly, as an inside part (a copy: a later change to the file doesn't
-/// change the assembly), with one or more components of it. The sb.modeling
-/// plugin adds it with the other modeling commands.
+/// Adds the commands that read or write parts' files to a registry, as the
+/// sb.modeling plugin does with the other modeling commands:
+/// - `component.insert`: puts a part from a `.sb` file into an assembly, with one
+///   or more components of it, linked to the file (or, with link=false, as an
+///   inside part).
+/// - `part.update`: updates linked parts from files that changed (updateLinkedParts()).
+/// - `part.relink`: links a part to its file where it is now.
+/// - `part.save_as`: saves a part to its own file, and links it.
 /// @code
 /// model::CommandRegistry r;
 /// io::addPartCommands(r);

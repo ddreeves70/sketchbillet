@@ -20,6 +20,7 @@ add_executable(sb_tests
   model/test_print_check.cpp
   io/test_sketchbillet_file.cpp
   io/test_assembly_file.cpp
+  io/test_linked_parts.cpp
   io/test_three_mf.cpp
   kernel/test_mesh_tools.cpp
   kernel/test_placement.cpp
@@ -125,6 +126,8 @@ if(TARGET sketchbillet_cli)
   set_tests_properties(cli.open_schema1 PROPERTIES PASS_REGULAR_EXPRESSION "Tag +ok +volume 7121.46 mm\\^3")
   add_test(NAME cli.open_schema2 COMMAND sketchbillet_cli open "${CMAKE_CURRENT_SOURCE_DIR}/files/schema2-car.sb" --components)
   set_tests_properties(cli.open_schema2 PROPERTIES PASS_REGULAR_EXPRESSION "Car: assembly, 3 components, 2 parts.*Mass in all: 46.41 g")
+  add_test(NAME cli.open_schema2_linked COMMAND sketchbillet_cli open "${CMAKE_CURRENT_SOURCE_DIR}/files/schema2-linked-car.sb" --components)
+  set_tests_properties(cli.open_schema2_linked PROPERTIES PASS_REGULAR_EXPRESSION "part.not_found.*Car: assembly, 3 components, 2 parts.*can't be found: using the copy saved on Nov 20, 2026")
 endif()
 
 # PRE_TEST discovery waits until ctest runs, after vcpkg has copied DLLs next to

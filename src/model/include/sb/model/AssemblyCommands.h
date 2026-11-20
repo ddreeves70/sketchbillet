@@ -30,10 +30,11 @@ public:
     void revert(DocumentEditor& editor) override;
 };
 
-/// Puts a part in an assembly as an inside part, with one or more components of
-/// it, in a row. A part the assembly already has (the same design id) isn't
-/// added again: only its new components are. The first component put in an
-/// empty assembly is grounded.
+/// Puts a part in an assembly, with one or more components of it, in a row: as
+/// an inside part, or linked to its file. A part the assembly already has (the
+/// same design id) isn't added again: only its new components are, and it stays
+/// linked or inside as it was. The first component put in an empty assembly is
+/// grounded.
 class InsertPartCommand final : public Command {
 public:
     /// Prepares the change.
@@ -41,8 +42,9 @@ public:
     /// @param count How many components of it, 1 to 100.
     /// @param at Where the first one goes.
     /// @param step How far each one is from the one before (mm).
+    /// @param link Its file, for a linked part; nullopt for an inside part.
     InsertPartCommand(std::unique_ptr<Document> part, int count, kernel::Placement at = {},
-                      kernel::Vec3 step = {});
+                      kernel::Vec3 step = {}, std::optional<PartLink> link = std::nullopt);
     ~InsertPartCommand() override;
 
     std::string label() const override;
@@ -60,6 +62,7 @@ private:
     int count_;
     kernel::Placement at_;
     kernel::Vec3 step_;
+    std::optional<PartLink> link_;  // the new link while it isn't applied; the old one while it is
     bool addedPart_ = false;
     std::vector<ComponentId> ids_;  // made on the first apply, the same on redo
 };
@@ -70,7 +73,8 @@ class AddPartCommand final : public Command {
 public:
     /// Prepares the change.
     /// @param part The part: a design of the kind Part, not in the assembly yet.
-    explicit AddPartCommand(std::unique_ptr<Document> part);
+    /// @param link Its file, for a linked part; nullopt for an inside part.
+    explicit AddPartCommand(std::unique_ptr<Document> part, std::optional<PartLink> link = std::nullopt);
     ~AddPartCommand() override;
 
     std::string label() const override;
@@ -81,6 +85,51 @@ private:
     std::unique_ptr<Document> part_;
     DocId id_;
     std::string name_;
+    std::optional<PartLink> link_;  // the new link while it isn't applied; the old one while it is
+};
+
+/// Finds one of an assembly's parts by name, for a command that names it.
+/// @param doc The assembly.
+/// @param name The part's name, like Wheel.
+/// @param problem Set to why there's no such part (in plain words, with the
+///        assembly's part names), when there isn't.
+/// @return The part, or nullptr.
+const Document* partNamed(const Document& doc, const std::string& name, Diagnostic& problem);
+
+/// One change to one of an assembly's parts, for UpdatePartsCommand.
+struct PartUpdate {
+    DocId part{};                      ///< Which part, by its design id.
+    std::unique_ptr<Document> design;  ///< Its new design (with the same id); null to keep the one it has.
+    std::optional<PartLink> link;      ///< Its link from now on; nullopt makes it an inside part.
+};
+
+/// Changes where some of an assembly's parts come from, as one undo step:
+/// updating linked parts from their files, linking a part to a file found
+/// somewhere else, or making a linked part an inside part. The components stay
+/// as they are. Undo puts back the parts and links they had.
+///
+/// @code
+/// std::vector<PartUpdate> changes;
+/// changes.push_back({wheelId, std::move(newWheel), PartLink{"/class/wheel.sb", fingerprint, now}});
+/// car.execute(std::make_unique<UpdatePartsCommand>(std::move(changes), "Update Wheel"));
+/// @endcode
+class UpdatePartsCommand final : public Command {
+public:
+    /// Prepares the change.
+    /// @param changes The parts to change. Each must be one of the assembly's parts,
+    ///        and a new design must be a part with the same design id.
+    /// @param label What undo says, like "Update Wheel".
+    UpdatePartsCommand(std::vector<PartUpdate> changes, std::string label);
+    ~UpdatePartsCommand() override;
+
+    std::string label() const override { return label_; }
+    Diagnostics apply(DocumentEditor& editor) override;
+    void revert(DocumentEditor& editor) override;
+
+private:
+    void swap(DocumentEditor& editor);  // apply and revert each swap the parts and links
+    std::vector<PartUpdate> changes_;
+    std::string label_;
 };
 
 /// Adds one component exactly as given (its id, name, part, placement and
@@ -203,6 +252,7 @@ private:
     std::size_t index_ = 0;
     std::unique_ptr<Document> part_;  // its part, if it went too
     std::size_t partIndex_ = 0;
+    std::optional<PartLink> link_;  // and that part's link, if it was linked
 };
 
 }  // namespace sb::model
