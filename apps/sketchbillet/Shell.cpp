@@ -573,6 +573,20 @@ void Shell::buildPanels() {
         o.over->setStatusTip(
             tr("Float %1 over the 3D view, see-through, instead of beside it.").arg(spec->title.toLower()));
         connect(o.over, &QAction::triggered, this, [this, id](bool on) { setOverView(id, on); });
+        // Panels > title opens a docked panel that was closed where it starts: floating
+        // over the view, as Reset layout puts it. (Plugins showing a docked panel, like
+        // Measure while measuring, don't use this action, so they leave it docked.)
+        auto* toggle = dock->toggleViewAction();
+        toggle->setObjectName(QStringLiteral("sb.shell.dock.") + id);
+        QObject::disconnect(toggle, nullptr, dock, nullptr);
+        connect(toggle, &QAction::triggered, this, [this, id, dock](bool on) {
+            if (!on) {
+                dock->toggleView(false);
+                return;
+            }
+            setOverView(id, true);
+            showPanel(id, true);
+        });
         overlays_[id] = o;
         overlayOrder_.push_back(id);
     }
