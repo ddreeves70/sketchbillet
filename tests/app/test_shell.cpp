@@ -2988,6 +2988,54 @@ TEST_CASE("Properties and the Sketch panel float at the view's top right, one un
     CHECK_FALSE(app.shell->panelWidget(sketch)->isVisible());
 }
 
+TEST_CASE("a docked panel that's closed opens again floating over the view", "[app][overlay]") {
+    App app;
+    const QString id = QStringLiteral("sb.featuretree.panel");
+    auto* frame = app.shell->overlay(id);
+    REQUIRE(frame);
+    frame->findChild<QToolButton*>(QStringLiteral("sb.shell.overlay.dock"))->click();
+    settle();
+    REQUIRE_FALSE(app.shell->overView(id));
+    auto* toggle = app.menu("sb.shell.dock.sb.featuretree.panel");
+    REQUIRE(toggle);
+    CHECK(toggle->isVisible());
+    CHECK(toggle->isChecked());
+
+    // Panels > Feature tree closes it, docked...
+    toggle->trigger();
+    settle();
+    CHECK_FALSE(app.tree()->isVisible());
+    CHECK_FALSE(app.shell->overView(id));
+    // ...and opens it again where it starts: floating over the view.
+    toggle->trigger();
+    settle();
+    CHECK(app.shell->overView(id));
+    CHECK(frame->isVisible());
+    CHECK(frame->isAncestorOf(app.tree()));
+    CHECK(app.tree()->isVisible());
+    CHECK(app.menu("sb.shell.show.sb.featuretree.panel")->isChecked());
+    CHECK(app.menu("sb.shell.overview.sb.featuretree.panel")->isChecked());
+    // SketchBillet remembers it floats.
+    app.shell.reset();
+    app.open();
+    CHECK(app.shell->overView(id));
+
+    // A docked panel a tool opens and closes (the Sketch panel) stays docked.
+    const QString sketch = QStringLiteral("sb.sketcher.panel");
+    app.menu("sb.shell.overview.sb.sketcher.panel")->trigger();
+    settle();
+    REQUIRE_FALSE(app.shell->overView(sketch));
+    app.click("sb.sketcher.new_xy");
+    CHECK(app.shell->panelWidget(sketch)->isVisible());
+    app.click("sb.sketcher.finish");
+    settle();
+    CHECK_FALSE(app.shell->panelWidget(sketch)->isVisible());
+    app.click("sb.sketcher.new_xy");
+    settle();
+    CHECK_FALSE(app.shell->overView(sketch));
+    CHECK(app.shell->panelWidget(sketch)->isVisible());
+}
+
 TEST_CASE("Document settings in the feature tree shows the design's settings in Properties",
           "[app][overlay]") {
     App app;

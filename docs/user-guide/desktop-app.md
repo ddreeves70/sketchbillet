@@ -193,6 +193,9 @@ Properties is at the top right, under the view cube, with the Sketch panel
 - **Dock it** beside the viewer as an ordinary panel with the button at the right
   of its title bar (or untick **Panels > *panel* over the view** on the View
   tab). Tick it again to float it over the viewer once more.
+- **Close a docked one** with the X on its tab. **Panels > *panel*** opens it
+  again where it starts: floating over the viewer. Dock it again with its dock
+  button if you want it beside the viewer.
 - **Panels > *panel*** hides it and shows it again.
 
 SketchBillet remembers all of this next time it starts.
