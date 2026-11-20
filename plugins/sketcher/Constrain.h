@@ -81,6 +81,41 @@ struct LabelPlace {
 std::optional<LabelPlace> labelPlace(const sketch::Constraint& c, const sketch::Sketch& sketch, double gap,
                                      sketch::Point2 middle);
 
+// A dimension drawn as on a drawing (plugin::OverlayShape::Dimension), in sketch
+// mm: what it measures from and to, a point its line passes through, the
+// direction it measures along (zero: straight from one point to the other), and
+// where its number goes (for clicking it).
+struct DimensionPlace {
+    sketch::Point2 from, to, through;
+    sketch::Point2 along{};
+    bool arrowAtFrom = true;
+    bool arrowAtTo = true;
+    bool textAtEnd = false;  // a leader (radius, diameter): the number past its `to` end
+    sketch::Point2 textAt;
+};
+
+// Where a dimension is drawn: lengths and distances get a line `2 * gap` mm out
+// from what they measure, on the side away from `middle`; a radius or diameter
+// gets a leader from the edge outwards. Empty for constraints drawn as labels
+// (an angle, H, V, ...).
+std::optional<DimensionPlace> dimensionPlace(const sketch::Constraint& c, const sketch::Sketch& sketch,
+                                             double gap, sketch::Point2 middle);
+
+// Where a dimension's line runs, in sketch mm: level with what it measures from
+// and to, through its `through` point.
+std::pair<sketch::Point2, sketch::Point2> dimensionLine(const DimensionPlace& d);
+
+// Moves a dimension's line (and its number) `by` mm further out, away from what it measures.
+void pushOut(DimensionPlace& d, double by);
+
+// Whether two dimensions' lines would be drawn on top of each other: side by side
+// closer than `near` mm, along the same direction, and overlapping.
+bool dimensionsClash(const DimensionPlace& a, const DimensionPlace& b, double near);
+
+// What a dimension's number says: like labelText(), without the "x" or "y" of a
+// horizontal or vertical distance (its line shows which way), and never negative.
+std::string dimensionText(const sketch::Constraint& c, LengthUnit unit = LengthUnit::Millimeter);
+
 // Name base for a new constraint, e.g. "HorizontalDistance".
 std::string constraintBase(sketch::ConstraintKind kind);
 

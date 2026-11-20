@@ -31,6 +31,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command feature.import
            command feature.reload_import
            command feature.rename
+           command feature.set_color
            command feature.set_edges
            command feature.set_material
            command feature.set_sketch_face

@@ -1,12 +1,14 @@
 #include "sb/plugins/Sketcher.h"
 
 #include <QFileInfo>
+#include <QLocale>
 #include <QObject>
 #include <QPointer>
 #include <QString>
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <memory>
 #include <numbers>
 #include <optional>
@@ -20,6 +22,8 @@
 #include "SketcherIcons.h"
 #include "sb/grid/Grid.h"
 #include "sb/model/Commands.h"
+#include "sb/model/Expression.h"
+#include "sb/model/Formulas.h"
 #include "sb/plugin/Events.h"
 #include "sb/plugin/PluginContext.h"
 #include "sb/sketch/Profiles.h"
@@ -101,17 +105,24 @@ const char* toolHint(Tool tool, std::size_t clicks) {
                    "move "
                    "all of it. Esc finishes the sketch.";
         case Tool::Line:
-            return clicks == 0 ? "Line: click where it starts." : "Line: click where it ends. Esc stops.";
+            return clicks == 0
+                       ? "Line: click where it starts."
+                       : "Line: click where it ends, or type its length (Tab: its angle) and press Enter. "
+                         "Esc stops.";
         case Tool::Rectangle:
-            return clicks == 0 ? "Rectangle: click one corner."
-                               : "Rectangle: click the opposite corner. Esc stops.";
+            return clicks == 0
+                       ? "Rectangle: click one corner."
+                       : "Rectangle: click the opposite corner, or type its width (Tab: its height) and "
+                         "press Enter. Esc stops.";
         case Tool::RoundCorner:
             return "Round corner: click a corner where two lines meet. Then type its radius in the Sketch "
                    "panel.";
         case Tool::Trim:
             return "Trim: click the piece of a line, circle or arc to cut away (it shows red). Esc stops.";
         case Tool::Circle:
-            return clicks == 0 ? "Circle: click its center." : "Circle: click to set its size. Esc stops.";
+            return clicks == 0
+                       ? "Circle: click its center."
+                       : "Circle: click to set its size, or type its diameter and press Enter. Esc stops.";
         case Tool::Arc:
             return clicks == 0   ? "Arc: click the center of its circle."
                    : clicks == 1 ? "Arc: click where it starts. Esc stops."
@@ -180,9 +191,52 @@ std::optional<double> edgeDistance(const sketch::Shape& shape, sketch::Point2 p)
 }
 
 // The sketcher: the drawing of sketches, and the mouse tool that edits one.
+// Hears what's typed in the viewer's number boxes, and passes it on.
+struct NumberUser final : viewer::INumberUser {
+    std::function<void(const std::string& id, const std::string& text)> onTyped;
+    std::function<void(const std::string& id)> onEntered;
+    std::function<void()> onCancelled;
+    void typed(const std::string& id, const std::string& text) override {
+        if (onTyped) onTyped(id, text);
+    }
+    void entered(const std::string& id) override {
+        if (onEntered) onEntered(id);
+    }
+    void cancelled() override {
+        if (onCancelled) onCancelled();
+    }
+};
+
+// Sizes typed while drawing a shape, in mm (radians for an angle); empty where
+// nothing usable was typed.
+struct Sizes {
+    std::optional<double> width, height;  // a rectangle's
+    std::optional<double> length, angle;  // a line's (the angle from the sketch's x, counterclockwise)
+    std::optional<double> diameter;       // a circle's
+    bool any() const { return width || height || length || angle || diameter; }
+};
+
 class Sketcher final : public viewer::IViewTool {
 public:
-    explicit Sketcher(plugin::PluginContext& ctx) : ctx_(ctx) {}
+    explicit Sketcher(plugin::PluginContext& ctx) : ctx_(ctx) {
+        // A dimension clicked in the view: its box. Enter changes it, Escape doesn't.
+        dimensionBox_.onTyped = [this](const std::string&, const std::string& text) {
+            dimensionText_ = text;
+        };
+        dimensionBox_.onEntered = [this](const std::string&) { changeDimension(); };
+        dimensionBox_.onCancelled = [this] { closeDimensionBox(); };
+        // Sizes typed while drawing: each change redraws the shape; Enter finishes
+        // it as a click would; Escape stops it, as in the view.
+        sizeBoxes_.onTyped = [this](const std::string& id, const std::string& text) {
+            typed_[id] = text;
+            drawPreview();
+        };
+        sizeBoxes_.onEntered = [this](const std::string&) { finishTyped(); };
+        sizeBoxes_.onCancelled = [this] { cancelled(); };
+    }
+
+    // The dimension being changed in a box in the view, if any.
+    std::optional<ConstraintId> changingDimension() const { return changing_; }
 
     // --- Editing ---------------------------------------------------------
 
@@ -209,6 +263,9 @@ public:
     }
 
     void finish() {
+        closeDimensionBox();
+        typed_.clear();
+        hideSizes();
         if (auto* viewer = ctx_.service<viewer::IViewer>()) viewer->stopTool(*this);
         const bool was = editing();
         editing_ = {};
@@ -232,6 +289,7 @@ public:
                 "with Sketch > New sketch.");
             return;
         }
+        closeDimensionBox();
         tool_ = tool;
         pending_.clear();
         hoverItem_.reset();
@@ -469,6 +527,8 @@ public:
                 conflictLabels = labelsIn(kConflict), hoverLabels = labelsIn(kHover),
                 pickedLabels = labelsIn(kPicked);
         labels_.clear();
+        std::vector<Overlay> dimensions;               // one overlay each
+        std::vector<sketcher::DimensionPlace> placed;  // where they went, so the next ones don't land on them
         if (doc) {
             for (std::size_t i = 0; i < doc->featureCount(); ++i) {
                 const auto& f = doc->featureAt(i);
@@ -554,7 +614,54 @@ public:
                 };
                 const auto* design = ctx_.documents().find(ctx_.documents().active());
                 const auto unit = design ? design->lengthUnit() : LengthUnit::Millimeter;
+                const auto axes = axesOf(step);
                 for (const auto& c : whole.constraints) {
+                    const Item item{{}, std::nullopt, c.id};
+                    const bool conflict = last && listed(last->conflicting, c.id);
+                    // The color it's drawn in: picked, under the mouse, can't all be true, a repeat.
+                    const plugin::OverlayColor color = std::ranges::find(picked_, item) != picked_.end()
+                                                           ? kPicked
+                                                       : hoverItem_ == item && !drag_          ? kHover
+                                                       : conflict                              ? kConflict
+                                                       : last && listed(last->redundant, c.id) ? kRedundant
+                                                                                               : kLabel;
+                    // Lengths, distances, radii and diameters: drawn as on a drawing.
+                    if (auto dim = sketcher::dimensionPlace(c, whole, gap, middle)) {
+                        // One already there: further out, a step at a time.
+                        for (int tries = 0;
+                             tries < 8 &&
+                             std::ranges::any_of(
+                                 placed,
+                                 [&](const auto& p) { return sketcher::dimensionsClash(p, *dim, gap); });
+                             ++tries)
+                            sketcher::pushOut(*dim, 1.5 * gap);
+                        placed.push_back(*dim);
+                        Overlay d{.shape = OverlayShape::Dimension, .color = color, .size = 13};
+                        d.points = {model::toDesign(axes, dim->from), model::toDesign(axes, dim->to),
+                                    model::toDesign(axes, dim->through)};
+                        d.texts = {sketcher::dimensionText(c, unit)};
+                        const auto origin = model::toDesign(axes, {0, 0});
+                        const auto along = model::toDesign(axes, dim->along);
+                        d.dimension.along = {along.x - origin.x, along.y - origin.y, along.z - origin.z};
+                        d.dimension.normal = {axes.x.y * axes.y.z - axes.x.z * axes.y.y,
+                                              axes.x.z * axes.y.x - axes.x.x * axes.y.z,
+                                              axes.x.x * axes.y.y - axes.x.y * axes.y.x};  // x × y
+                        d.dimension.arrowAtFrom = dim->arrowAtFrom;
+                        d.dimension.arrowAtTo = dim->arrowAtTo;
+                        d.dimension.textAtEnd = dim->textAtEnd;
+                        dimensions.push_back(std::move(d));
+                        labels_.emplace_back(c.id, dim->textAt);
+                        if (conflict) {
+                            for (const auto& e : entities) {
+                                const bool on = std::ranges::find(c.entities, e.id) != c.entities.end() ||
+                                                std::ranges::any_of(c.points, [&](const auto& p) {
+                                                    return p.entity == e.id;
+                                                });
+                                if (on) lineInto(conflictLines, e);
+                            }
+                        }
+                        continue;
+                    }
                     const auto text = sketcher::labelText(c, unit);
                     const auto spot = sketcher::labelPlace(c, whole, gap, middle);
                     if (text.empty() || !spot) continue;
@@ -572,8 +679,6 @@ public:
                     }
                     used.emplace_back(place, half);
                     labels_.emplace_back(c.id, place);
-                    const Item item{{}, std::nullopt, c.id};
-                    const bool conflict = last && listed(last->conflicting, c.id);
                     Overlay& into = std::ranges::find(picked_, item) != picked_.end() ? pickedLabels
                                     : hoverItem_ == item && !drag_                    ? hoverLabels
                                     : conflict                                        ? conflictLabels
@@ -611,7 +716,14 @@ public:
                                                            {"edit.labels_hover", &hoverLabels},
                                                            {"edit.labels_picked", &pickedLabels}};
         for (const auto& [name, overlay] : layers) overlays.remove(name);
+        for (const auto& name : dimensionNames_) overlays.remove(name);
         for (const auto& [name, overlay] : layers) show(overlays, name, std::move(*overlay));
+        // Dimensions over the labels, each its own overlay.
+        dimensionNames_.clear();
+        for (std::size_t i = 0; i < dimensions.size(); ++i) {
+            dimensionNames_.push_back("edit.dimension." + std::to_string(i + 1));
+            overlays.set(dimensionNames_.back(), std::move(dimensions[i]));
+        }
         drawPreview();
     }
 
@@ -638,8 +750,14 @@ public:
             pickAt(point);
             return;
         }
-        const Pick here = where(point);
+        // Sizes typed in the boxes win over where the mouse is (the mouse still
+        // says which way); each becomes a dimension on the new shape.
+        const Sizes sizes = typedSizes();
+        Pick here = where(point);
+        if (sizes.any() && pending_.size() == 1) here = Pick{sizedEnd(pending_[0].at, here.at, sizes)};
         hover_ = here;
+        typed_.clear();
+        hideSizes();  // the next shape starts with fresh boxes
         switch (tool_) {
             case Tool::Select:
                 break;
@@ -659,7 +777,7 @@ public:
                 if (pending_.empty()) {
                     pending_.push_back(here);
                 } else if (distance(pending_[0].at, here.at) > 1e-6) {
-                    const auto line = addLine(pending_[0], here);
+                    const auto line = addLine(pending_[0], here, sizes);
                     pending_.clear();
                     // Keep going from the end, unless it closed onto a point already there.
                     if (line && !here.ref)
@@ -690,7 +808,7 @@ public:
                 if (pending_.empty()) {
                     pending_.push_back(here);
                 } else if (pending_[0].at.x != here.at.x && pending_[0].at.y != here.at.y) {
-                    addRectangle(pending_[0], here);
+                    addRectangle(pending_[0], here, sizes);
                     pending_.clear();
                 }
                 break;
@@ -698,7 +816,7 @@ public:
                 if (pending_.empty()) {
                     pending_.push_back(here);
                 } else if (distance(pending_[0].at, here.at) > 1e-6) {
-                    addCircle(pending_[0], distance(pending_[0].at, here.at));
+                    addCircle(pending_[0], distance(pending_[0].at, here.at), sizes);
                     pending_.clear();
                 }
                 break;
@@ -715,8 +833,189 @@ public:
                 if (!here.ref) addPoint(here);  // a point on a point already there adds nothing
                 break;
         }
+        // A rectangle, line or circle just started: its first size box gets the
+        // keyboard, so the student can type straight away.
+        if (sizedTool() && pending_.size() == 1) focusSizes_ = true;
         draw();
         hint();
+    }
+
+    // The tools whose sizes can be typed while drawing.
+    bool sizedTool() const {
+        return tool_ == Tool::Rectangle || tool_ == Tool::Line || tool_ == Tool::Circle;
+    }
+
+    // What's typed in the size boxes, read: a plain number is in the design's
+    // unit (degrees for the angle); anything else is a formula, like "2 in".
+    // Something that can't be read, or a size of 0 or less, counts as not typed.
+    Sizes typedSizes() const {
+        Sizes out;
+        const auto* design = ctx_.documents().find(ctx_.documents().active());
+        if (!design || !sizedTool()) return out;
+        auto read = [&](const char* id, bool angle) -> std::optional<double> {
+            const auto it = typed_.find(id);
+            if (it == typed_.end()) return std::nullopt;
+            const QString text = QString::fromStdString(it->second).trimmed();
+            if (text.isEmpty()) return std::nullopt;
+            bool plain = false;
+            const double number = QLocale::c().toDouble(text, &plain);
+            std::optional<double> value;
+            if (plain) {
+                value = angle ? number * kPi / 180 : fromUnit(number, design->lengthUnit());
+            } else if (model::Expression::parse(text.toStdString()).isConstant()) {
+                const auto r = model::evalDimension(
+                    angle ? sketch::ConstraintKind::Angle : sketch::ConstraintKind::Length,
+                    text.toStdString(), design->parameters().evaluate(), id);
+                if (r.ok()) value = r.value->value;
+            }
+            if (value && !angle && !(*value > 0)) return std::nullopt;
+            return value;
+        };
+        switch (tool_) {
+            case Tool::Rectangle:
+                out.width = read("width", false);
+                out.height = read("height", false);
+                break;
+            case Tool::Line:
+                out.length = read("length", false);
+                out.angle = read("angle", true);
+                break;
+            case Tool::Circle:
+                out.diameter = read("diameter", false);
+                break;
+            default:
+                break;
+        }
+        return out;
+    }
+
+    // Where the shape being drawn from `first` ends: at the mouse, except for the
+    // sizes typed (the mouse still says which way).
+    sketch::Point2 sizedEnd(sketch::Point2 first, sketch::Point2 mouse, const Sizes& sizes) const {
+        const double dx = mouse.x - first.x, dy = mouse.y - first.y;
+        switch (tool_) {
+            case Tool::Rectangle:
+                return {first.x + (sizes.width ? (dx < 0 ? -*sizes.width : *sizes.width) : dx),
+                        first.y + (sizes.height ? (dy < 0 ? -*sizes.height : *sizes.height) : dy)};
+            case Tool::Line: {
+                const double length = sizes.length ? *sizes.length : std::hypot(dx, dy);
+                const double angle = sizes.angle ? *sizes.angle : std::atan2(dy, dx);
+                return {first.x + length * std::cos(angle), first.y + length * std::sin(angle)};
+            }
+            case Tool::Circle: {
+                if (!sizes.diameter) return mouse;
+                const double d = std::hypot(dx, dy);
+                const sketch::Point2 way = d > 1e-12 ? sketch::Point2{dx / d, dy / d} : sketch::Point2{1, 0};
+                return {first.x + way.x * *sizes.diameter / 2, first.y + way.y * *sizes.diameter / 2};
+            }
+            default:
+                return mouse;
+        }
+    }
+
+    // While a rectangle, line or circle follows the mouse: its sizes as dimension
+    // lines, and a box for each on them, showing the size now or what was typed.
+    void showSizes(const model::PlaneAxes& plane, sketch::Point2 first, sketch::Point2 end) {
+        auto* viewer = ctx_.service<viewer::IViewer>();
+        const auto* design = ctx_.documents().find(ctx_.documents().active());
+        if (!viewer || !design) return;
+        const auto unit = design->lengthUnit();
+        const double off = 30 * hoverPixel_;  // how far out the dimension lines are: 30 pixels
+        auto size = [&](double mm) {
+            return QString::number(toUnit(mm, unit), 'f', 2).toStdString() + " " +
+                   std::string(unitSymbol(unit));
+        };
+        std::vector<viewer::NumberBox> boxes;
+        std::vector<plugin::Overlay> dims;
+        auto box = [&](const char* id, sketch::Point2 at, std::string now) {
+            const auto it = typed_.find(id);
+            boxes.push_back(
+                {id, model::toDesign(plane, at), it != typed_.end() ? it->second : std::move(now)});
+        };
+        auto dimension = [&](sketch::Point2 from, sketch::Point2 to, sketch::Point2 through,
+                             sketch::Point2 along, bool leader) {
+            plugin::Overlay d{.shape = plugin::OverlayShape::Dimension, .color = {230, 120, 20}, .size = 13};
+            d.points = {model::toDesign(plane, from), model::toDesign(plane, to),
+                        model::toDesign(plane, through)};
+            const auto o = model::toDesign(plane, {0, 0});
+            const auto a = model::toDesign(plane, along);
+            d.dimension.along = {a.x - o.x, a.y - o.y, a.z - o.z};
+            d.dimension.normal = {plane.x.y * plane.y.z - plane.x.z * plane.y.y,
+                                  plane.x.z * plane.y.x - plane.x.x * plane.y.z,
+                                  plane.x.x * plane.y.y - plane.x.y * plane.y.x};
+            d.dimension.arrowAtTo = !leader;
+            dims.push_back(std::move(d));  // no number: its box is the number
+        };
+        const double dx = end.x - first.x, dy = end.y - first.y;
+        switch (tool_) {
+            case Tool::Rectangle: {
+                const double below = std::min(first.y, end.y) - off;
+                dimension(first, {end.x, first.y}, {first.x, below}, {1, 0}, false);
+                box("width", {(first.x + end.x) / 2, below}, size(std::abs(dx)));
+                const double right = std::max(first.x, end.x) + off;
+                dimension({end.x, first.y}, end, {right, first.y}, {0, 1}, false);
+                box("height", {right, (first.y + end.y) / 2}, size(std::abs(dy)));
+                break;
+            }
+            case Tool::Line: {
+                const double length = std::hypot(dx, dy);
+                if (length < 1e-9) break;
+                const sketch::Point2 left{-dy / length, dx / length};
+                const sketch::Point2 mid{(first.x + end.x) / 2 + left.x * off,
+                                         (first.y + end.y) / 2 + left.y * off};
+                dimension(first, end, mid, {}, false);
+                box("length", mid, size(length));
+                // The angle's box beside the start, halfway round from the sketch's x.
+                double angle = std::atan2(dy, dx);
+                if (angle < 0) angle += 2 * kPi;
+                const double half = angle / 2;
+                box("angle", {first.x + std::cos(half) * 2.2 * off, first.y + std::sin(half) * 2.2 * off},
+                    QString::number(angle * 180 / kPi, 'f', 1).toStdString() + "°");
+                break;
+            }
+            case Tool::Circle: {
+                const double r = std::hypot(dx, dy);
+                if (r < 1e-9) break;
+                const sketch::Point2 way{dx / r, dy / r};
+                const sketch::Point2 edge{first.x + way.x * r, first.y + way.y * r};
+                const sketch::Point2 out{first.x + way.x * (r + 1.5 * off),
+                                         first.y + way.y * (r + 1.5 * off)};
+                dimension(edge, out, edge, {}, true);
+                box("diameter", {out.x + way.x * 1.6 * off, out.y + way.y * 1.6 * off}, "Ø" + size(2 * r));
+                break;
+            }
+            default:
+                break;
+        }
+        auto& overlays = ctx_.overlays();
+        for (const auto& name : sizeNames_) overlays.remove(name);
+        sizeNames_.clear();
+        for (std::size_t i = 0; i < dims.size(); ++i) {
+            sizeNames_.push_back("edit.size." + std::to_string(i + 1));
+            overlays.set(sizeNames_.back(), std::move(dims[i]));
+        }
+        // The keyboard goes to the first box once there are boxes (a line's next
+        // segment has none until the mouse moves away from its start).
+        const std::string focus = focusSizes_ && !boxes.empty() ? boxes.front().id : std::string();
+        if (!boxes.empty()) focusSizes_ = false;
+        viewer->askNumbers(sizeBoxes_, std::move(boxes), focus);
+        sizesShown_ = true;
+    }
+
+    // Takes the size boxes and their dimension lines away.
+    void hideSizes() {
+        if (!sizesShown_) return;
+        sizesShown_ = false;
+        if (auto* viewer = ctx_.service<viewer::IViewer>()) viewer->clearNumbers(sizeBoxes_);
+        for (const auto& name : sizeNames_) ctx_.overlays().remove(name);
+        sizeNames_.clear();
+    }
+
+    // Enter in a size box: finish the shape where the mouse is, with the sizes typed.
+    void finishTyped() {
+        const auto* step = sketchStep(editing_);
+        if (!step || !hover_ || pending_.size() != 1 || !sizedTool()) return;
+        clicked(viewer::ToolPoint{model::toDesign(axesOf(*step), hover_->at), hoverPixel_, {}, false});
     }
 
     // Select: dragging a point moves it; dragging a line moves the whole line;
@@ -922,6 +1221,11 @@ public:
     // and lets go of picked parts that went away.
     void checkStillThere() {
         if (editing() && (ctx_.documents().active() != doc_ || !sketchStep(editing_))) finish();
+        // A dimension being changed that isn't there anymore (undone, deleted): its box goes.
+        if (changing_) {
+            const auto* step = sketchStep(editing_);
+            if (!step || !step->sketch().find(*changing_)) closeDimensionBox();
+        }
         // Constraints that can't all be true: say which, in plain words (they're red too).
         if (const auto* step = sketchStep(editing_)) {
             const auto* last = lastResult(*step);
@@ -1173,10 +1477,46 @@ private:
         } else {
             picked_ = {*item};
         }
+        // A click on a dimension's number opens a box there to type a new one.
+        closeDimensionBox();
+        if (item && !point.add && item->isConstraint()) openDimensionBox(item->constraint);
         draw();
         hint();
         refreshPanels();
         ctx_.publish(plugin::ActionsChanged{});  // Delete turns on or off
+    }
+
+    // Opens a box in the view, on a dimension's number, to type a new one.
+    void openDimensionBox(const ConstraintId& id) {
+        const auto* step = sketchStep(editing_);
+        auto* viewer = ctx_.service<viewer::IViewer>();
+        if (!step || !viewer) return;
+        const auto* c = step->sketch().find(id);
+        const auto spot = std::ranges::find_if(labels_, [&](const auto& l) { return l.first == id; });
+        if (!c || !sketch::isDimension(c->kind) || spot == labels_.end()) return;
+        changing_ = id;
+        dimensionText_ = sketcher::dimensionBoxText(ctx_, *c);
+        viewer->askNumbers(dimensionBox_,
+                           {{"dimension", model::toDesign(axesOf(*step), spot->second), dimensionText_}},
+                           "dimension");
+        message("Type a new size for " + c->name + " and press Enter. Esc leaves it as it is.");
+    }
+
+    // Changes the dimension to what was typed in its box, then closes the box.
+    void changeDimension() {
+        const auto id = changing_;
+        const auto text = dimensionText_;
+        closeDimensionBox();
+        const auto* step = sketchStep(editing_);
+        const auto* c = step && id ? step->sketch().find(*id) : nullptr;
+        if (!c) return;
+        sketcher::typeDimension(ctx_, editing_, c->name, text);
+    }
+
+    void closeDimensionBox() {
+        if (!changing_) return;
+        changing_.reset();
+        if (auto* viewer = ctx_.service<viewer::IViewer>()) viewer->clearNumbers(dimensionBox_);
     }
 
     // Where a mouse point lands: on a sketch point if it's close, else on the
@@ -1301,6 +1641,7 @@ private:
         plugin::Overlay guides{.shape = plugin::OverlayShape::Lines, .color = {230, 120, 20, 140}, .size = 1};
         plugin::Overlay dots{.shape = plugin::OverlayShape::Points, .color = {230, 120, 20}, .size = 7};
         const auto* step = sketchStep(editing_);
+        bool sizing = false;  // a shape whose sizes can be typed is following the mouse
         if (step && hover_ && (tool_ != Tool::Select || drag_)) {
             const auto plane = axesOf(*step);
             const Pick& h = *hover_;
@@ -1310,18 +1651,25 @@ private:
             };
             if (!pending_.empty()) {
                 const auto& first = pending_[0].at;
+                // Where it ends: the mouse, with any sizes typed in its boxes.
+                const sketch::Point2 end =
+                    sizedTool() && pending_.size() == 1 ? sizedEnd(first, h.at, typedSizes()) : h.at;
+                if (sizedTool() && pending_.size() == 1) {
+                    showSizes(plane, first, end);
+                    sizing = true;
+                }
                 switch (tool_) {
                     case Tool::Line:
-                        show(sketch::LineShape{first, h.at});
+                        show(sketch::LineShape{first, end});
                         break;
                     case Tool::Rectangle: {
-                        const sketch::Point2 c[4] = {first, {h.at.x, first.y}, h.at, {first.x, h.at.y}};
+                        const sketch::Point2 c[4] = {first, {end.x, first.y}, end, {first.x, end.y}};
                         for (int i = 0; i < 4; ++i) show(sketch::LineShape{c[i], c[(i + 1) % 4]});
                         break;
                     }
                     case Tool::Circle:
-                        if (distance(first, h.at) > 1e-9)
-                            show(sketch::CircleShape{first, distance(first, h.at)});
+                        if (distance(first, end) > 1e-9)
+                            show(sketch::CircleShape{first, distance(first, end)});
                         break;
                     case Tool::Arc:
                         if (pending_.size() == 1) {
@@ -1381,6 +1729,10 @@ private:
         show(overlays, "edit.preview_points", std::move(dots));
         show(overlays, "edit.snap", std::move(snap));
         show(overlays, "edit.hint", std::move(hintLabel));
+        if (!sizing) {
+            typed_.clear();
+            hideSizes();
+        }
     }
 
     static std::optional<sketch::ArcShape> arcFrom(sketch::Point2 center, sketch::Point2 start,
@@ -1414,10 +1766,12 @@ private:
     // Adds a shape as one undo step, with the constraints its picks call for: a
     // Coincident for a point it snapped onto, On for an edge, and Horizontal,
     // Vertical or Tangent for a line's end that was kept that way.
-    std::optional<EntityId> add(const std::string& base, sketch::Shape shape, std::vector<Join> joins) {
+    std::optional<EntityId> add(const std::string& base, sketch::Shape shape, std::vector<Join> joins,
+                                std::vector<std::pair<sketch::ConstraintKind, double>> dimensions = {}) {
         const EntityId id = EntityId::generate();
         const bool isLine = std::holds_alternative<sketch::LineShape>(shape);
-        auto change = [id, base, shape, joins, isLine](sketch::Sketch& s, std::string& label) -> Diagnostics {
+        auto change = [id, base, shape, joins, isLine, dimensions](sketch::Sketch& s,
+                                                                   std::string& label) -> Diagnostics {
             const std::string name = model::uniqueSketchName(s, base);
             s.entities.push_back({id, name, shape, false});
             auto addConstraint = [&](sketch::ConstraintKind kind, std::vector<sketch::PointRef> points,
@@ -1451,6 +1805,11 @@ private:
                         addConstraint(*pick.align, {}, {id});
                 }
             }
+            // Sizes typed while drawing: dimensions on it, so it stays that size.
+            for (const auto& [kind, value] : dimensions) {
+                addConstraint(kind, {}, {id});
+                s.constraints.back().value = value;
+            }
             label = "Add " + name;
             return {};
         };
@@ -1458,9 +1817,11 @@ private:
         return id;
     }
 
-    std::optional<EntityId> addLine(const Pick& from, const Pick& to) {
+    std::optional<EntityId> addLine(const Pick& from, const Pick& to, const Sizes& sizes = {}) {
+        std::vector<std::pair<sketch::ConstraintKind, double>> dimensions;
+        if (sizes.length) dimensions.emplace_back(sketch::ConstraintKind::Length, *sizes.length);
         return add("Line", sketch::LineShape{from.at, to.at},
-                   {{sketch::PointRole::Start, from}, {sketch::PointRole::End, to}});
+                   {{sketch::PointRole::Start, from}, {sketch::PointRole::End, to}}, dimensions);
     }
 
     // Trim: the line, circle or arc under the mouse (within 6 pixels of its edge),
@@ -1519,9 +1880,28 @@ private:
 
     // A rectangle from two opposite corners, as one undo step (see model::addRectangle()),
     // with its two clicked corners joined to whatever they snapped onto.
-    void addRectangle(const Pick& corner, const Pick& opposite) {
-        auto change = [corner, opposite](sketch::Sketch& s, std::string& label) -> Diagnostics {
+    void addRectangle(const Pick& corner, const Pick& opposite, const Sizes& sizes = {}) {
+        auto change = [corner, opposite, sizes](sketch::Sketch& s, std::string& label) -> Diagnostics {
             const auto r = model::addRectangle(s, corner.at, opposite.at);
+            // Sizes typed while drawing: its width along its first side, its height
+            // along its second (signed: which way from the first corner).
+            const std::pair<std::optional<double>, std::pair<sketch::ConstraintKind, EntityId>> typed[] = {
+                {sizes.width, {sketch::ConstraintKind::HorizontalDistance, r.lines[0]}},
+                {sizes.height, {sketch::ConstraintKind::VerticalDistance, r.lines[1]}}};
+            for (const auto& [size, what] : typed) {
+                if (!size) continue;
+                const auto& [kind, line] = what;
+                sketch::Constraint c;
+                c.id = ConstraintId::generate();
+                c.kind = kind;
+                c.points = {{line, sketch::PointRole::Start}, {line, sketch::PointRole::End}};
+                const double way = kind == sketch::ConstraintKind::HorizontalDistance
+                                       ? opposite.at.x - corner.at.x
+                                       : opposite.at.y - corner.at.y;
+                c.value = way < 0 ? -*size : *size;
+                c.name = model::uniqueSketchName(s, sketcher::constraintBase(kind));
+                s.constraints.push_back(std::move(c));
+            }
             // The first corner is Line1's start; the opposite one is Line2's end.
             const std::pair<sketch::PointRef, Pick> joins[] = {
                 {{r.lines[0], sketch::PointRole::Start}, corner},
@@ -1554,8 +1934,11 @@ private:
         run(std::move(change));
     }
 
-    void addCircle(const Pick& center, double radius) {
-        add("Circle", sketch::CircleShape{center.at, radius}, {{sketch::PointRole::Center, center}});
+    void addCircle(const Pick& center, double radius, const Sizes& sizes = {}) {
+        std::vector<std::pair<sketch::ConstraintKind, double>> dimensions;
+        if (sizes.diameter) dimensions.emplace_back(sketch::ConstraintKind::Diameter, *sizes.diameter);
+        add("Circle", sketch::CircleShape{center.at, radius}, {{sketch::PointRole::Center, center}},
+            dimensions);
     }
 
     void addArc(const Pick& center, const Pick& start, const Pick& end) {
@@ -1654,6 +2037,15 @@ private:
     std::vector<Item> picked_;                                     // what's picked (Select), in picking order
     std::optional<Drag> drag_;                                     // what's being dragged
     std::vector<std::pair<ConstraintId, sketch::Point2>> labels_;  // where the edited sketch's labels are
+    std::vector<std::string> dimensionNames_;                      // the dimension overlays drawn last time
+    NumberUser dimensionBox_;                   // hears the box of a dimension being changed
+    NumberUser sizeBoxes_;                      // hears the size boxes of a shape being drawn
+    std::map<std::string, std::string> typed_;  // what's typed in them, by box ("width", ...)
+    bool focusSizes_ = false;                   // the next size boxes get the keyboard
+    bool sizesShown_ = false;                   // size boxes are showing
+    std::vector<std::string> sizeNames_;        // their dimension lines' overlays
+    std::optional<ConstraintId> changing_;      // the dimension being changed in that box
+    std::string dimensionText_;                 // what its box says
     ConstraintId justAdded_{};
     std::vector<QPointer<sketcher::SketchPanel>> panels_;  // a new dimension, for the Sketch panel
     bool dragCancelled_ = false;                           // Escape during a drag: ignore its drop

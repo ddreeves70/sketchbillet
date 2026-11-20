@@ -22,6 +22,7 @@ revolve).
 | 5. Auto-constraints and profiles | Horizontal, vertical, coincident and tangent added while drawing; closed loops found as profiles | Built |
 | 6. Extrude | Profiles become solids (Phase 2 starts properly here). A: the kernel's faces and extrude; B: the Extrude step | Built |
 | 7. B-splines | Full spline support, as the roadmap lists. A: splines in the model, solver, files and kernel, through to extrude (built); B: drawing them in the app; C: spline constraints; D: import from a file of points | A built |
+| 9. Dimensions like a drawing's | A: dimensions drawn with extension lines, arrows and the number, and changed by clicking the number; B: sizes typed while drawing, Tab between them | Built |
 
 Each step is its own pull request, with tests and guide pages.
 
@@ -446,6 +447,66 @@ under 5 minutes. These tools cut the clicks for that, one pull request each:
   takes away 2 ways to move. SketchBillet's own measure is the same two distances.
 - A **Symmetric** button for two points and a line (not the line's own ends),
   labelled **Sym** between the points.
+
+## Dimensions like a drawing's (step 9)
+
+Asked for on Nov 19, 2026, like Fusion: sizes shown as on a drawing, changed by
+clicking them, and typed while drawing.
+
+**A. Drawn as on a drawing, changed by clicking** (`sb_view`, `sb.viewer/5`,
+the sketcher; plugin API 57; built):
+
+- **A Dimension overlay** (`plugin::OverlayShape::Dimension`): where it measures
+  from and to, a point its line passes through, and `OverlayDimension` (the
+  direction it measures along, its plane, which ends get arrows, and whether its
+  number goes past the end, for a leader). `sb_view`'s `dimensionDrawing()` turns
+  it into lines and a number at the view's zoom, with arrowheads and gaps in
+  pixels, so it looks the same at any zoom; the 3D view works it out again when
+  the zoom changes by 2% or the view turns. Pure maths, tested without graphics.
+- **Where the number goes:** in a gap in the middle of the line when the line
+  runs across the screen and is long enough; beside its middle, outside, when it
+  runs up the screen (so no turned words) or is too short. The number sits on a
+  box of the background's color.
+- **The sketcher** draws Length, Distance, horizontal and vertical distances as
+  dimension lines `2 × gap` out from what they measure, on the side away from the
+  sketch's middle, and steps one `1.5 × gap` further out while its line would land
+  on another's. A radius or diameter is a leader from a circle up along a
+  diagonal, to the side away from the middle (an arc's goes out from its middle),
+  clear of the lines across and up. Dimensions within about 10° of each other
+  count as side by side.
+  Angles and the other constraints keep their labels.
+- **Number boxes in the viewer** (`sb.viewer/5`: `NumberBox`, `INumberUser`,
+  `askNumbers()`, `clearNumbers()`): `QLineEdit`s over the active pane at points
+  of the design, placed again after each draw. Tab and Shift+Tab go round them,
+  Enter and Escape are reported, and a box keeps what the student typed until
+  it's taken away. Plain text: the plugin reads it.
+- **Clicking a dimension's number** (in Select) picks it and opens a box there
+  with its size picked. Enter runs `sketch.set_value`: a plain number is in the
+  design's unit, anything else is a formula (`2 in`, `wall * 2`), as in the
+  Sketch panel (`typeDimension()`, shared with it). Escape, another click, another
+  tool or finishing the sketch closes it.
+
+**B. Sizes typed while drawing** (the sketcher only; built):
+
+- While a rectangle, line or circle follows the mouse (after its first click),
+  its sizes are dimension lines (orange, no number) with a number box on each,
+  through `sb.viewer/5`: a rectangle's width (below) and height (to the right), a
+  line's length (on its left) and angle (beside its start, halfway round from
+  the sketch's x), a circle's diameter (a leader towards the mouse). Boxes sit 30
+  pixels out, so they're the same distance away at any zoom. The first box gets
+  the keyboard when the shape starts.
+- A typed size locks it: `sizedEnd()` puts the shape's end at that size, in the
+  mouse's direction (a rectangle's sides keep the mouse's signs; a line keeps its
+  angle unless that's typed). Plain numbers are in the design's unit (degrees for
+  the angle); anything else is a constant formula, like `2 in`. What can't be read,
+  or isn't more than 0, counts as not typed.
+- Enter finishes the shape as a click at the mouse would, with the locked sizes.
+  The new shape gets a dimension for each typed size in the same undo step: a
+  rectangle's HorizontalDistance and VerticalDistance (signed, along its first
+  two sides), a line's Length, a circle's Diameter. A typed angle places the line
+  but adds nothing: there's no angle-to-the-sketch's-x dimension yet.
+- A shape with a typed size ignores what the mouse would snap to (the point
+  moved). A chained line starts its next segment with fresh boxes.
 
 ## Choices
 

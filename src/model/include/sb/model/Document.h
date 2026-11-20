@@ -194,6 +194,17 @@ public:
     ///         the body has the default material.
     FeatureId materialSource(const FeatureId& id) const;
 
+    /// Gives the color a step's body is drawn in. The nearest choice wins: the
+    /// step's own color (Feature::color()) if it has one; otherwise the color of
+    /// the material picked for it; otherwise the color of the body it was made
+    /// from (the first body, A, of a union, cut or intersect, or the body a Move
+    /// moves), found the same way; and if nothing was picked anywhere, the
+    /// default material's color. So a red plate stays red after a hole is cut in
+    /// it, and picking a material for a step gives it that material's color.
+    /// @param id The step.
+    /// @return The color. For a step not in the design, the default material's color.
+    Color colorOf(const FeatureId& id) const;
+
     /// Gives the design's parameters: named values like `wall = 3 mm` that
     /// other values can use. Change them with SetParameterCommand,
     /// RenameParameterCommand and DeleteParameterCommand.

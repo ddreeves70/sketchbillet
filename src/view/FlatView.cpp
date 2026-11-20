@@ -1,5 +1,8 @@
 #include "sb/view/FlatView.h"
 
+#include "InputBoxes.h"
+#include "sb/view/Dimensions.h"
+
 #include <QFontMetricsF>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -26,6 +29,26 @@ FlatView::FlatView(QWidget* parent) : QWidget(parent) {
     QPalette p = palette();
     p.setColor(QPalette::Window, QColor(246, 247, 249));
     setPalette(p);
+    inputs_ =
+        new InputBoxes(this, [this](const kernel::Vec3& at) { return std::optional<QPointF>(toScreen(at)); });
+    inputs_->typed = [this](const std::string& id, const QString& text) { emit inputTyped(id, text); };
+    inputs_->entered = [this](const std::string& id) {
+        const std::string copy = id;  // the boxes may change while it's handled
+        emit inputEntered(copy);
+    };
+    inputs_->cancelled = [this] { emit inputsCancelled(); };
+}
+
+void FlatView::setInputs(const std::vector<ViewInput>& inputs, const std::string& focus) {
+    inputs_->set(inputs, focus);
+}
+
+const std::vector<ViewInput>& FlatView::inputs() const {
+    return inputs_->inputs();
+}
+
+QLineEdit* FlatView::input(const std::string& id) const {
+    return inputs_->box(id);
 }
 
 void FlatView::setText(const QString& text) {
@@ -192,16 +215,19 @@ double FlatView::pixelsPerSpace(const ViewOverlay& lattice) {
 }
 
 void FlatView::paintEvent(QPaintEvent*) {
+    inputs_->place();  // the middle of the view moves as it resizes
     QPainter painter(this);
 
     // Lattices (like the grid) first, underneath everything else, so lines that
     // lie on them (like the axes) still show.
+    // Dimensions become lines and boxed words, at this view's fixed scale.
+    const auto overlays = expandDimensions(overlays_, 1.0 / kPixelsPerMm);
     std::vector<const ViewOverlay*> order;
-    for (const auto& o : overlays_) {
+    for (const auto& o : overlays) {
         if (o.shape == OverlayShape::Lattice) order.push_back(&o);
     }
-    for (const auto& o : overlays_) {
-        if (o.shape != OverlayShape::Lattice) order.push_back(&o);
+    for (const auto& o : overlays) {
+        if (o.shape != OverlayShape::Lattice && o.shape != OverlayShape::Dimension) order.push_back(&o);
     }
     for (const auto* drawn : order) {
         const auto& o = *drawn;
@@ -248,9 +274,15 @@ void FlatView::paintEvent(QPaintEvent*) {
             for (std::size_t i = 0; i < std::min(o.points.size(), o.texts.size()); ++i) {
                 const QString word = QString::fromStdString(o.texts[i]);
                 const QRectF box = metrics.boundingRect(word);
-                painter.drawText(toScreen(o.points[i]) -
-                                     QPointF(box.width() / 2, -metrics.ascent() / 2 + metrics.descent() / 2),
-                                 word);
+                const QPointF at = toScreen(o.points[i]) -
+                                   QPointF(box.width() / 2, -metrics.ascent() / 2 + metrics.descent() / 2);
+                if (o.boxed) {
+                    // On a box of the background's color, so lines under the words don't show.
+                    painter.fillRect(QRectF(at.x() - 2, at.y() - metrics.ascent() - 1, box.width() + 4,
+                                            metrics.height() + 2),
+                                     palette().color(QPalette::Base));
+                }
+                painter.drawText(at, word);
             }
             painter.setFont(before);
         } else if (o.shape == OverlayShape::Lines) {

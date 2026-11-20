@@ -2106,6 +2106,25 @@ CommandRegistry makeBuiltin() {
               return std::make_unique<SetMaterialCommand>(argFeature(a, "feature"), argText(a, "material"));
           });
 
+    r.add({"feature.set_color",
+           "Set color",
+           "Picks the color a step's body is drawn in. It changes only how the body looks, not its "
+           "material.",
+           {{"feature", ArgType::FeatureRef, "The step.", true, {}},
+            {"color",
+             ArgType::Text,
+             "The color as #rrggbb, like #d03030 for red. Leave it empty to use the color of the body's "
+             "material again.",
+             true,
+             {}}}},
+          [](const Document&, const Args& a) -> std::unique_ptr<Command> {
+              const auto text = argText(a, "color");
+              const auto color = parseColor(text);
+              return std::make_unique<SetColorCommand>(argFeature(a, "feature"),
+                                                       text.empty() ? std::nullopt : color,
+                                                       text.empty() || color ? std::string() : text);
+          });
+
     r.add({"material.define",
            "Define material",
            "Adds a material of your own to the design, or changes one you added.",

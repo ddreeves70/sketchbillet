@@ -31,6 +31,25 @@ enum class OverlayShape {
     Points,   ///< A dot at each of `points`.
     Lattice,  ///< Evenly spaced lines (or dots where they cross) on a plane, like graph paper.
     Labels,   ///< Words: `texts[i]` is written at `points[i]`, always facing the screen.
+    /// A dimension, as on a drawing: extension lines, a line with arrowheads and
+    /// its number. `points` are where it measures from and to, and a point its
+    /// line passes through; `texts[0]` is its number; `dimension` says the rest.
+    /// Its arrowheads stay the same size on the screen as the view zooms.
+    Dimension,
+};
+
+/// How a Dimension overlay is drawn, beyond its points.
+struct OverlayDimension {
+    /// The direction it measures along (a unit vector), like the sketch's x for
+    /// a horizontal distance; zero to measure straight from one point to the other.
+    kernel::Vec3 along{};
+    /// The plane it lies on, as its direction (a unit vector): the sketch's.
+    kernel::Vec3 normal{0, 0, 1};
+    bool arrowAtFrom = true;  ///< An arrowhead where it measures from.
+    bool arrowAtTo = true;    ///< An arrowhead where it measures to.
+    /// The number goes just past the `to` end (a leader, for a radius or
+    /// diameter) instead of in the middle of its line.
+    bool textAtEnd = false;
 };
 
 /// How far each side of the view cube is from its middle, in screen pixels.
@@ -74,7 +93,8 @@ struct Overlay {
     /// True to draw it over the design: never hidden behind a body, like a
     /// measurement's line and its words. Otherwise bodies hide it.
     bool overBodies = false;
-    std::string id{};    ///< Set by SketchBillet: the plugin id and the overlay's name.
+    OverlayDimension dimension{};  ///< For Dimension: how it's drawn.
+    std::string id{};              ///< Set by SketchBillet: the plugin id and the overlay's name.
     std::string pane{};  ///< Set by SketchBillet: the pane it's for (see PluginOverlays::set()), or empty for
                          ///< every pane.
 };

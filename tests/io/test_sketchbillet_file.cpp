@@ -193,6 +193,41 @@ TEST_CASE("a design without materials saves exactly as before", "[io][material]"
     for (const auto& [name, text] : entries) CHECK(text.find("material") == std::string::npos);
 }
 
+TEST_CASE("a body's own color survives saving and opening", "[io][material][color]") {
+    auto doc = makeDesign();
+    const auto plate = doc->featureAt(0).id();
+    REQUIRE(doc->execute(std::make_unique<model::SetColorCommand>(plate, model::Color{208, 48, 48})).empty());
+
+    io::Bytes bytes;
+    REQUIRE(io::writeBytes(*doc, bytes).empty());
+    const auto entries = readZip(bytes);
+    const auto& text = entries.at("features/" + plate.toString() + ".json");
+    CHECK(text.find(R"("color": "#d03030")") != std::string::npos);
+    auto opened = io::readBytes(bytes, "tag.sb");
+    REQUIRE(opened.ok());
+    const auto& back = *opened.document;
+    CHECK(back.find(plate)->color() == model::Color{208, 48, 48});
+    CHECK_FALSE(back.featureAt(1).color().has_value());  // only the plate has one
+    CHECK(back.colorOf(back.featureAt(2).id()) == model::Color{208, 48, 48});
+    io::Bytes again;
+    REQUIRE(io::writeBytes(back, again).empty());
+    CHECK(again == bytes);
+}
+
+TEST_CASE("a color SketchBillet can't read opens as the material's color", "[io][material][color]") {
+    const std::string box =
+        R"({"id":")" + kBoxId +
+        R"(","type":"Box","name":"Box1","color":"tomato","params":{"corner":[0,0,0],"size":[10,20,30]}})";
+    auto opened = io::readBytes(makeZip({{"manifest.json", manifest()},
+                                         {"timeline.json", timeline()},
+                                         {"features/" + kBoxId + ".json", box}}),
+                                "odd.sb");
+    REQUIRE(opened.ok());
+    const auto& f = opened.document->featureAt(0);
+    CHECK_FALSE(f.color().has_value());
+    CHECK(opened.document->colorOf(f.id()) == model::defaultMaterial().color);
+}
+
 TEST_CASE("a material key SketchBillet doesn't know opens as the default material", "[io][material]") {
     const std::string box =
         R"({"id":")" + kBoxId +
@@ -756,7 +791,8 @@ TEST_CASE("a linked copy survives saving and opening, and a plain move saves no 
           "[io][move][linked]") {
     auto doc = makeDesign();
     const auto tag = doc->featureAt(2).id();
-    auto copy = std::make_unique<model::MoveFeature>("Copy1", tag, kernel::Motion{{0, 40, 0}, {}, {0, 0, 1}, 0});
+    auto copy =
+        std::make_unique<model::MoveFeature>("Copy1", tag, kernel::Motion{{0, 40, 0}, {}, {0, 0, 1}, 0});
     copy->setCopy(true);
     const auto id = copy->id();
     REQUIRE(doc->execute(std::make_unique<model::AddFeatureCommand>(std::move(copy))).empty());

@@ -574,7 +574,8 @@ std::string importPath(const model::ImportFeature& f) {
 
 json featureToJson(const Feature& f) {
     json j{{"id", f.id().toString()}, {"name", f.name()}};
-    if (!f.material().empty()) j["material"] = f.material();  // left out when not picked
+    if (!f.material().empty()) j["material"] = f.material();   // left out when not picked
+    if (f.color()) j["color"] = model::colorText(*f.color());  // left out when not picked
     switch (f.type()) {
         case FeatureType::Box: {
             const auto& b = static_cast<const model::BoxFeature&>(f);
@@ -1525,6 +1526,9 @@ OpenResult readBytes(const Bytes& data, std::string_view displayName) {
             // and the body counts as the default material until it's changed.
             feature->setMaterial((*fj)["material"].get<std::string>());
         }
+        // A color that can't be read is left out: the body gets its material's color.
+        if (fj->contains("color") && (*fj)["color"].is_string())
+            feature->setColor(model::parseColor((*fj)["color"].get<std::string>()));
 
         // Add through the normal command, so the same checks run as when a
         // student builds the design (unique names, inputs come first).
@@ -1698,6 +1702,8 @@ StepsResult stepsFromText(std::string_view text) {
         f->setSuppressed(fj.value("suppressed", false));
         if (fj.contains("material") && fj["material"].is_string())
             f->setMaterial(fj["material"].get<std::string>());
+        if (fj.contains("color") && fj["color"].is_string())
+            f->setColor(model::parseColor(fj["color"].get<std::string>()));
         seen.push_back(*id);
         read.push_back(std::move(f));
     }

@@ -13,6 +13,7 @@
 #include "sb/core/Id.h"
 #include "sb/kernel/IKernel.h"
 #include "sb/model/Expression.h"
+#include "sb/model/Material.h"
 #include "sb/model/Naming.h"
 #include "sb/sketch/Sketch.h"
 #include "sb/sketch/Solver.h"
@@ -175,6 +176,15 @@ public:
     /// @param key A material's key, or empty to go back to the material it gets by default.
     void setMaterial(std::string key) { material_ = std::move(key); }
 
+    /// Gives the color picked for this step's body, if one was.
+    /// @return The color, or nothing: then the body is drawn in the color it gets
+    ///         by default (see Document::colorOf()).
+    const std::optional<Color>& color() const { return color_; }
+
+    /// Picks the color this step's body is drawn in. Use from a Command (SetColorCommand).
+    /// @param color The color, or nothing to go back to the color it gets by default.
+    void setColor(std::optional<Color> color) { color_ = color; }
+
     /// Gives the kind of feature.
     /// @return The feature type.
     virtual FeatureType type() const = 0;
@@ -325,6 +335,7 @@ private:
     std::string name_;
     bool suppressed_ = false;
     std::string material_;
+    std::optional<Color> color_;
     std::map<std::string, std::string, std::less<>> formulas_;  // number key -> formula
 };
 

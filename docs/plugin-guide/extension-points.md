@@ -450,7 +450,7 @@ all-panes grid changed.
 
 A **view tool** lets the student draw with the mouse on a plane, the way the
 sketcher's Line and Circle tools do. The viewer (`sb.viewer`) offers it as the
-`sb.viewer/4` service, described by its contract header `sb/viewer/Viewer.h`.
+`sb.viewer/5` service, described by its contract header `sb/viewer/Viewer.h`.
 While your tool runs, a left click in any pane tells you the point on the plane
 (in mm) instead of turning the view or picking; moving the mouse tells you too, so
 you can draw a preview with an overlay. Panning and zooming still work, and Escape
@@ -522,7 +522,7 @@ to drag, like the arrows SketchBillet's own `sb.movehandles` plugin puts on a pi
 body. The viewer draws handles over the design, so they can always be grabbed,
 lights up the one under the mouse, and tells you how far it's been dragged (in
 mm): along an arrow, or across a square's flat plane. It changes nothing itself:
-you decide what a drag does. Handles use the same `sb.viewer/4` service as
+you decide what a drag does. Handles use the same `sb.viewer/5` service as
 tools, and aren't shown while a tool runs.
 
 ```cpp
@@ -560,7 +560,7 @@ click, like the three planes SketchBillet's **New sketch** shows (XY, XZ and YZ)
 The one under the mouse lights up, and the viewer tells you which was clicked,
 by its id. Clicking anywhere else picks as usual, and a drag still turns the
 view, so the student can turn round to see a plane before clicking it. Choices
-use the same `sb.viewer/4` service.
+use the same `sb.viewer/5` service.
 
 ```cpp
 #include "sb/viewer/Viewer.h"
@@ -589,6 +589,44 @@ lines where they meet, which keeps each one easy to click. `offerChoices()`
 replaces the choices shown, even another plugin's; `clearChoices()` takes yours
 away.
 
+## Boxes to type numbers in (desktop app only)
+
+A **number box** is a small box in the viewer, at a point of the design, for the
+student to type a number in, like the box SketchBillet's sketcher opens on a
+dimension that's clicked. They use the same `sb.viewer/5` service.
+
+```cpp
+#include "sb/viewer/Viewer.h"
+
+struct Width final : sb::viewer::INumberUser {
+    sb::plugin::PluginContext& ctx;
+    std::string text = "90 mm";
+    explicit Width(sb::plugin::PluginContext& c) : ctx(c) {}
+    void typed(const std::string&, const std::string& now) override { text = now; }  // every change
+    void entered(const std::string&) override {
+        ctx.service<sb::viewer::IViewer>()->clearNumbers(*this);  // the boxes stay until you do
+        // Use `text`: run a command with it.
+    }
+    void cancelled() override { ctx.service<sb::viewer::IViewer>()->clearNumbers(*this); }  // Escape
+};
+
+auto width = std::make_shared<Width>(ctx);
+if (auto* viewer = ctx.service<sb::viewer::IViewer>()) {
+    viewer->askNumbers(*width, {{.id = "width", .at = {45, -12, 0}, .text = width->text}}, "width");
+}
+```
+
+- The boxes show in the active pane of every viewer. The last argument gives one
+  of them the keyboard, with its words picked, so typing replaces them.
+- **Tab** and **Shift+Tab** go from box to box, in the order given. **Enter**
+  calls `entered()`, **Escape** `cancelled()`.
+- Give the boxes again, with new `text` and `at`, as what they measure changes
+  (while something is dragged, say). A box the student has typed in keeps what
+  they typed until it's taken away.
+- `askNumbers()` replaces the boxes shown, even another plugin's;
+  `clearNumbers()` takes yours away. What's typed is plain text: read it as you
+  like (the sketcher takes a number in the design's unit, or a formula).
+
 ## Draw in the viewer
 
 An **overlay** is something every viewer draws over the design: lines, dots, or
@@ -610,6 +648,7 @@ ctx.overlays().set("guides", guide);  // its id is "sam.notes.guides"
 | `OverlayShape::Points` | A dot at each point | `points` (in mm) |
 | `OverlayShape::Lattice` | Lines every `spacing` mm on a plane, or dots where they cross | `lattice`: `origin`, `xAxis`, `yAxis`, `spacing` and `halfSize` in mm, `dots` |
 | `OverlayShape::Labels` | Words that always face the screen, like the axes' X, Y and Z | `points` (in mm) and `texts`, one word for each point; `size` is the letters' height in pixels |
+| `OverlayShape::Dimension` | A dimension, as on a drawing: extension lines, a line with arrowheads, and its number | `points`: where it measures from and to, and a point its line passes through (in mm); `texts[0]`: its number; `dimension` (below); `size`: the number's height in pixels |
 
 - Calling `set` again with the same name replaces the overlay; `remove("guides")`
   takes it away; `visible = false` hides it.
@@ -627,6 +666,23 @@ ctx.overlays().set("guides", guide);  // its id is "sam.notes.guides"
   an edge shows when it's more than 23 pixels out on both sides, but draw it more
   than 26 out if it should also show when the cube is seen straight at a side (in
   the Top, Front and Right views). Lattices can't go on the cube.
+- A **Dimension** measures straight from one point to the other, or along
+  `dimension.along` (a unit vector, like x for a horizontal distance). Its line
+  runs through the third point, and extension lines join it to the measured
+  points. `dimension.normal` is the plane it lies on. `arrowAtFrom` and
+  `arrowAtTo` choose the arrowheads, and `textAtEnd` puts the number past the
+  `to` end instead of in the middle, for a leader like a radius. Arrowheads stay
+  the same size on the screen as the view zooms, and the number sits on a box of
+  the background's color, so the line doesn't run through it:
+
+  ```cpp
+  sb::plugin::Overlay width;
+  width.shape = sb::plugin::OverlayShape::Dimension;
+  width.points = {{0, 0, 0}, {90, 0, 0}, {0, -12, 0}};  // 90 mm along x, its line 12 mm below
+  width.texts = {"90 mm"};
+  width.size = 13;
+  ctx.overlays().set("width", width);
+  ```
 - Every change sends `sb.OverlaysChanged`, which the viewer listens to.
 - If your plugin fails to start, SketchBillet removes its overlays.
 

@@ -1098,6 +1098,22 @@
       }
     },
     {
+      "out": "docs/user-guide/images/app-body-color.png",
+      "size": "1280x800",
+      "script": "tag",
+      "commands": ["run --open tag.sb --save tag.sb feature.set_color feature=Plate color=#d03030"],
+      "app": {"open": "tag.sb"},
+      "crop": [0, 176, 1280, 506]
+    },
+    {
+      "out": "docs/user-guide/images/app-body-color-row.png",
+      "size": "1280x800",
+      "script": "tag",
+      "commands": ["run --open tag.sb --save tag.sb feature.set_color feature=Plate color=#d03030"],
+      "app": {"open": "tag.sb", "select": ["Plate"]},
+      "crop": [906, 450, 374, 140]
+    },
+    {
       "out": "docs/user-guide/images/app-design-tabs.png",
       "size": "1280x800",
       "script": "organizer-app",
@@ -1133,6 +1149,19 @@
         1280,
         800
       ]
+    },
+    {
+      "out": "docs/user-guide/images/app-sketch-dimensions.png",
+      "size": "1280x800",
+      "commands": [
+        "run --save rect.sb feature.add_sketch",
+        "run --open rect.sb --save rect.sb sketch.add_rectangle sketch=Sketch1 from=-35,-20 to=35,20",
+        "run --open rect.sb --save rect.sb sketch.constrain sketch=Sketch1 kind=fix on=Line1.start",
+        "run --open rect.sb --save rect.sb sketch.constrain sketch=Sketch1 kind=horizontal_distance on=Line1.start,Line1.end value=70",
+        "run --open rect.sb --save rect.sb sketch.constrain sketch=Sketch1 kind=vertical_distance on=Line2.start,Line2.end value=40"
+      ],
+      "app": {"open": "rect.sb", "select": ["Sketch1"], "trigger": ["sb.sketcher.edit"]},
+      "crop": [340, 176, 620, 506]
     },
     {
       "out": "docs/user-guide/images/app-sketch-free.png",

@@ -1446,6 +1446,19 @@ private:
         info->installEventFilter(this);
         wrapped_ = info;
         form->addRow(QString(), info);
+        // The body's color: its material's, until the student picks one of its own.
+        auto* color = new QPushButton(form_);
+        color->setObjectName(QStringLiteral("bodycolor"));
+        auto* reset = new QPushButton(tr("Use material color"), form_);
+        reset->setObjectName(QStringLiteral("bodycolorreset"));
+        reset->setToolTip(tr("Draw this body in its material's color again."));
+        auto* colorRow = new QHBoxLayout;
+        colorRow->setContentsMargins(0, 0, 0, 0);
+        colorRow->addWidget(color, 1);
+        colorRow->addWidget(reset);
+        form->addRow(tr("Color"), colorRow);
+        connect(color, &QPushButton::clicked, this, [this] { pickColor(); });
+        connect(reset, &QPushButton::clicked, this, [this] { setColor(QString()); });
         auto* volume = new QLabel(form_);
         volume->setObjectName(QStringLiteral("volume"));
         form->addRow(tr("Volume"), volume);
@@ -1465,7 +1478,8 @@ private:
             }
         });
 
-        updaters_.push_back([this, material, edit, info, volume, mass, cost](const model::Feature& g) {
+        updaters_.push_back([this, material, edit, info, color, reset, volume, mass,
+                             cost](const model::Feature& g) {
             const auto* doc = design();
             if (!doc) return;
             // The first item: what the body gets when nothing is picked for it.
@@ -1492,6 +1506,16 @@ private:
             material->setCurrentIndex(at < 0 ? 0 : at);
 
             const auto& m = doc->materialOf(g.id());
+            const auto shown = doc->colorOf(g.id());
+            const QColor c(shown.r, shown.g, shown.b);
+            // Dark text on a light color, light text on a dark one.
+            const QString ink = c.lightness() > 140 ? QStringLiteral("#1f2328") : QStringLiteral("#ffffff");
+            color->setStyleSheet(QStringLiteral("background: %1; color: %2").arg(c.name(), ink));
+            color->setText(g.color() ? c.name() : tr("%1 (by default)").arg(c.name()));
+            color->setToolTip(
+                tr("The color this body is drawn in. Click to pick another; it changes only "
+                   "how the body looks, not its material."));
+            reset->setEnabled(g.color().has_value());
             // Only the design's own materials can be changed; SketchBillet's stay as they are.
             edit->setEnabled(!m.builtin);
             edit->setToolTip(m.builtin ? tr("%1 is one of SketchBillet's own materials, so it can't be "
@@ -1538,6 +1562,28 @@ private:
         if (!f || key == f->material()) return;
         auto problems = ctx_.documents().run(ctx_.selection().doc(), "feature.set_material",
                                              {{"feature", f->id()}, {"material", key}});
+        if (!problems.empty()) ui_.showProblems(problems);
+        schedule();
+    }
+
+    // Asks for the picked body's color, starting from the one it's drawn in now.
+    void pickColor() {
+        const auto* f = selected();
+        const auto* doc = design();
+        if (!f || !doc) return;
+        const auto now = doc->colorOf(f->id());
+        const QColor picked =
+            QColorDialog::getColor(QColor(now.r, now.g, now.b), this, tr("Color of %1").arg(qs(f->name())));
+        if (picked.isValid()) setColor(picked.name());
+    }
+
+    // Gives the picked body its own color ("#rrggbb"), or none (empty): its material's again.
+    void setColor(const QString& color) {
+        const auto* f = selected();
+        if (!f) return;
+        if (color.isEmpty() ? !f->color() : f->color() && qs(model::colorText(*f->color())) == color) return;
+        auto problems = ctx_.documents().run(ctx_.selection().doc(), "feature.set_color",
+                                             {{"feature", f->id()}, {"color", color.toStdString()}});
         if (!problems.empty()) ui_.showProblems(problems);
         schedule();
     }

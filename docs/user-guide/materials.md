@@ -101,6 +101,29 @@ material with the same name again (with `material.define`) changes it everywhere
 it's used.
 [`material.delete`](../cli/commands.md#materialdelete) removes one no step uses.
 
+## A color for each body
+
+A body is drawn in its material's color until you give it one of its own. That's
+handy for telling parts apart, or for showing which color you'll print each one
+in. A body's color changes only how it looks: it's still made of its material, so
+its mass and cost stay the same.
+
+![The tag drawn in red: its plate has its own color, and the cut takes it](images/app-body-color.png)
+
+- **Pick a color:** click a body's step, then click the **Color** box in
+  Properties, under Material. Pick a color and click OK.
+
+  ![The Color box in Properties, red, with Use material color beside it](images/app-body-color-row.png)
+
+- **Back to the material's color:** click **Use material color**. The Color box
+  says "(by default)" when the body has no color of its own.
+- **Bodies made from others** take their color the way they take their material:
+  a cut with no color of its own is the color of the body it was cut from, so a
+  red plate stays red after you cut a hole in it. Picking a material or a color
+  for the cut itself changes it.
+- **3MF files** keep each body's color, so your slicer shows it.
+- **With `sketchbillet_cli`:** run [`feature.set_color`](../cli/commands.md#featureset_color).
+
 ## Tips
 
 - **3D prints aren't solid.** SketchBillet's mass is for a solid part. A print with 20 %
