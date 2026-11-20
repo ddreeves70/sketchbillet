@@ -41,6 +41,17 @@ struct PanelHooks {
     std::function<void(SplinePick)> pickSpline;               // pick a spline, or one of its control points
 };
 
+// Changes a dimension of a sketch to what the student typed: a plain number is
+// in the design's unit (degrees for an angle), like "45"; anything else is a
+// formula, like "45 mm" or "wall * 2". Shows what went wrong, if anything.
+// Returns false if nothing changed (the same number, or a problem).
+bool typeDimension(plugin::PluginContext& ctx, const FeatureId& sketch, const std::string& name,
+                   const std::string& text);
+
+// What a dimension's box shows to start with: its number in the design's unit,
+// like "60 mm", or "30 deg" for an angle.
+std::string dimensionBoxText(plugin::PluginContext& ctx, const sketch::Constraint& c);
+
 class SketchPanel final : public QWidget {
 public:
     SketchPanel(plugin::PluginContext& ctx, PanelHooks hooks, QWidget* parent = nullptr);

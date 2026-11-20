@@ -164,7 +164,11 @@ class PluginContext;
 /// Version 56 added squares to click in the viewers (sb.viewer/4: viewer::Choice,
 /// viewer::IChoiceUser, IViewer::offerChoices() and clearChoices()), which New
 /// sketch uses to show the three planes.
-inline constexpr int kPluginApiVersion = 56;
+/// Version 57 added dimensions drawn as on a drawing (plugin::OverlayShape::Dimension
+/// and plugin::OverlayDimension) and boxes to type numbers in the viewers
+/// (sb.viewer/5: viewer::NumberBox, viewer::INumberUser, IViewer::askNumbers() and
+/// clearNumbers()), which the sketcher uses to change a dimension that's clicked.
+inline constexpr int kPluginApiVersion = 57;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

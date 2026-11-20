@@ -68,7 +68,7 @@ view::DrawingPlane drawingPlane(const viewer::ToolPlane& p) {
     return {p.origin, cross(p.xAxis, p.yAxis)};
 }
 
-// The sb.viewer/4 service: one drawing tool, one set of handles and one set of
+// The sb.viewer/5 service: one drawing tool, one set of handles and one set of
 // choices, for every pane of every viewer.
 class ViewerService final : public viewer::IViewer {
 public:
@@ -85,6 +85,18 @@ public:
     void clearChoices(const viewer::IChoiceUser& user) override;
     std::vector<viewer::Choice> choices() const override { return choices_; }
     viewer::IChoiceUser* choiceUser() const override { return choiceUser_; }
+    void askNumbers(viewer::INumberUser& user, std::vector<viewer::NumberBox> boxes,
+                    const std::string& focus) override;
+    void clearNumbers(const viewer::INumberUser& user) override;
+    std::vector<viewer::NumberBox> numberBoxes() const override { return numbers_; }
+    viewer::INumberUser* numberUser() const override { return numberUser_; }
+
+    // The number boxes, as the view shows them.
+    std::vector<view::ViewInput> viewInputs() const {
+        std::vector<view::ViewInput> out;
+        for (const auto& b : numbers_) out.push_back({b.id, b.at, b.text});
+        return out;
+    }
 
     // The choices to draw, as the view draws them.
     std::vector<view::ViewChoice> viewChoices() const {
@@ -109,6 +121,7 @@ private:
 
     void showHandlesAll();
     void showChoicesAll();
+    void showNumbersAll(const std::string& focus);
 
     viewer::IViewTool* tool_ = nullptr;
     viewer::ToolPlane plane_{};
@@ -117,6 +130,8 @@ private:
     std::vector<viewer::Handle> given_;
     viewer::IChoiceUser* choiceUser_ = nullptr;
     std::vector<viewer::Choice> choices_;
+    viewer::INumberUser* numberUser_ = nullptr;
+    std::vector<viewer::NumberBox> numbers_;
     std::vector<ViewerPanel*> panels_;
 };
 
@@ -259,6 +274,15 @@ public:
         for (auto* pane : panes_) pane->setHandles(service_.viewHandles());
     }
 
+    // The number boxes in the active pane (and the flat view); none in the others.
+    void applyNumbers(const std::string& focus = {}) {
+        const auto inputs = service_.viewInputs();
+        for (auto* pane : panes_)
+            pane->setInputs(pane == activePane() ? inputs : std::vector<view::ViewInput>{},
+                            pane == activePane() ? focus : std::string());
+        if (flat_) flat_->setInputs(inputs, focus);
+    }
+
     // The choices in every pane, and in the flat view.
     void applyChoices() {
         const auto choices = service_.viewChoices();
@@ -294,6 +318,20 @@ private:
                 });
         connect(view, &View::planeCancelled, this, [this] {
             if (auto* t = service_.tool()) t->cancelled();
+        });
+    }
+
+    // Sends what's typed in a view's number boxes to whoever asked for them.
+    template <typename View>
+    void forwardNumbers(View* view) {
+        connect(view, &View::inputTyped, this, [this](const std::string& id, const QString& text) {
+            if (auto* u = service_.numberUser()) u->typed(id, text.toStdString());
+        });
+        connect(view, &View::inputEntered, this, [this](const std::string& id) {
+            if (auto* u = service_.numberUser()) u->entered(id);
+        });
+        connect(view, &View::inputsCancelled, this, [this] {
+            if (auto* u = service_.numberUser()) u->cancelled();
         });
     }
 
@@ -678,6 +716,7 @@ private:
         forward(pane, paneKey(index));
         forwardHandles(pane);
         forwardChoices(pane);
+        forwardNumbers(pane);
         pane->setDrawingPlane(service_.plane());
         pane->setHandles(service_.viewHandles());
         pane->setChoices(service_.viewChoices());
@@ -693,6 +732,7 @@ private:
                 on ? QStringLiteral("QFrame#sb\\.viewer\\.paneframe { border: 2px solid #3d8bfd; }")
                    : QStringLiteral("QFrame#sb\\.viewer\\.paneframe { border: 2px solid transparent; }"));
         }
+        applyNumbers();  // number boxes go with the active pane
     }
 
     view::ViewWidget* activePane() const {
@@ -718,8 +758,10 @@ private:
         flat_->setOverlays(viewOverlays(ctx_.overlays().forPane({})));
         forward(flat_, paneKey(0));
         forwardChoices(flat_);
+        forwardNumbers(flat_);
         flat_->setDrawingPlane(service_.plane());
         flat_->setChoices(service_.viewChoices());
+        flat_->setInputs(service_.viewInputs());
         refresh();
     }
 
@@ -889,6 +931,24 @@ void ViewerService::showChoicesAll() {
     for (auto* panel : panels_) panel->applyChoices();
 }
 
+void ViewerService::askNumbers(viewer::INumberUser& user, std::vector<viewer::NumberBox> boxes,
+                               const std::string& focus) {
+    numberUser_ = &user;
+    numbers_ = std::move(boxes);
+    showNumbersAll(focus);
+}
+
+void ViewerService::clearNumbers(const viewer::INumberUser& user) {
+    if (numberUser_ != &user) return;
+    numberUser_ = nullptr;
+    numbers_.clear();
+    showNumbersAll({});
+}
+
+void ViewerService::showNumbersAll(const std::string& focus) {
+    for (auto* panel : panels_) panel->applyNumbers(focus);
+}
+
 void registerViewer(plugin::PluginContext& ctx) {
     // The service lives as long as the plugin: a listener SketchBillet keeps while the
     // plugin is loaded holds it (and so does the panel factory below).
@@ -991,7 +1051,12 @@ std::vector<view::ViewOverlay> viewOverlays(const std::vector<plugin::Overlay>& 
             case plugin::OverlayShape::Labels:
                 v.shape = view::OverlayShape::Labels;
                 break;
+            case plugin::OverlayShape::Dimension:
+                v.shape = view::OverlayShape::Dimension;
+                break;
         }
+        v.dimension = {o.dimension.along, o.dimension.normal, o.dimension.arrowAtFrom, o.dimension.arrowAtTo,
+                       o.dimension.textAtEnd};
         v.points = o.points;
         v.texts = o.texts;
         v.origin = o.lattice.origin;
