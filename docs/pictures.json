@@ -712,6 +712,23 @@
       "crop": [0, 0, 1280, 140]
     },
     {
+      "out": "docs/user-guide/images/app-assembly-car.png",
+      "size": "1280x800",
+      "commands": [
+        "run --save Body.sb feature.add_box size=80,40,10",
+        "run --save Wheel.sb feature.add_cylinder radius=12 height=6",
+        "run --save Car.sb assembly.new",
+        "run --open Car.sb --save Car.sb component.insert file=Body.sb",
+        "run --open Car.sb --save Car.sb component.insert file=Wheel.sb count=4",
+        "run --open Car.sb --save Car.sb component.place \"component=Wheel 1\" origin=12,0,12 x=1,0,0 z=0,-1,0",
+        "run --open Car.sb --save Car.sb component.place \"component=Wheel 2\" origin=68,0,12 x=1,0,0 z=0,-1,0",
+        "run --open Car.sb --save Car.sb component.place \"component=Wheel 3\" origin=12,40,12 x=1,0,0 z=0,1,0",
+        "run --open Car.sb --save Car.sb component.place \"component=Wheel 4\" origin=68,40,12 x=1,0,0 z=0,1,0"
+      ],
+      "app": {"open": "Car.sb"},
+      "crop": [0, 140, 1280, 545]
+    },
+    {
       "out": "docs/user-guide/images/app-properties.png",
       "size": "1280x800",
       "script": "tag",

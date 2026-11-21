@@ -48,6 +48,7 @@
 #include <V3d_View.hxx>
 #include <V3d_Viewer.hxx>
 #include <gp_Ax1.hxx>
+#include <gp_Ax3.hxx>
 #include <gp_Dir.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Trsf.hxx>
@@ -278,13 +279,21 @@ private:
 struct ViewWidget::Impl {
     explicit Impl(ViewWidget& w) : controller(w) {}
 
+    // A drawn body: its step, and in an assembly the component it's drawn for.
+    struct BodyKey {
+        FeatureId feature;
+        InstanceId component;
+        auto operator<=>(const BodyKey&) const = default;
+    };
+
     struct Shown {
         std::uint64_t shapeId = 0;  // the ShapeHandle it was made from
         bool ghost = false;
         Rgb color;
         Handle(AIS_Shape) object;
-        TopoDS_Shape original;  // the design's shape
-        TopoDS_Shape drawn;     // the view's copy of it, meshed
+        kernel::Placement placement;  // where it's drawn (a component's place)
+        TopoDS_Shape original;        // the design's shape, placed
+        TopoDS_Shape drawn;           // the view's copy of it, meshed
         // The drawn copy's edges and faces, numbered as the design's shape numbers
         // them (kernel::IKernel::elements()), so a picked one's number is the design's.
         TopTools_IndexedMapOfShape edges;
@@ -297,7 +306,7 @@ struct ViewWidget::Impl {
     Handle(AIS_InteractiveContext) context;
     Handle(V3d_View) view;
     Handle(AIS_ViewCube) cube;
-    std::map<FeatureId, Shown> shown;
+    std::map<BodyKey, Shown> shown;
     SceneContent content;
     Handle(AIS_Shape) pickedEdges;   // the picked edges, drawn thick on top of their bodies
     Handle(AIS_Shape) pickedFaces;   // the picked faces, drawn in the picked color
@@ -334,7 +343,7 @@ struct ViewWidget::Impl {
     // Draws the previewed body moved, and every other body where it is.
     void applyPreview() {
         for (auto& [id, s] : shown) {
-            const bool moved = previewBody && *previewBody == id;
+            const bool moved = previewBody && *previewBody == id.feature && id.component.isNil();
             if (moved || s.object->HasTransformation())
                 context->SetLocation(s.object, moved ? TopLoc_Location(previewMove) : TopLoc_Location());
         }
@@ -596,7 +605,7 @@ void ViewController::OnSelectionChanged(const Handle(AIS_InteractiveContext) & c
                                   : kind == kernel::TopoKind::Edge ? s.edges
                                                                    : s.vertices;
                 const int at = map.FindIndex(owner->Shape());
-                if (at > 0) clicked.push_back({id, at - 1, kind});
+                if (at > 0) clicked.push_back({id.feature, at - 1, kind});
             }
         }
         if (clicked.size() > 1) clicked.resize(1);
@@ -631,7 +640,7 @@ void ViewController::OnSelectionChanged(const Handle(AIS_InteractiveContext) & c
             for (const auto& [id, s] : d.shown) {
                 if (s.object != ctx->SelectedInteractive()) continue;
                 const int at = (faces ? s.faces : s.edges).FindIndex(owner->Shape());
-                if (at > 0) clicked.push_back({id, at - 1, kind});
+                if (at > 0) clicked.push_back({id.feature, at - 1, kind});
             }
         }
         if (faces) {
@@ -667,16 +676,36 @@ void ViewController::OnSelectionChanged(const Handle(AIS_InteractiveContext) & c
         return;
     }
     std::vector<FeatureId> now;
+    std::vector<InstanceId> components;
     for (ctx->InitSelected(); ctx->MoreSelected(); ctx->NextSelected()) {
         const Handle(AIS_InteractiveObject) obj = ctx->SelectedInteractive();
         for (const auto& [id, s] : d.shown) {
-            if (s.object == obj) now.push_back(id);
+            if (s.object != obj) continue;
+            if (id.component.isNil())
+                now.push_back(id.feature);
+            else if (std::find(components.begin(), components.end(), id.component) == components.end())
+                components.push_back(id.component);
         }
+    }
+    // An assembly: clicking picks components.
+    const bool assembly = std::any_of(d.shown.begin(), d.shown.end(),
+                                      [](const auto& entry) { return !entry.first.component.isNil(); });
+    if (assembly) {
+        auto mergedComponents = mergePick(d.content.selectedComponents, components);
+        if (mergedComponents == d.content.selectedComponents) return;
+        QPointer<ViewWidget> w(&widget_);
+        QMetaObject::invokeMethod(
+            &widget_,
+            [w, mergedComponents] {
+                if (w) emit w->componentsPicked(mergedComponents);
+            },
+            Qt::QueuedConnection);
+        return;
     }
     // Ctrl-click keeps selected steps this view doesn't draw (one that failed to build, say).
     if (d.clickAdds) {
         for (const auto& id : d.content.selected) {
-            if (!d.shown.count(id)) now.push_back(id);
+            if (!d.shown.count(ViewWidget::Impl::BodyKey{id, {}})) now.push_back(id);
         }
     }
     auto merged = mergePick(d.content.selected, now);
@@ -764,16 +793,31 @@ void ViewWidget::setContent(const SceneContent& content) {
     d.content = content;
     if (!d.context) return;
     try {
-        std::map<FeatureId, Impl::Shown> next;
+        std::map<Impl::BodyKey, Impl::Shown> next;
         for (const auto& body : content.bodies) {
-            const TopoDS_Shape* shape = kernel::occtShape(body.shape);
-            if (!shape || shape->IsNull()) continue;
-            auto it = d.shown.find(body.feature);
+            const TopoDS_Shape* given = kernel::occtShape(body.shape);
+            if (!given || given->IsNull()) continue;
+            const Impl::BodyKey key{body.feature, body.component};
+            auto it = d.shown.find(key);
             if (it != d.shown.end() && it->second.shapeId == body.shape.id() &&
-                it->second.ghost == body.ghost && it->second.color == body.color) {
+                it->second.ghost == body.ghost && it->second.color == body.color &&
+                kernel::samePlacement(it->second.placement, body.placement, 0)) {
                 next.insert(d.shown.extract(it));
                 continue;
             }
+            // Where it's drawn: a component's place in an assembly. The same shape
+            // placed again shares its faces, so its drawing is reused below.
+            TopoDS_Shape placedShape = *given;
+            if (!kernel::samePlacement(body.placement, kernel::Placement{}, 0)) {
+                const auto& p = body.placement;
+                const gp_Ax3 to(gp_Pnt(p.origin.x, p.origin.y, p.origin.z),
+                                gp_Dir(p.zAxis.x, p.zAxis.y, p.zAxis.z),
+                                gp_Dir(p.xAxis.x, p.xAxis.y, p.xAxis.z));
+                gp_Trsf place;
+                place.SetDisplacement(gp_Ax3(), to);
+                placedShape = given->Moved(TopLoc_Location(place));
+            }
+            const TopoDS_Shape* shape = &placedShape;
             // Draw a copy: the view meshes what it draws, and the design's own shape
             // must not change (exports mesh it too, and must not depend on the view).
             TopoDS_Shape drawn;
@@ -824,8 +868,9 @@ void ViewWidget::setContent(const SceneContent& content) {
             }
             const bool wire = !body.ghost && d.style == DisplayStyle::Wireframe;
             d.context->Display(obj, wire ? AIS_WireFrame : AIS_Shaded, 0, false);
-            next[body.feature] = {body.shape.id(),  body.ghost,       body.color,         obj, *shape, drawn,
-                                  std::move(edges), std::move(faces), std::move(vertices)};
+            next[key] = {
+                body.shape.id(),  body.ghost,       body.color,         obj, body.placement, *shape, drawn,
+                std::move(edges), std::move(faces), std::move(vertices)};
         }
         for (auto& [id, s] : d.shown) d.context->Remove(s.object, false);
         d.shown = std::move(next);
@@ -852,9 +897,13 @@ void ViewWidget::setContent(const SceneContent& content) {
 
         d.context->ClearSelected(false);
         if (!picking) {
-            for (const auto& id : content.selected) {
-                if (auto it = d.shown.find(id); it != d.shown.end())
-                    d.context->AddOrRemoveSelected(it->second.object, false);
+            auto in = [](const auto& list, const auto& id) {
+                return std::find(list.begin(), list.end(), id) != list.end();
+            };
+            for (const auto& [key, s] : d.shown) {
+                if (key.component.isNil() ? in(content.selected, key.feature)
+                                          : in(content.selectedComponents, key.component))
+                    d.context->AddOrRemoveSelected(s.object, false);
             }
         }
 
@@ -872,7 +921,7 @@ void ViewWidget::setContent(const SceneContent& content) {
         builder.MakeCompound(pickedPoints);
         bool anyPicked = false, anyFace = false, anyPoint = false;
         for (const auto& p : content.picked) {
-            auto it = d.shown.find(p.body);
+            auto it = d.shown.find(Impl::BodyKey{p.body, {}});
             if (it == d.shown.end() || p.index < 0) continue;
             const bool face = p.kind == kernel::TopoKind::Face;
             const bool point = p.kind == kernel::TopoKind::Vertex;

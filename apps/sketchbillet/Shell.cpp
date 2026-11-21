@@ -1020,19 +1020,6 @@ Diagnostics Shell::openDesign(const std::filesystem::path& path) {
         showProblems(opened.issues);
         return opened.issues;
     }
-    if (opened.document->kind() == model::DocKind::Assembly) {
-        // Assemblies show in the app from a later version (docs/design/assemblies.md, step 4).
-        const auto file = path.filename().string();
-        Diagnostics refused{{"assembly.app",
-                             Severity::Error,
-                             file +
-                                 " is an assembly. The desktop app shows assemblies from a later version; "
-                                 "for now, list it with: sketchbillet_cli open " +
-                                 file + " --components",
-                             {}}};
-        showProblems(refused);
-        return refused;
-    }
     if (host_.documents().find(opened.document->id())) {
         // Already open (the same design): just show its tab.
         host_.documents().setActive(opened.document->id());
@@ -1040,7 +1027,11 @@ Diagnostics Shell::openDesign(const std::filesystem::path& path) {
         return {};
     }
     addDesign(std::move(opened.document), path);
-    showMessage(tr("Opened %1").arg(QString::fromStdWString(path.filename().wstring())));
+    // An assembly's linked parts: updated from their files, found somewhere else, or not found.
+    QStringList notes;
+    for (const auto& note : opened.notes) notes << QString::fromStdString(note.message);
+    showMessage(notes.isEmpty() ? tr("Opened %1").arg(QString::fromStdWString(path.filename().wstring()))
+                                : notes.join(QLatin1Char(' ')));
     return {};
 }
 

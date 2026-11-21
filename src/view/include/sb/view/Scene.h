@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "sb/core/Id.h"
+#include "sb/kernel/Placement.h"
 #include "sb/kernel/Types.h"
 
 namespace sb::view {
@@ -24,12 +25,19 @@ struct Rgb {
     bool operator==(const Rgb& other) const = default;
 };
 
-/// One shape to draw, belonging to one step of the design.
+/// One shape to draw, belonging to one step of the design (or, in an assembly,
+/// to one step of a part, placed by one of its components).
 struct SceneBody {
     FeatureId feature{};          ///< The step the shape belongs to; picking it selects this step.
     kernel::ShapeHandle shape{};  ///< The shape, from the OCCT kernel.
     bool ghost = false;           ///< Drawn see-through: a step that is used up by a later step.
     Rgb color{};                  ///< Its color: its material's. The default is a light steel blue.
+    /// In an assembly, the component it's drawn for: picking it picks the component.
+    /// Nil in a part. Components of the same part share their shapes, and the view
+    /// draws each shape's mesh once.
+    InstanceId component{};
+    /// Where it's drawn: the component's placement. As it is (no move) in a part.
+    kernel::Placement placement{};
 };
 
 /// One edge, face or point drawn picked in a view: which body it's on, and its
@@ -49,6 +57,8 @@ struct ScenePick {
 struct SceneContent {
     std::vector<SceneBody> bodies{};    ///< The shapes, in design order.
     std::vector<FeatureId> selected{};  ///< Selected steps, in picking order; drawn highlighted.
+    /// Selected components of an assembly, in picking order; drawn highlighted.
+    std::vector<InstanceId> selectedComponents{};
     /// True while clicking picks edges (for a fillet or chamfer) instead of bodies.
     bool pickEdges = false;
     /// True while clicking picks faces (to sketch on) instead of bodies.
@@ -167,5 +177,12 @@ std::vector<kernel::Vec3> latticePoints(const ViewOverlay& overlay);
 /// @param after The steps selected after the click, in any order.
 /// @return @p after, in picking order.
 std::vector<FeatureId> mergePick(const std::vector<FeatureId>& before, const std::vector<FeatureId>& after);
+
+/// Works out the picked components after a click in a view, the same way.
+/// @param before The components picked before the click, in picking order.
+/// @param after The components picked after the click, in any order.
+/// @return @p after, in picking order.
+std::vector<InstanceId> mergePick(const std::vector<InstanceId>& before,
+                                  const std::vector<InstanceId>& after);
 
 }  // namespace sb::view
