@@ -173,7 +173,9 @@ class PluginContext;
 /// Version 59 added previews of a moved body in the viewers (sb.viewer/6:
 /// viewer::BodyPreview, IViewer::previewMove(), clearPreview() and preview()),
 /// which the move handles use while a body is dragged.
-inline constexpr int kPluginApiVersion = 59;
+/// Version 60 added picking an assembly's components (Selection::components(),
+/// Selection::setComponents() and SelectionChanged::components).
+inline constexpr int kPluginApiVersion = 60;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

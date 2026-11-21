@@ -256,6 +256,12 @@ signals:
     /// @param selection The steps that should be selected, in picking order.
     void picked(const std::vector<sb::FeatureId>& selection);
 
+    /// Components of an assembly were picked by clicking (Ctrl or Shift adds or
+    /// takes away), in picking order: the selection the view wants. Like picked(),
+    /// the view doesn't change its own highlight until setContent().
+    /// @param components The components, in picking order; empty after a click on empty space.
+    void componentsPicked(const std::vector<sb::InstanceId>& components);
+
     /// Edges were picked by clicking, while SceneContent::pickEdges is on: the
     /// edge clicked, or with Ctrl or Shift held, the edges picked before with the
     /// one clicked added or taken away.

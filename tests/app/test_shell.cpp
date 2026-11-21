@@ -53,6 +53,7 @@
 #include "sb/io/SketchBilletFile.h"
 #include "sb/kernel_occt/OcctKernel.h"
 #include "sb/model/AssemblyCommands.h"
+#include "sb/model/Commands.h"
 #include "sb/model/ConstructionPlane.h"
 #include "sb/model/Feature.h"
 #include "sb/model/Holes.h"
@@ -2823,18 +2824,83 @@ TEST_CASE("a body is its material's color until it's given its own", "[app][mate
     CHECK(app.doc().colorOf(cylinder) == model::Color{208, 48, 48});
 }
 
-TEST_CASE("an assembly doesn't open in the app yet, and says how to see it", "[app][assembly]") {
+TEST_CASE("an assembly opens in the app: the tree lists its components and parts, and they can be picked",
+          "[app][assembly]") {
     App app;
+    // Car: a Body and two Wheels, one turned to face sideways.
     model::Document car(model::DocKind::Part, "Car");
     REQUIRE(car.execute(std::make_unique<model::MakeAssemblyCommand>()).empty());
+    auto part = [](const char* name, kernel::Vec3 size) {
+        auto p = std::make_unique<model::Document>(model::DocKind::Part, name);
+        REQUIRE(p->execute(std::make_unique<model::AddFeatureCommand>(
+                               std::make_unique<model::BoxFeature>("Box1", kernel::Vec3{}, size)))
+                    .empty());
+        return p;
+    };
+    REQUIRE(car.execute(std::make_unique<model::InsertPartCommand>(part("Body", {80, 40, 10}), 1)).empty());
+    REQUIRE(car
+                .execute(std::make_unique<model::InsertPartCommand>(
+                    part("Wheel", {10, 10, 4}), 2, kernel::Placement{{10, -5, 0}}, kernel::Vec3{50, 0, 0}))
+                .empty());
     const auto path = app.dir.filePath(QStringLiteral("car.sb")).toStdWString();
     REQUIRE(io::writeFile(car, path).empty());
-    const auto problems = app.shell->openDesign(path);
-    REQUIRE(problems.size() == 1);
-    CHECK(problems[0].code == "assembly.app");
-    CHECK(problems[0].message.find("sketchbillet_cli open car.sb --components") != std::string::npos);
-    CHECK(app.host.documents().ids().size() == 1);  // still just the empty design it started with
-    CHECK(app.doc().kind() == model::DocKind::Part);
+    REQUIRE(app.shell->openDesign(path).empty());
+    settle();
+    const auto& doc = app.doc();
+    REQUIRE(doc.kind() == model::DocKind::Assembly);
+    REQUIRE(doc.components().size() == 3);
+
+    // The tree: Components (with each one's part, grounded or free), then Parts.
+    auto* tree = app.tree();
+    CHECK(tree->headerItem()->text(0) == QStringLiteral("Name"));
+    REQUIRE(tree->topLevelItemCount() == 2);
+    auto* components = tree->topLevelItem(0);
+    CHECK(components->text(0) == QStringLiteral("Components"));
+    REQUIRE(components->childCount() == 3);
+    CHECK(components->child(0)->text(0) == QStringLiteral("Body 1"));
+    CHECK(components->child(0)->text(2) == QStringLiteral("grounded"));
+    CHECK(components->child(2)->text(0) == QStringLiteral("Wheel 2"));
+    CHECK(components->child(2)->text(1) == QStringLiteral("Wheel"));
+    CHECK(components->child(2)->text(2) == QStringLiteral("free"));
+    auto* parts = tree->topLevelItem(1);
+    CHECK(parts->text(0) == QStringLiteral("Parts"));
+    REQUIRE(parts->childCount() == 2);
+    CHECK(parts->child(1)->text(0) == QStringLiteral("Wheel"));
+    CHECK(parts->child(1)->text(2) == QStringLiteral("inside"));
+
+    // The viewer draws every component's bodies, each placed.
+    auto scene = plugins::viewerScene(app.host.documents(), app.host.selection());
+    REQUIRE(scene.bodies.size() == 3);
+    CHECK(scene.bodies[2].component == doc.components()[2].id);
+    CHECK(scene.bodies[2].placement.origin.x == 60);
+    CHECK(scene.bodies[1].shape.id() == scene.bodies[2].shape.id());  // the two Wheels share their shape
+
+    // Picking a component's row picks it, and Properties shows it.
+    components->child(2)->setSelected(true);
+    settle();
+    REQUIRE(app.host.selection().components() == std::vector{doc.components()[2].id});
+    scene = plugins::viewerScene(app.host.documents(), app.host.selection());
+    CHECK(scene.selectedComponents == std::vector{doc.components()[2].id});
+    CHECK(app.field<QLineEdit>("component")->text() == QStringLiteral("Wheel 2"));
+    CHECK(app.field<QLabel>("part")->text() == QStringLiteral("Wheel"));
+    CHECK(app.field<QLabel>("file")->text() == QStringLiteral("Inside this assembly"));
+    CHECK(app.field<QLabel>("place")->text() == QStringLiteral("x 60 mm, y -5 mm, z 0 mm"));
+    auto* grounded = app.field<QCheckBox>("grounded");
+    CHECK_FALSE(grounded->isChecked());
+
+    // Grounding it, and renaming it, from Properties: each a step of undo.
+    grounded->click();
+    settle();
+    CHECK(doc.components()[2].grounded);
+    CHECK(tree->topLevelItem(0)->child(2)->text(2) == QStringLiteral("grounded"));  // the tree follows
+    CHECK(doc.undoLabel() == "Ground Wheel 2");
+    auto* name = app.field<QLineEdit>("component");
+    name->setText(QStringLiteral("Back wheel"));
+    emit name->editingFinished();
+    settle();
+    CHECK(doc.components()[2].name == "Back wheel");
+    CHECK(tree->topLevelItem(0)->child(2)->text(0) == QStringLiteral("Back wheel"));
+    CHECK(app.host.selection().components() == std::vector{doc.components()[2].id});  // still picked
 }
 
 TEST_CASE("opening a file that isn't a design explains why", "[app]") {

@@ -421,7 +421,15 @@ Each line is one pull request, in this order:
    and [the file format](../file-format.md#linkjson)). Saving `wheel.sb` in the
    desktop app updating an open assembly at once comes with step 4.
 4. **Assemblies in the app:** the tree, inserting parts, moving components,
-   shared shapes in the viewer, Edit Part.
+   shared shapes in the viewer, Edit Part. Built in pieces:
+   - **Showing assemblies** (built, Nov 20, 2026): the app opens them; the
+     viewer draws each component's bodies placed, sharing each part's shapes
+     (`SceneBody::component` and `placement`); clicking a component in the
+     viewer or the tree picks it (`Selection::setComponents()`, plugin API 60);
+     the tree lists Components and Parts; Properties shows a component, and
+     renames and grounds it.
+   - Next: the Assemble tab (inserting parts, linked-part commands), moving
+     components with the move handles, and Edit Part / Open Part.
 5. **Joints:** rigid, revolute and slider; placing along chains; loops checked;
    limits; dragging along joints; the joint tool; `joint.add`, `joint.set`.
 6. **Checks:** overlaps, the assembly's mass and center of gravity, measuring

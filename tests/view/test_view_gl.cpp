@@ -875,3 +875,53 @@ TEST_CASE("a moved body reuses its drawing, in the right place, with its faces n
         img.pixelColor(static_cast<int>(topAt->x() * ratio), static_cast<int>(topAt->y() * ratio));
     CHECK_FALSE(isBackground(at));
 }
+
+TEST_CASE("components share a shape, each drawn where it's placed; clicking one picks the component",
+          "[view][gl][assembly]") {
+    Fixture f;
+    const auto left = InstanceId::generate();
+    const auto right = InstanceId::generate();
+    SceneContent c;
+    // The same 20 mm box twice: 100 mm to the left and right, the right one turned upside down.
+    c.bodies = {{f.boxId, f.box, false, {}, left, kernel::Placement{{-100, 0, 0}}},
+                {f.boxId, f.box, false, {}, right, kernel::Placement{{100, 0, 20}, {1, 0, 0}, {0, 0, -1}}}};
+    f.view.setContent(c);
+    f.view.setStandardView(StandardView::Front);
+    f.view.fitAll();
+    settle(f.view);
+    CHECK(f.view.shownCount() == 2);
+
+    const auto leftAt = f.view.toScreen({-100, -10, 10});
+    const auto rightAt = f.view.toScreen({100, -10, 10});
+    const auto middle = f.view.toScreen({0, -10, 10});
+    REQUIRE(leftAt);
+    REQUIRE(rightAt);
+    REQUIRE(middle);
+    const QImage img = f.view.grabFramebuffer();
+    const double ratio = f.view.devicePixelRatioF();
+    auto at = [&](QPoint p) { return img.pixelColor(int(p.x() * ratio), int(p.y() * ratio)); };
+    CHECK_FALSE(isBackground(at(*leftAt)));
+    CHECK_FALSE(isBackground(at(*rightAt)));
+    CHECK(isBackground(at(*middle)));  // nothing at the origin, where the box was made
+
+    std::vector<InstanceId> last;
+    int picks = 0;
+    QObject::connect(&f.view, &ViewWidget::componentsPicked, [&](const std::vector<InstanceId>& ids) {
+        last = ids;
+        ++picks;
+        auto now = f.view.content();
+        now.selectedComponents = ids;
+        f.view.setContent(now);
+    });
+    f.view.clickAt(*rightAt);
+    REQUIRE(waitFor([&] { return picks == 1; }));
+    CHECK(last == std::vector{right});
+    settle(f.view);
+    f.view.clickAt(*leftAt, true);  // Ctrl adds
+    REQUIRE(waitFor([&] { return picks == 2; }));
+    CHECK(last == std::vector{right, left});
+    settle(f.view);
+    f.view.clickAt(*middle);  // empty space: none
+    REQUIRE(waitFor([&] { return picks == 3; }));
+    CHECK(last.empty());
+}

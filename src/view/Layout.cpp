@@ -210,6 +210,21 @@ std::vector<FeatureId> mergePick(const std::vector<FeatureId>& before, const std
     return out;
 }
 
+std::vector<InstanceId> mergePick(const std::vector<InstanceId>& before,
+                                  const std::vector<InstanceId>& after) {
+    auto in = [](const std::vector<InstanceId>& list, const InstanceId& id) {
+        return std::find(list.begin(), list.end(), id) != list.end();
+    };
+    std::vector<InstanceId> out;
+    for (const auto& id : before) {
+        if (in(after, id) && !in(out, id)) out.push_back(id);
+    }
+    for (const auto& id : after) {
+        if (!in(out, id)) out.push_back(id);
+    }
+    return out;
+}
+
 std::optional<kernel::Vec3> rayHitsPlane(const kernel::Vec3& from, const kernel::Vec3& direction,
                                          const DrawingPlane& plane) {
     const auto& n = plane.normal;

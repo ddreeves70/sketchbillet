@@ -17,7 +17,8 @@ namespace sb::plugin {
 /// Picking a step in the feature tree selects it here, and every other panel
 /// and view hears SelectionChanged and highlights it too. A selection is a list of
 /// steps in one design, or, while viewers pick edges, faces or things to measure
-/// (see PickMode), a list of edges, faces or points of its bodies.
+/// (see PickMode), a list of edges, faces or points of its bodies, or, in an
+/// assembly, a list of its components.
 ///
 /// The selection keeps itself valid: steps that are deleted or undone away drop
 /// out of it, and closing the design clears it.
@@ -57,6 +58,25 @@ public:
 
     /// Selects nothing. Sends SelectionChanged if something was selected.
     void clear();
+
+    /// Gives the picked components, while the selection is an assembly's components.
+    /// @return Them, in the order they were picked; empty when steps are selected.
+    const std::vector<model::ComponentId>& components() const { return components_; }
+
+    /// Checks whether a component is picked.
+    /// @param id The component.
+    /// @return True if it is.
+    bool containsComponent(const model::ComponentId& id) const;
+
+    /// Picks components of an assembly instead of steps, as clicking one in a
+    /// viewer or the feature tree does. Sends SelectionChanged if it differs. Ids
+    /// that aren't components of @p doc, and repeats, are left out.
+    /// @code
+    /// ctx.selection().setComponents(car, {wheel1});
+    /// @endcode
+    /// @param doc The assembly.
+    /// @param components The components, in the order they were picked.
+    void setComponents(const DocId& doc, std::vector<model::ComponentId> components);
 
     /// Gives the picked edges, faces or points, while the selection is those instead of steps.
     /// @return Them, in the order they were picked; empty when steps are selected.
@@ -110,6 +130,7 @@ private:
     DocId doc_;
     std::vector<FeatureId> features_;
     std::vector<PickedElement> elements_;
+    std::vector<model::ComponentId> components_;
     PickMode mode_ = PickMode::Bodies;
     FeatureId only_{};
     bool design_ = false;

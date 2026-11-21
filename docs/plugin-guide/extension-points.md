@@ -302,6 +302,19 @@ if (sel.designPicked()) { /* show the design's settings, not a step's */ }
 `SelectionChanged::design` says which kind of selection it is. Picking steps
 with `set()` un-picks the design.
 
+In an assembly, the student picks **components** instead: clicking one in the
+viewer or the feature tree picks it, wherever its part's bodies are drawn.
+
+```cpp
+sel.setComponents(carId, {wheel1Id});   // a model::ComponentId each
+for (const auto& id : sel.components()) {
+    const auto* wheel = ctx.documents().find(sel.doc())->findComponent(id);  // its name, part, placement
+}
+```
+
+`SelectionChanged::components` lists them. Picking steps, the design or edges
+un-picks components, and deleted components drop out.
+
 Edges or faces can be picked instead of steps. While `pickMode()` is
 `PickMode::Edges` (**Select > Pick edges**), clicking a body in the viewer picks
 the edge under the mouse; while it's `PickMode::Faces` (**Sketch > New sketch on a
@@ -735,7 +748,7 @@ ctx.listen<plugin::RebuildFinished>([&ctx](const plugin::RebuildFinished& e) {
 | `ActiveDocumentChanged` | The student switches to another design | `doc` (nil if none is open) |
 | `DocumentChanged` | A command runs, or a step is undone or redone | `doc`, `kind` (`Executed`, `Undone`, `Redone`), `label` |
 | `RebuildFinished` | A design was rebuilt after a change | `doc`, `ok` (did every step build?) |
-| `SelectionChanged` | The selection changes | `doc`, `features` (in picking order), `design` (the design itself is picked: Document settings), `elements` (picked edges) |
+| `SelectionChanged` | The selection changes | `doc`, `features` (in picking order), `design` (the design itself is picked: Document settings), `elements` (picked edges), `components` (an assembly's picked components) |
 | `PickModeChanged` | Clicking a body switches between picking bodies, edges, faces and things to measure | `mode` |
 | `sb::viewoptions::ViewOptionChanged` | A view option changes (sent by `sb.viewoptions`, desktop app) | `option` (its id) |
 | `sb::grid::GridChanged` | The grid settings change (sent by `sb.grid`, desktop app) | `grid`: visible, spacing in mm, snap, style |
