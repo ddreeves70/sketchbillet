@@ -639,6 +639,17 @@ class OcctKernel final : public IKernel {
 public:
     OcctKernel() { silenceOcctConsole(); }
 
+private:
+    // Bodies measured lately (massProps()), as they are before their placement.
+    struct Measured {
+        TopoDS_Shape shape;
+        MassProps props;
+    };
+    static constexpr std::size_t kMeasuredKept = 16;
+    mutable std::mutex massMutex_;
+    mutable std::vector<Measured> measured_;
+
+public:
     OpResult makeBox(const Point3& c, double dx, double dy, double dz) override {
         if (dx <= 0 || dy <= 0 || dz <= 0) {
             return failed("kernel.box.size", "A box needs a width, depth and height greater than 0 mm.");
@@ -688,8 +699,10 @@ public:
             }
             gp_Trsf slide;
             slide.SetTranslation(gp_Vec(motion.offset.x, motion.offset.y, motion.offset.z));
-            // Copy the geometry, so the result has no hidden placement (cleaner meshes and files).
-            BRepBuilderAPI_Transform mk(*s, slide * turn, Standard_True);
+            // A placement, not a copy: the moved body shares its faces with the
+            // original, so moving even a body with thousands of faces is instant, and
+            // what's already worked out for them (meshes, mass) still holds.
+            BRepBuilderAPI_Transform mk(*s, slide * turn, Standard_False);
             if (!mk.IsDone()) return failed("kernel.move.failed", "The body could not be moved.");
             OpResult out{wrap(mk.Shape()), {}, {}};
             traceFaces(mk, *s, 0, Maps(mk.Shape()), out.history);
@@ -1024,9 +1037,39 @@ public:
     }
 
     MassProps massProps(const ShapeHandle& h) const override {
+        const TopoDS_Shape* placed = unwrap(h);
+        if (!placed) return {};
+        // Measured where the body's own geometry is, then moved to where it's placed:
+        // a moved body shares its faces with the original (transform() places, it
+        // doesn't copy), so it's measured once. The same for every body, so the
+        // numbers don't depend on what was measured before.
+        const TopoDS_Shape local = placed->Located(TopLoc_Location());
         MassProps out;
-        const TopoDS_Shape* s = unwrap(h);
-        if (!s) return out;
+        {
+            std::lock_guard<std::mutex> lock(massMutex_);
+            for (const auto& m : measured_) {
+                if (m.shape.IsEqual(local)) {
+                    out = m.props;
+                    break;
+                }
+            }
+        }
+        if (out.volume == 0 && out.area == 0) {
+            out = measure(local);
+            std::lock_guard<std::mutex> lock(massMutex_);
+            if (measured_.size() >= kMeasuredKept) measured_.erase(measured_.begin());  // the oldest
+            measured_.push_back({local, out});
+        }
+        const gp_Pnt c = gp_Pnt(out.centerOfMass.x, out.centerOfMass.y, out.centerOfMass.z)
+                             .Transformed(placed->Location().Transformation());
+        out.centerOfMass = {c.X(), c.Y(), c.Z()};
+        return out;
+    }
+
+    // Volume, area and center of mass, measured.
+    static MassProps measure(const TopoDS_Shape& shape) {
+        MassProps out;
+        const TopoDS_Shape* s = &shape;
         // Integrated to a relative error of 1e-9 (volumes by Gauss-Kronrod): OCCT's quick default
         // is exact for flat and round faces, but off by up to 1e-3 on free-form
         // (spline) ones, like a solid with a closed spline hole.

@@ -1,8 +1,11 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <numbers>
 #include <set>
 
@@ -119,6 +122,54 @@ TEST_CASE("Moving keeps volume, area, topology and validity, and shifts the boun
     CHECK(b.max.z == Approx(9.0).margin(1e-6));
     // The original isn't changed.
     CHECK(k->bounds(tag.shape).min.x == Approx(0.0).margin(1e-6));
+}
+
+TEST_CASE("A moved body's center of mass moves with it, and a moved body works like any other",
+          "[kernel][occt][move]") {
+    // A move places the body rather than copying it, and massProps() remembers bodies
+    // measured before they were placed: the numbers must be the same either way.
+    auto k = makeOcctKernel();
+    auto box = k->makeBox({0, 0, 0}, 10, 20, 30);
+    const auto before = k->massProps(box.shape);
+    CHECK(before.centerOfMass.x == Approx(5.0));
+    Motion m;
+    m.angle = std::numbers::pi / 2;
+    m.axis = {0, 0, 1};
+    m.offset = {100, 0, 0};
+    auto moved = k->transform(box.shape, m);
+    REQUIRE(moved.ok());
+    const auto after = k->massProps(moved.shape);
+    CHECK(after.volume == before.volume);
+    CHECK(after.area == before.area);
+    // (5, 10, 15) turned a quarter about the z axis is (-10, 5, 15), then slid 100 in x.
+    CHECK(after.centerOfMass.x == Approx(90.0).margin(1e-9));
+    CHECK(after.centerOfMass.y == Approx(5.0).margin(1e-9));
+    CHECK(after.centerOfMass.z == Approx(15.0).margin(1e-9));
+    // Moved twice, and moved back: the placements add up.
+    Motion back;
+    back.offset = {-100, 0, 0};
+    auto again = k->transform(moved.shape, back);
+    REQUIRE(again.ok());
+    CHECK(k->massProps(again.shape).centerOfMass.x == Approx(-10.0).margin(1e-9));
+    // A moved body still cuts, meshes and exports.
+    auto hole = k->makeCylinder({90, 5, -1}, {0, 0, 1}, 2, 40);
+    auto cut = k->boolean(BoolOp::Cut, moved.shape, hole.shape);
+    REQUIRE(cut.ok());
+    CHECK(k->validate(cut.shape).empty());
+    CHECK(k->massProps(cut.shape).volume == Approx(6000.0 - std::numbers::pi * 4 * 30).epsilon(1e-6));
+    const auto mesh = k->tessellate(moved.shape, {});
+    REQUIRE_FALSE(mesh.vertices.empty());
+    float minX = mesh.vertices.front()[0];
+    for (const auto& v : mesh.vertices) minX = std::min(minX, v[0]);
+    CHECK(minX == Approx(80.0).margin(1e-4));  // where the body is, not where it was made
+    const auto path = std::filesystem::temp_directory_path() / "sb_moved_box.step";
+    REQUIRE(k->exportFile(moved.shape, ExportFormat::Step, path).empty());
+    std::ifstream in(path, std::ios::binary);
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    auto back_in = k->importStep(text);
+    REQUIRE(back_in.ok());
+    CHECK(k->bounds(back_in.shape).min.x == Approx(80.0).margin(1e-6));
+    std::filesystem::remove(path);
 }
 
 TEST_CASE("Turning happens about the given line, before the slide", "[kernel][occt][move]") {

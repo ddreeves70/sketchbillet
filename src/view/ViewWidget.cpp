@@ -283,6 +283,8 @@ struct ViewWidget::Impl {
         bool ghost = false;
         Rgb color;
         Handle(AIS_Shape) object;
+        TopoDS_Shape original;  // the design's shape
+        TopoDS_Shape drawn;     // the view's copy of it, meshed
         // The drawn copy's edges and faces, numbered as the design's shape numbers
         // them (kernel::IKernel::elements()), so a picked one's number is the design's.
         TopTools_IndexedMapOfShape edges;
@@ -774,17 +776,37 @@ void ViewWidget::setContent(const SceneContent& content) {
             }
             // Draw a copy: the view meshes what it draws, and the design's own shape
             // must not change (exports mesh it too, and must not depend on the view).
-            BRepBuilderAPI_Copy copier(*shape, false, false);
-            Handle(AIS_Shape) obj = new AIS_Shape(copier.Shape());
+            TopoDS_Shape drawn;
             TopTools_IndexedMapOfShape edges, faces, vertices;
-            for (auto [type, into] : {std::pair{TopAbs_EDGE, &edges}, std::pair{TopAbs_FACE, &faces},
-                                      std::pair{TopAbs_VERTEX, &vertices}}) {
-                TopTools_IndexedMapOfShape original;
-                TopExp::MapShapes(*shape, type, original);
-                for (int i = 1; i <= original.Extent(); ++i) into->Add(copier.ModifiedShape(original(i)));
+            // A body that's only moved (a Move step) shares its faces with one drawn
+            // already: draw that copy moved, so nothing is copied or meshed again.
+            for (const auto& [shownId, was] : d.shown) {
+                if (was.original.IsNull() || !was.original.IsPartner(*shape) ||
+                    was.original.Orientation() != shape->Orientation())
+                    continue;
+                const TopLoc_Location moved = shape->Location() * was.original.Location().Inverted();
+                drawn = was.drawn.Moved(moved);
+                for (auto [from, into] : {std::pair{&was.edges, &edges}, std::pair{&was.faces, &faces},
+                                          std::pair{&was.vertices, &vertices}}) {
+                    for (int i = 1; i <= from->Extent(); ++i) into->Add(from->FindKey(i).Moved(moved));
+                }
+                break;
             }
+            if (drawn.IsNull()) {
+                BRepBuilderAPI_Copy copier(*shape, false, false);
+                drawn = copier.Shape();
+                for (auto [type, into] : {std::pair{TopAbs_EDGE, &edges}, std::pair{TopAbs_FACE, &faces},
+                                          std::pair{TopAbs_VERTEX, &vertices}}) {
+                    TopTools_IndexedMapOfShape original;
+                    TopExp::MapShapes(*shape, type, original);
+                    for (int i = 1; i <= original.Extent(); ++i) into->Add(copier.ModifiedShape(original(i)));
+                }
+            }
+            Handle(AIS_Shape) obj = new AIS_Shape(drawn);
             obj->SetColor(rgb(body.color.r, body.color.g, body.color.b));
             obj->Attributes()->SetDeviationAngle(0.1);  // radians: smooth round edges
+            // Not a change: OCCT would throw away a reused drawing's mesh and make it again.
+            obj->Attributes()->UpdatePreviousDeviationAngle();
             if (body.ghost) {
                 obj->SetTransparency(0.7);
                 // Drawn just in front of the body it became part of, so their shared
@@ -802,7 +824,7 @@ void ViewWidget::setContent(const SceneContent& content) {
             }
             const bool wire = !body.ghost && d.style == DisplayStyle::Wireframe;
             d.context->Display(obj, wire ? AIS_WireFrame : AIS_Shaded, 0, false);
-            next[body.feature] = {body.shape.id(),  body.ghost,       body.color,         obj,
+            next[body.feature] = {body.shape.id(),  body.ghost,       body.color,         obj, *shape, drawn,
                                   std::move(edges), std::move(faces), std::move(vertices)};
         }
         for (auto& [id, s] : d.shown) d.context->Remove(s.object, false);
