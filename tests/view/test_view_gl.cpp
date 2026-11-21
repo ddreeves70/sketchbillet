@@ -11,6 +11,7 @@
 
 #include <cmath>
 #include <memory>
+#include <numbers>
 
 #include "sb/kernel_occt/OcctKernel.h"
 #include "sb/view/Graphics.h"
@@ -135,6 +136,25 @@ TEST_CASE("a preview draws a body moved, and picking follows it, until it's clea
     f.view.clearPreview();
     settle(f.view);
     CHECK(middleIsBox());
+}
+
+TEST_CASE("a picked body's orange highlight moves with its preview", "[view][gl]") {
+    // The highlight used to stay where the body was, as a see-through orange copy.
+    Fixture f;
+    f.view.setContent({{{f.boxId, f.box, false}}, {f.boxId}});  // picked
+    settle(f.view);
+    const auto middle = [&] {
+        const QImage img = f.view.grabFramebuffer();
+        return img.pixelColor(img.width() / 2, img.height() / 2);
+    };
+    REQUIRE_FALSE(isBackground(middle()));
+    f.view.setPreview(f.boxId, kernel::Motion{{500, 0, 0}});
+    settle(f.view);
+    INFO("middle pixel " << middle().name().toStdString());
+    CHECK(isBackground(middle()));
+    f.view.clearPreview();
+    settle(f.view);
+    CHECK_FALSE(isBackground(middle()));
 }
 
 TEST_CASE("standard views turn the camera", "[view][gl]") {
@@ -806,4 +826,52 @@ TEST_CASE("picking to measure: a face, edge or point, two at a time", "[view][gl
     REQUIRE(waitFor([&] { return picks == 6; }));
     CHECK(last.empty());
     CHECK(other == 0);
+}
+
+TEST_CASE("a moved body reuses its drawing, in the right place, with its faces numbered the same",
+          "[view][gl][faces]") {
+    // A Move step places the body without copying it, so the view draws its drawing
+    // moved instead of making it again: it must end up where the body is.
+    Fixture f;
+    const auto parts = f.kernel->elements(f.box);
+    int top = -1;
+    for (std::size_t i = 0; i < parts.faces.size(); ++i)
+        if (parts.faces[i].direction.z > 0.999) top = static_cast<int>(i);
+    REQUIRE(top >= 0);
+    SceneContent c;
+    c.bodies = {{f.boxId, f.box, false}};
+    c.pickFaces = true;
+    f.view.setContent(c);
+    f.view.fitAll();
+    settle(f.view);
+
+    // Up 15 mm and turned a quarter: the top is still at the middle, 15 mm higher.
+    auto moved =
+        f.kernel->transform(f.box, kernel::Motion{{0, 0, 15}, {0, 0, 0}, {0, 0, 1}, std::numbers::pi / 2});
+    REQUIRE(moved.ok());
+    c.bodies = {{f.boxId, moved.shape, false}};
+    f.view.setContent(c);
+    f.view.fitAll();
+    settle(f.view);
+    CHECK(f.view.shownCount() == 1);
+
+    int picks = 0;
+    std::vector<ScenePick> last;
+    QObject::connect(&f.view, &ViewWidget::facesPicked, [&](const std::vector<ScenePick>& p) {
+        ++picks;
+        last = p;
+    });
+    const auto topAt = f.view.toScreen({0, 0, 35});
+    REQUIRE(topAt);
+    REQUIRE(f.view.rect().contains(*topAt));
+    f.view.clickAt(*topAt);
+    REQUIRE(waitFor([&] { return picks == 1; }));
+    CHECK(last == std::vector<ScenePick>{{f.boxId, top, kernel::TopoKind::Face}});
+
+    // It is drawn there.
+    const QImage img = f.view.grabFramebuffer();
+    const double ratio = f.view.devicePixelRatioF();
+    const QColor at =
+        img.pixelColor(static_cast<int>(topAt->x() * ratio), static_cast<int>(topAt->y() * ratio));
+    CHECK_FALSE(isBackground(at));
 }
