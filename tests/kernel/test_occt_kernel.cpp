@@ -164,12 +164,17 @@ TEST_CASE("A moved body's center of mass moves with it, and a moved body works l
     CHECK(minX == Approx(80.0).margin(1e-4));  // where the body is, not where it was made
     const auto path = std::filesystem::temp_directory_path() / "sb_moved_box.step";
     REQUIRE(k->exportFile(moved.shape, ExportFormat::Step, path).empty());
-    std::ifstream in(path, std::ios::binary);
-    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    std::string text;
+    {
+        // Closed before it's removed: Windows won't remove a file that's open.
+        std::ifstream in(path, std::ios::binary);
+        text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    }
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
     auto back_in = k->importStep(text);
     REQUIRE(back_in.ok());
     CHECK(k->bounds(back_in.shape).min.x == Approx(80.0).margin(1e-6));
-    std::filesystem::remove(path);
 }
 
 TEST_CASE("Turning happens about the given line, before the slide", "[kernel][occt][move]") {
