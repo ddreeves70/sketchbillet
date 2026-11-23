@@ -185,8 +185,11 @@ public:
 
 /// A body drawn moved, without the design changing: see IViewer::previewMove().
 struct BodyPreview {
-    FeatureId body{};         ///< The step whose body is drawn moved.
+    FeatureId body{};         ///< The step whose body is drawn moved; nil for a component.
     kernel::Motion motion{};  ///< How it's moved: turned, then slid (mm, radians).
+    /// In an assembly, the component drawn moved, all its bodies (see
+    /// IViewer::previewComponent()); nil for a body.
+    InstanceId component{};
 };
 
 /// The viewers, as other plugins see them.
@@ -197,8 +200,9 @@ public:
     /// handles (setHandles(), clearHandles()). Version 4 added choices
     /// (offerChoices(), clearChoices()). Version 5 added boxes to type numbers in
     /// (askNumbers(), clearNumbers()). Version 6 added previews of a moved body
-    /// (previewMove(), clearPreview(), preview()).
-    static constexpr const char* kServiceName = "sb.viewer/6";
+    /// (previewMove(), clearPreview(), preview()). Version 7 added previews of a moved
+    /// component of an assembly (previewComponent(), BodyPreview::component).
+    static constexpr const char* kServiceName = "sb.viewer/7";
 
     /// Destroys the service.
     virtual ~IViewer() = default;
@@ -250,6 +254,13 @@ public:
     /// @param body The step whose body is drawn moved.
     /// @param motion How it's moved: turned about a line, then slid (mm, radians).
     virtual void previewMove(const FeatureId& body, const kernel::Motion& motion) = 0;
+
+    /// Draws one component of an assembly moved, all its bodies, without changing
+    /// the design: a preview while it's dragged, like previewMove(), in its place.
+    /// @param component The component drawn moved.
+    /// @param motion How it's moved, from where it's placed: turned about a line,
+    ///        then slid (mm, radians).
+    virtual void previewComponent(const InstanceId& component, const kernel::Motion& motion) = 0;
 
     /// Draws every body where the design has it again.
     virtual void clearPreview() = 0;

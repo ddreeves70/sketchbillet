@@ -75,6 +75,12 @@ public:
     /// @param motion How: turned about a line, then slid (mm, radians).
     void setPreview(const FeatureId& body, const kernel::Motion& motion);
 
+    /// Draws one component of an assembly moved (all its bodies), as a preview while
+    /// it's dragged, like setPreview(). It takes the place of a body's preview.
+    /// @param component The component drawn moved.
+    /// @param motion How: turned about a line, then slid (mm, radians), after its placement.
+    void setComponentPreview(const InstanceId& component, const kernel::Motion& motion);
+
     /// Draws every body where setContent() put it again.
     void clearPreview();
 

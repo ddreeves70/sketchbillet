@@ -26,15 +26,21 @@ Right-click it in the tree to rename it, ground it or delete it.
 | **Insert part** | Puts a part from a `.sb` file in, linked to the file |
 | **Insert copy** | Puts a copy of a part from a `.sb` file in, as an inside part |
 | **New part** | Adds a new, empty part, made inside the assembly |
-| **Add another** | Adds another copy of the picked component's part |
+| **Add another** | Adds another copy of the picked component's part, beside it, facing the same way |
 | **Ground** | Fixes the picked component where it is, or lets it go |
 | **Delete** | Takes the picked component out |
 | **Update** | Uses the new part from each linked file that changed |
 | **Find file** | Links the picked component's part to its file where it is now |
 | **Make part inside**, **Save part as file** | In the Parts dropdown: switch the picked component's part between inside and linked |
 
-Moving components in the app comes next; joints, which hold parts together and
-say how they move (a wheel turning on its axle), after that.
+**Moving a component:** pick a free one, and drag the arrows or the square that
+appear on it, in steps of 1 mm, like [dragging a body](moving.md#dragging-a-body).
+Its picture moves while you drag; when you let go it's placed there, as one step
+of Undo. A grounded component has no arrows: it stays where it is. Press
+**Escape** before you let go to put it back.
+
+Joints, which hold parts together and say how they move (a wheel turning on its
+axle), come next.
 
 ## An example: a toy car
 

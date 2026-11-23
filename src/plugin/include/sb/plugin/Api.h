@@ -178,7 +178,9 @@ class PluginContext;
 /// Version 61 added actions that take the picked component or its part
 /// (ActionSpec::fromComponent, fromComponentPart) and a file the student picks
 /// (fromFile, fileTypes, saveFile, suggestedFile).
-inline constexpr int kPluginApiVersion = 61;
+/// Version 62 added previews of a moved component of an assembly (sb.viewer/7:
+/// IViewer::previewComponent(), viewer::BodyPreview::component).
+inline constexpr int kPluginApiVersion = 62;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

@@ -82,6 +82,7 @@ public:
     std::vector<viewer::Handle> handles() const override { return given_; }
     viewer::IHandleUser* handleUser() const override { return handleUser_; }
     void previewMove(const FeatureId& body, const kernel::Motion& motion) override;
+    void previewComponent(const InstanceId& component, const kernel::Motion& motion) override;
     void clearPreview() override;
     std::optional<viewer::BodyPreview> preview() const override { return preview_; }
     void offerChoices(viewer::IChoiceUser& user, std::vector<viewer::Choice> choices) override;
@@ -284,7 +285,9 @@ public:
         for (auto* pane : panes_) showPreview(*pane);
     }
     void showPreview(view::ViewWidget& pane) {
-        if (const auto p = service_.preview())
+        if (const auto p = service_.preview(); p && !p->component.isNil())
+            pane.setComponentPreview(p->component, p->motion);
+        else if (p)
             pane.setPreview(p->body, p->motion);
         else
             pane.clearPreview();
@@ -941,6 +944,11 @@ void ViewerService::showHandlesAll() {
 
 void ViewerService::previewMove(const FeatureId& body, const kernel::Motion& motion) {
     preview_ = viewer::BodyPreview{body, motion};
+    showPreviewAll();
+}
+
+void ViewerService::previewComponent(const InstanceId& component, const kernel::Motion& motion) {
+    preview_ = viewer::BodyPreview{FeatureId{}, motion, component};
     showPreviewAll();
 }
 

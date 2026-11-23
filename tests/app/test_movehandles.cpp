@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "sb/kernel_occt/OcctKernel.h"
+#include "sb/model/AssemblyCommands.h"
 #include "sb/model/Commands.h"
 #include "sb/model/Document.h"
 #include "sb/plugin/PluginHost.h"
@@ -196,4 +197,66 @@ TEST_CASE("Escape during a drag puts the drawing back; the design never changed"
     // Dropping after Escape does nothing.
     user->dropped("y", {0, 6, 0});
     CHECK(k.box(a).corner().y == 0);
+}
+
+TEST_CASE("a free component has handles; dragging previews it and dropping places it, as one step",
+          "[movehandles][assembly]") {
+    SketchBillet k;
+    auto& docs = k.host.documents();
+    REQUIRE(docs.run(k.doc, "assembly.new", {}).empty());
+    auto wheel = std::make_unique<model::Document>(model::DocKind::Part, "Wheel");
+    REQUIRE(wheel
+                ->execute(std::make_unique<model::AddFeatureCommand>(
+                    std::make_unique<model::BoxFeature>("Box1", kernel::Vec3{}, kernel::Vec3{10, 20, 4})))
+                .empty());
+    // Wheel 1 (grounded, the first), and Wheel 2 at x 50, turned a quarter about z.
+    REQUIRE(docs.execute(k.doc, std::make_unique<model::InsertPartCommand>(std::move(wheel), 1)).empty());
+    const auto wheelPart = k.design().components()[0].part;
+    REQUIRE(docs.execute(k.doc, std::make_unique<model::AddComponentsCommand>(
+                                    wheelPart, 1, kernel::Placement{{50, 0, 0}, {0, 1, 0}, {0, 0, 1}}))
+                .empty());
+    const auto w1 = k.design().components()[0].id;
+    const auto w2 = k.design().components()[1].id;
+
+    // Grounded: none. Free: around it, where it's placed (turned, 20 by 10 mm).
+    k.host.selection().setComponents(k.doc, {w1});
+    CHECK(k.viewer->handles().empty());
+    k.host.selection().setComponents(k.doc, {w2});
+    REQUIRE(k.viewer->handles().size() == 4);
+    CHECK(k.viewer->handles()[0].at.x == Approx(40));  // x from 30 to 50
+    CHECK(k.viewer->handles()[0].at.y == Approx(5));   // y from 0 to 10
+    CHECK(k.viewer->handles()[0].at.z == Approx(2));
+
+    // Dragging only draws it moved.
+    const auto label = k.design().undoLabel();
+    auto* user = k.viewer->handleUser();
+    REQUIRE(user);
+    user->dragged("x", {5.4, 0, 0});
+    REQUIRE(k.viewer->preview());
+    CHECK(k.viewer->preview()->component == w2);
+    CHECK(k.viewer->preview()->body.isNil());
+    CHECK(k.viewer->preview()->motion.offset.x == 5);
+    CHECK(k.viewer->handles()[0].at.x == Approx(45));  // the handles follow
+    CHECK(k.design().findComponent(w2)->placement.origin.x == 50);
+    CHECK(k.design().undoLabel() == label);
+    user->dragged("xy", {7, -3, 0});
+    user->dropped("xy", {7, -3, 0});
+    CHECK_FALSE(k.viewer->preview());
+    const auto& placed = k.design().findComponent(w2)->placement;
+    CHECK(placed.origin.x == 57);
+    CHECK(placed.origin.y == -3);
+    CHECK(placed.xAxis.y == Approx(1));  // still facing the same way
+    CHECK(k.design().undoLabel() == "Move Wheel 2");
+    CHECK(k.host.selection().components() == std::vector{w2});
+    REQUIRE(k.viewer->handles().size() == 4);
+    CHECK(k.viewer->handles()[0].at.x == Approx(47));
+    REQUIRE(docs.undo(k.doc));  // the whole drag
+    CHECK(k.design().findComponent(w2)->placement.origin.x == 50);
+
+    // Escape: nothing changes.
+    user->dragged("z", {0, 0, 9});
+    user->cancelled();
+    CHECK_FALSE(k.viewer->preview());
+    CHECK(k.design().findComponent(w2)->placement.origin.z == 0);
+    CHECK(k.viewer->handles()[0].at.z == Approx(2));
 }

@@ -3,9 +3,13 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <optional>
 #include <string>
 
+#include "sb/kernel/Placement.h"
+#include "sb/model/AssemblyCommands.h"
 #include "sb/model/Commands.h"
+#include "sb/model/Document.h"
 #include "sb/plugin/Events.h"
 
 namespace sb::plugins {
@@ -30,13 +34,31 @@ public:
     // No clearHandles() when it goes: that's only when SketchBillet closes, and the
     // viewer may already be gone then.
 
-    // Shows handles on the picked body (or the body being dragged, where it's
-    // drawn), or none.
+    // Shows handles on the picked body or free component (or the one being
+    // dragged, where it's drawn), or none.
     void refresh() {
         const DocId docId = ctx_.documents().active();
         const auto* doc = ctx_.documents().find(docId);
         const auto* report = ctx_.documents().lastRebuild(docId);
         const auto* kernel = ctx_.documents().kernel();
+        if (doc && kernel && report && doc->kind() == model::DocKind::Assembly) {
+            // A component: a grounded one stays where it is, so it has none.
+            const model::Component* c = nullptr;
+            if (dragging_ && !component_.isNil()) {
+                c = doc->findComponent(component_);
+            } else if (!dragging_ && ctx_.selection().doc() == docId &&
+                       ctx_.selection().components().size() == 1) {
+                c = doc->findComponent(ctx_.selection().components().front());
+                if (c && c->grounded) c = nullptr;
+            }
+            const auto box = c ? componentBounds(*report, *kernel, *c) : std::nullopt;
+            if (!box) {
+                viewer_.clearHandles(*this);
+                return;
+            }
+            viewer_.setHandles(*this, moveHandles(shifted(*box)));
+            return;
+        }
         std::optional<FeatureId> body;
         if (dragging_) {
             body = target_;
@@ -49,30 +71,34 @@ public:
             viewer_.clearHandles(*this);
             return;
         }
-        auto box = kernel->bounds(*shape);
-        for (auto* p : {&box.min, &box.max}) {  // where the preview draws it
-            p->x += shown_.x;
-            p->y += shown_.y;
-            p->z += shown_.z;
-        }
-        viewer_.setHandles(*this, moveHandles(box));
+        viewer_.setHandles(*this, moveHandles(shifted(kernel->bounds(*shape))));
     }
 
     void dragged(const std::string&, const kernel::Vec3& by) override {
         const auto* doc = ctx_.documents().find(ctx_.documents().active());
         if (!doc) return;
         if (!dragging_) {
-            // The drag starts: it slides the picked body.
-            if (ctx_.selection().features().size() != 1) return;
+            // The drag starts: it slides the picked component, or body.
+            const auto& sel = ctx_.selection();
+            component_ = {};
+            if (doc->kind() == model::DocKind::Assembly) {
+                if (sel.components().size() != 1) return;
+                component_ = sel.components().front();
+            } else {
+                if (sel.features().size() != 1) return;
+                target_ = sel.features().front();
+            }
             dragging_ = true;
-            target_ = ctx_.selection().features().front();
             shown_ = {};
         }
         const auto snapped = snapSlide(by, doc->lengthUnit());
         if (snapped.x == shown_.x && snapped.y == shown_.y && snapped.z == shown_.z) return;
         // Only the drawing moves while dragging; the design changes once, on dropping.
         shown_ = snapped;
-        viewer_.previewMove(target_, kernel::Motion{shown_});
+        if (!component_.isNil())
+            viewer_.previewComponent(component_, kernel::Motion{shown_});
+        else
+            viewer_.previewMove(target_, kernel::Motion{shown_});
         refresh();  // the handles follow the body
     }
 
@@ -83,7 +109,24 @@ public:
         shown_ = {};
         viewer_.clearPreview();  // before the design moves it, so it isn't moved twice
         const DocId docId = ctx_.documents().active();
-        if (ctx_.documents().find(docId) && (slide.x != 0 || slide.y != 0 || slide.z != 0)) {
+        const bool moved = slide.x != 0 || slide.y != 0 || slide.z != 0;
+        if (!component_.isNil()) {
+            // A component: placed further along, as one step.
+            const auto* doc = ctx_.documents().find(docId);
+            const auto* c = doc ? doc->findComponent(component_) : nullptr;
+            if (c && moved) {
+                auto placement = c->placement;
+                placement.origin = {placement.origin.x + slide.x, placement.origin.y + slide.y,
+                                    placement.origin.z + slide.z};
+                auto problems = ctx_.documents().execute(
+                    docId, std::make_unique<model::PlaceComponentCommand>(component_, placement));
+                if (!problems.empty()) ctx_.log(problems.front().message);
+            }
+            component_ = {};
+            refresh();
+            return;
+        }
+        if (ctx_.documents().find(docId) && moved) {
             const FeatureId moveId = FeatureId::generate();
             auto problems = ctx_.documents().execute(
                 docId, std::make_unique<model::SlideBodyCommand>(target_, slide, false, moveId));
@@ -101,15 +144,51 @@ public:
         // Escape: the design never changed, so only the drawing goes back.
         dragging_ = false;
         shown_ = {};
+        component_ = {};
         viewer_.clearPreview();
         refresh();
     }
 
 private:
+    // A box moved to where the preview draws it.
+    kernel::Box3 shifted(kernel::Box3 box) const {
+        for (auto* p : {&box.min, &box.max}) {
+            p->x += shown_.x;
+            p->y += shown_.y;
+            p->z += shown_.z;
+        }
+        return box;
+    }
+
+    // Around a component's bodies, where it's placed: the box around each body's
+    // own box, turned and moved by the placement.
+    static std::optional<kernel::Box3> componentBounds(const model::RebuildReport& report,
+                                                       const kernel::IKernel& kernel,
+                                                       const model::Component& c) {
+        const auto* built = report.part(c.part);
+        if (!built) return std::nullopt;
+        std::optional<kernel::Box3> out;
+        for (const auto& body : built->bodies()) {
+            const auto* shape = built->shapeOf(body);
+            if (!shape) continue;
+            const auto b = kernel.bounds(*shape);
+            for (int corner = 0; corner < 8; ++corner) {
+                const auto p = kernel::apply(c.placement, kernel::Point3{corner & 1 ? b.max.x : b.min.x,
+                                                                         corner & 2 ? b.max.y : b.min.y,
+                                                                         corner & 4 ? b.max.z : b.min.z});
+                if (!out) out = kernel::Box3{p, p};
+                out->min = {std::min(out->min.x, p.x), std::min(out->min.y, p.y), std::min(out->min.z, p.z)};
+                out->max = {std::max(out->max.x, p.x), std::max(out->max.y, p.y), std::max(out->max.z, p.z)};
+            }
+        }
+        return out;
+    }
+
     plugin::PluginContext& ctx_;
     viewer::IViewer& viewer_;
     bool dragging_ = false;  // a drag has started
     FeatureId target_;       // the step being slid
+    InstanceId component_;   // or, in an assembly, the component
     kernel::Vec3 shown_{};   // how far the preview draws it, snapped (mm)
 };
 

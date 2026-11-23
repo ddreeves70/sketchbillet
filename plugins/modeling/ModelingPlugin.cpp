@@ -7,7 +7,9 @@
 
 #include "ModelingIcons.h"
 #include "sb/io/PartCommands.h"
+#include "sb/kernel/Placement.h"
 #include "sb/kernel/Types.h"
+#include "sb/model/AssemblyCommands.h"
 #include "sb/model/CommandRegistry.h"
 #include "sb/plugin/Actions.h"
 #include "sb/plugin/Events.h"
@@ -186,14 +188,46 @@ void addAssembleTools(plugin::PluginContext& ctx) {
                              .icon = std::string(icons::modeling::new_part_svg),
                              .tip = "Add a new, empty part, made inside the assembly.",
                              .enabled = [assembly] { return assembly() != nullptr; }});
-    ctx.addAction(ActionSpec{.id = "sb.modeling.add_component",
-                             .text = "Add another",
-                             .menu = "Assemble/Insert",
-                             .command = "component.add",
-                             .fromComponentPart = "part",
-                             .toolbar = true,
-                             .icon = std::string(icons::modeling::add_component_svg),
-                             .tip = "Add another copy of the picked component's part, at the origin."});
+    ctx.addAction(ActionSpec{
+        .id = "sb.modeling.add_component",
+        .text = "Add another",
+        .menu = "Assemble/Insert",
+        .toolbar = true,
+        .icon = std::string(icons::modeling::add_component_svg),
+        .tip = "Add another copy of the picked component's part, beside it.",
+        .run =
+            [&ctx, assembly, picked] {
+                const auto* c = picked();
+                const auto* doc = assembly();
+                const auto* part = c ? doc->findPart(c->part) : nullptr;
+                if (!part) return;
+                // Beside it: along x, as far as the part is long, and 10 mm more.
+                double length = 0;
+                const auto* report = ctx.documents().lastRebuild(doc->id());
+                const auto* built = report ? report->part(c->part) : nullptr;
+                const auto* kernel = ctx.documents().kernel();
+                if (built && kernel) {
+                    for (const auto& body : built->bodies()) {
+                        if (const auto* shape = built->shapeOf(body)) {
+                            const auto b = kernel->bounds(*shape);
+                            length = std::max(length, b.max.x - b.min.x);
+                        }
+                    }
+                }
+                // Facing the same way as the one it's beside, as one step.
+                const auto by = kernel::applyDirection(c->placement, {length + 10, 0, 0});
+                auto placement = c->placement;
+                placement.origin = {placement.origin.x + by.x, placement.origin.y + by.y,
+                                    placement.origin.z + by.z};
+                const DocId id = doc->id();
+                const auto before = doc->components().size();
+                auto problems = ctx.documents().execute(id, std::make_unique<model::AddComponentsCommand>(
+                                                                part->id(), 1, placement, kernel::Vec3{}));
+                const auto* now = ctx.documents().find(id);
+                if (problems.empty() && now && now->components().size() > before)
+                    ctx.selection().setComponents(id, {now->components().back().id});
+            },
+        .enabled = [picked] { return picked() != nullptr; }});
     ctx.addAction(ActionSpec{.id = "sb.modeling.ground",
                              .text = "Ground",
                              .menu = "Assemble/Component",
