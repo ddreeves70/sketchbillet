@@ -428,8 +428,15 @@ Each line is one pull request, in this order:
      viewer or the tree picks it (`Selection::setComponents()`, plugin API 60);
      the tree lists Components and Parts; Properties shows a component, and
      renames and grounds it.
-   - Next: the Assemble tab (inserting parts, linked-part commands), moving
-     components with the move handles, and Edit Part / Open Part.
+   - **The Assemble tab** (built, Nov 23, 2026): it takes the Model tab's place
+     while an assembly is open (toolbar mode `sb.modeling.assembly`), with
+     Insert part, Insert copy, New part, Add another, Ground, Delete component,
+     Update linked parts, Find linked file, Make part inside and Save part as
+     file; File > New assembly. Actions can take the picked component or its
+     part, and a file the student picks (`ActionSpec::fromComponent`,
+     `fromComponentPart`, `fromFile`; plugin API 61). Model tools are greyed out
+     on an assembly.
+   - Next: moving components with the move handles, and Edit Part / Open Part.
 5. **Joints:** rigid, revolute and slider; placing along chains; loops checked;
    limits; dragging along joints; the joint tool; `joint.add`, `joint.set`.
 6. **Checks:** overlaps, the assembly's mass and center of gravity, measuring

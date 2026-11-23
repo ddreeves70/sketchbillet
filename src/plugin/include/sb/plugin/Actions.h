@@ -69,6 +69,27 @@ struct ActionSpec {
     std::string fromFaces{};
     /// With `fromFaces`: the argument the faces' body goes in, like "body".
     std::string fromFacesBody{};
+    /// An argument filled with the picked component's name (an ArgType::Text
+    /// argument), in an assembly. The action is enabled when exactly one
+    /// component is picked.
+    std::string fromComponent{};
+    /// An argument filled with the name of the picked component's part (an
+    /// ArgType::Text argument), like "Wheel" for Wheel 2. The action is enabled
+    /// when exactly one component is picked.
+    std::string fromComponentPart{};
+    /// An argument filled with a file the student picks (an ArgType::Text
+    /// argument): clicking the action opens a file window, and the file's full
+    /// path, as UTF-8, goes in this argument. Closing the window does nothing.
+    std::string fromFile{};
+    /// With `fromFile`: the kinds of file the window shows, as Qt writes them,
+    /// like "SketchBillet designs (*.sb)". Empty shows every file.
+    std::string fileTypes{};
+    /// With `fromFile`: true to ask for a new file to save to (the window warns
+    /// before replacing one), false to pick a file to open.
+    bool saveFile = false;
+    /// With `fromFile`: the file name the window starts with, like "Wheel.sb",
+    /// asked each time. Empty starts with none.
+    std::function<std::string()> suggestedFile{};
     std::string shortcut{};  ///< Keyboard shortcut, e.g. "Ctrl+B" or "Delete". May be empty.
     bool toolbar = false;    ///< True to also show it as a button on its panel, not only in the dropdown.
     /// Shorter words for the toolbar button, e.g. "Sketch" for "New sketch on XY

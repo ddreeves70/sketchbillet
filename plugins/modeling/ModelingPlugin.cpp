@@ -114,6 +114,171 @@ void drawPlanes(plugin::PluginContext& ctx) {
     put("planes.names", std::move(names));
 }
 
+// The toolbar mode while an assembly is the design being worked on: the
+// Assemble tab shows instead of the Model tab.
+constexpr const char* kAssemblyMode = "sb.modeling.assembly";
+
+// The Assemble tab: putting parts in an assembly, its components, and its parts'
+// files. Each tool is a command, like every other.
+void addAssembleTools(plugin::PluginContext& ctx) {
+    using plugin::ActionSpec;
+    ctx.addTab({.name = "Assemble", .always = false, .mode = kAssemblyMode});
+    // The Assemble tab takes the Model tab's place while an assembly is open
+    // (unless another mode, like editing a sketch, is on).
+    auto followDesign = [&ctx] {
+        const auto* doc = ctx.documents().find(ctx.documents().active());
+        const bool assembly = doc && doc->kind() == model::DocKind::Assembly;
+        const auto& mode = ctx.toolbarMode();
+        if (assembly && mode.empty()) ctx.setToolbarMode(kAssemblyMode);
+        if (!assembly && mode == kAssemblyMode) ctx.setToolbarMode("");
+    };
+    ctx.listen<plugin::ActiveDocumentChanged>([followDesign](const auto&) { followDesign(); });
+    ctx.listen<plugin::DocumentChanged>([followDesign](const auto&) { followDesign(); });
+    ctx.onStart(followDesign);
+
+    auto assembly = [&ctx]() -> const model::Document* {
+        const auto* doc = ctx.documents().find(ctx.documents().active());
+        return doc && doc->kind() == model::DocKind::Assembly ? doc : nullptr;
+    };
+    // The one picked component, if one is.
+    auto picked = [&ctx, assembly]() -> const model::Component* {
+        const auto* doc = assembly();
+        const auto& sel = ctx.selection();
+        if (!doc || sel.doc() != doc->id() || sel.components().size() != 1) return nullptr;
+        return doc->findComponent(sel.components().front());
+    };
+    auto pickedLinked = [assembly, picked](bool linked) {
+        return [assembly, picked, linked] {
+            const auto* c = picked();
+            return c && (assembly()->partLink(c->part) != nullptr) == linked;
+        };
+    };
+    const std::string designs = "SketchBillet designs (*.sb)";
+
+    ctx.addAction(ActionSpec{.id = "sb.modeling.insert_part",
+                             .text = "Insert part",
+                             .menu = "Assemble/Insert",
+                             .command = "component.insert",
+                             .fromFile = "file",
+                             .fileTypes = designs,
+                             .toolbar = true,
+                             .icon = std::string(icons::modeling::insert_part_svg),
+                             .tip = "Put a part from a .sb file in the assembly. It stays linked: change the "
+                                    "file, and the assembly follows.",
+                             .enabled = [assembly] { return assembly() != nullptr; }});
+    ctx.addAction(ActionSpec{.id = "sb.modeling.insert_copy",
+                             .text = "Insert copy",
+                             .menu = "Assemble/Insert",
+                             .command = "component.insert",
+                             .args = {{"link", false}},
+                             .fromFile = "file",
+                             .fileTypes = designs,
+                             .toolbar = true,
+                             .icon = std::string(icons::modeling::insert_copy_svg),
+                             .tip = "Put a copy of a part from a .sb file in the assembly. The copy doesn't "
+                                    "change when the file does.",
+                             .enabled = [assembly] { return assembly() != nullptr; }});
+    ctx.addAction(ActionSpec{.id = "sb.modeling.new_part",
+                             .text = "New part",
+                             .menu = "Assemble/Insert",
+                             .command = "component.new",
+                             .toolbar = true,
+                             .icon = std::string(icons::modeling::new_part_svg),
+                             .tip = "Add a new, empty part, made inside the assembly.",
+                             .enabled = [assembly] { return assembly() != nullptr; }});
+    ctx.addAction(ActionSpec{.id = "sb.modeling.add_component",
+                             .text = "Add another",
+                             .menu = "Assemble/Insert",
+                             .command = "component.add",
+                             .fromComponentPart = "part",
+                             .toolbar = true,
+                             .icon = std::string(icons::modeling::add_component_svg),
+                             .tip = "Add another copy of the picked component's part, at the origin."});
+    ctx.addAction(ActionSpec{.id = "sb.modeling.ground",
+                             .text = "Ground",
+                             .menu = "Assemble/Component",
+                             .toolbar = true,
+                             .icon = std::string(icons::modeling::ground_svg),
+                             .tip = "Fix the picked component where it is, or let it go again.",
+                             .run =
+                                 [&ctx, picked] {
+                                     const auto* c = picked();
+                                     if (!c) return;
+                                     const auto name = c->name;
+                                     const bool grounded = !c->grounded;
+                                     ctx.documents().run(ctx.documents().active(), "component.ground",
+                                                         {{"component", name}, {"grounded", grounded}});
+                                 },
+                             .checked = [picked] { return picked() && picked()->grounded; },
+                             .enabled = [picked] { return picked() != nullptr; }});
+    ctx.addAction(ActionSpec{.id = "sb.modeling.delete_component",
+                             .text = "Delete component",
+                             .menu = "Assemble/Component",
+                             .command = "component.delete",
+                             .fromComponent = "component",
+                             .toolbar = true,
+                             .buttonText = "Delete",
+                             .icon = std::string(icons::modeling::delete_component_svg),
+                             .tip = "Take the picked component out of the assembly."});
+    ctx.addAction(ActionSpec{.id = "sb.modeling.update_links",
+                             .text = "Update linked parts",
+                             .menu = "Assemble/Parts",
+                             .command = "part.update",
+                             .toolbar = true,
+                             .buttonText = "Update",
+                             .icon = std::string(icons::modeling::update_links_svg),
+                             .tip = "Use the new part from each linked file that changed since the assembly "
+                                    "opened.",
+                             .enabled = [assembly] {
+                                 const auto* doc = assembly();
+                                 if (!doc) return false;
+                                 const auto parts = doc->parts();
+                                 return std::any_of(parts.begin(), parts.end(), [doc](const auto* p) {
+                                     return doc->partLink(p->id()) != nullptr;
+                                 });
+                             }});
+    ctx.addAction(ActionSpec{.id = "sb.modeling.find_file",
+                             .text = "Find linked file",
+                             .menu = "Assemble/Parts",
+                             .command = "part.relink",
+                             .fromComponentPart = "part",
+                             .fromFile = "file",
+                             .fileTypes = designs,
+                             .toolbar = true,
+                             .buttonText = "Find file",
+                             .icon = std::string(icons::modeling::find_file_svg),
+                             .tip = "Link the picked component's part to its file where it is now, when "
+                                    "it was moved or renamed.",
+                             .enabled = pickedLinked(true)});
+    ctx.addAction(ActionSpec{.id = "sb.modeling.make_inside",
+                             .text = "Make part inside",
+                             .menu = "Assemble/Parts",
+                             .command = "part.make_inside",
+                             .fromComponentPart = "part",
+                             .icon = std::string(icons::modeling::make_inside_svg),
+                             .tip = "Keep the picked component's part only in the assembly, so changing its "
+                                    "file no longer changes it.",
+                             .enabled = pickedLinked(true)});
+    ctx.addAction(ActionSpec{.id = "sb.modeling.save_part",
+                             .text = "Save part as file",
+                             .menu = "Assemble/Parts",
+                             .command = "part.save_as",
+                             .fromComponentPart = "part",
+                             .fromFile = "file",
+                             .fileTypes = designs,
+                             .saveFile = true,
+                             .suggestedFile =
+                                 [assembly, picked] {
+                                     const auto* c = picked();
+                                     const auto* part = c ? assembly()->findPart(c->part) : nullptr;
+                                     return part ? part->name() + ".sb" : std::string();
+                                 },
+                             .icon = std::string(icons::modeling::save_part_svg),
+                             .tip = "Save the picked component's part as a .sb file of its own, and link it, "
+                                    "to open it on its own or use it in other assemblies.",
+                             .enabled = pickedLinked(false)});
+}
+
 void registerModeling(plugin::PluginContext& ctx) {
     // Construction planes are drawn in the view after every rebuild and pick.
     ctx.listen<plugin::RebuildFinished>([&ctx](const auto&) { drawPlanes(ctx); });
@@ -421,6 +586,7 @@ void registerModeling(plugin::PluginContext& ctx) {
                              .fromSelection = {"feature"},
                              .shortcut = "Delete",
                              .tip = "Delete the selected step."});
+    addAssembleTools(ctx);
 }
 
 }  // namespace

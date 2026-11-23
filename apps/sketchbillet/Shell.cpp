@@ -11,6 +11,7 @@
 #include <QCloseEvent>
 #include <QDateTime>
 #include <QDesktopServices>
+#include <QDir>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -51,6 +52,7 @@
 #include "sb/io/SketchBilletFile.h"
 #include "sb/io/Steps.h"
 #include "sb/io/ThreeMf.h"
+#include "sb/model/AssemblyCommands.h"
 #include "sb/model/Commands.h"
 #include "sb/plugin/Events.h"
 
@@ -180,6 +182,10 @@ Shell::Shell(plugin::PluginHost& host, AppUi& ui, QSettings& settings, QWidget* 
                "STL, from 3D modeling programs and slicers (*.stl *.STL);;"
                "3MF, from slicers and 3D modeling programs (*.3mf *.3MF)"));
     };
+    askFilePath = [this](const QString& title, const QString& types, bool save, const QString& suggested) {
+        return save ? QFileDialog::getSaveFileName(this, title, suggested, types)
+                    : QFileDialog::getOpenFileName(this, title, suggested, types);
+    };
     askExportPath = [this](const QString& suggested) {
         const QString stl = tr("STL, for 3D printing (*.stl)");
         const QString threeMf = tr("3MF, for 3D printing, with the part's name, material and color (*.3mf)");
@@ -261,7 +267,8 @@ void Shell::buildMenus() {
     // The toolbar: File and the quick buttons on top, then tabs of panels.
     ribbon_ = new Ribbon(this);
     setMenuWidget(ribbon_);
-    ribbon_->setTabOrder({tr("Model"), tr("Sketch"), tr("Inspect"), tr("View")});
+    ribbon_->setTabOrder({tr("Model"), tr("Assemble"), tr("Sketch"), tr("Inspect"), tr("View")});
+    ribbon_->setPanelOrder(tr("Assemble"), {tr("Insert"), tr("Component"), tr("Parts")});
     // Most-used panels first, from left to right.
     ribbon_->setPanelOrder(
         tr("Model"), {tr("Sketch"), tr("Create"), tr("Modify"), tr("Combine"), tr("Pattern"), tr("Inspect"),
@@ -274,6 +281,10 @@ void Shell::buildMenus() {
     auto* newAct = file->addAction(tr("&New"), this, [this] { newDesign(); });
     newAct->setObjectName(QStringLiteral("sb.shell.new"));
     newAct->setShortcut(QKeySequence::New);
+    auto* newAssemblyAct = file->addAction(tr("New &assembly"), this, [this] { newAssembly(); });
+    newAssemblyAct->setObjectName(QStringLiteral("sb.shell.new_assembly"));
+    newAssemblyAct->setStatusTip(
+        tr("Start a design that puts parts together, like a car's body and wheels."));
     auto* openAct = file->addAction(tr("&Open..."), this, [this] {
         const auto path = QFileDialog::getOpenFileName(this, tr("Open design"), QString(),
                                                        tr("SketchBillet designs (*.sb)"));
@@ -724,6 +735,14 @@ void Shell::refreshActions() {
         // Enabled: a design to change (or the plugin's own code), the steps it needs
         // picked, and whatever the plugin says.
         bool ok = doc != nullptr || static_cast<bool>(spec.run);
+        // An assembly has no steps of its own: steps go in its parts.
+        if (doc && doc->kind() == model::DocKind::Assembly &&
+            (spec.command.rfind("feature.", 0) == 0 || spec.command.rfind("sketch.", 0) == 0 ||
+             spec.command.rfind("folder.", 0) == 0))
+            ok = false;
+        if (!spec.fromComponent.empty() || !spec.fromComponentPart.empty()) {
+            ok = ok && sel.doc() == activeDesign() && sel.components().size() == 1;
+        }
         if (!spec.fromSelection.empty()) {
             ok = ok && sel.doc() == activeDesign() && sel.features().size() == spec.fromSelection.size();
         }
@@ -857,7 +876,39 @@ void Shell::runAction(const plugin::ActionSpec& spec) {
         args[spec.fromFaces] = std::move(faces);
         if (!spec.fromFacesBody.empty()) args[spec.fromFacesBody] = sel.elements().front().body;
     }
+    if (!spec.fromComponent.empty() || !spec.fromComponentPart.empty()) {
+        const auto* design = docs.find(doc);
+        const auto* c = design && sel.doc() == doc && sel.components().size() == 1
+                            ? design->findComponent(sel.components().front())
+                            : nullptr;
+        const auto* part = c ? design->findPart(c->part) : nullptr;
+        if (!part) {
+            showProblems({{"action.component",
+                           Severity::Error,
+                           tr("%1 needs one component picked, in the feature tree or the 3D view.")
+                               .arg(qs(spec.text))
+                               .toStdString(),
+                           {}}});
+            return;
+        }
+        if (!spec.fromComponent.empty()) args[spec.fromComponent] = c->name;
+        if (!spec.fromComponentPart.empty()) args[spec.fromComponentPart] = part->name();
+    }
+    if (!spec.fromFile.empty()) {
+        QString suggested;
+        try {
+            if (spec.suggestedFile) suggested = qs(spec.suggestedFile());
+        } catch (...) {
+            // A plugin's function failed: start with no name.
+        }
+        const QString path = askFilePath(qs(spec.text), qs(spec.fileTypes), spec.saveFile, suggested);
+        if (path.isEmpty()) return;  // the window was closed
+        const auto u = QDir::cleanPath(path).toStdU16String();
+        const auto utf8 = std::filesystem::path(u).u8string();
+        args[spec.fromFile] = std::string(utf8.begin(), utf8.end());
+    }
     const auto before = docs.find(doc)->featureCount();
+    const auto componentsBefore = docs.find(doc)->components();
     auto problems = docs.run(doc, spec.command, args);
     if (!problems.empty()) {
         showProblems(problems);
@@ -871,6 +922,16 @@ void Shell::runAction(const plugin::ActionSpec& spec) {
     const auto* design = docs.find(doc);
     if (design && design->featureCount() > before) {
         host_.selection().set(doc, {design->featureAt(design->featureCount() - 1).id()});
+    }
+    // Or the components it put in an assembly, so they show where they are.
+    if (design && design->components().size() > componentsBefore.size()) {
+        std::vector<model::ComponentId> added;
+        for (const auto& c : design->components()) {
+            if (std::none_of(componentsBefore.begin(), componentsBefore.end(),
+                             [&](const model::Component& b) { return b.id == c.id; }))
+                added.push_back(c.id);
+        }
+        host_.selection().setComponents(doc, added);
     }
 }
 
@@ -1011,6 +1072,29 @@ bool Shell::newDesign() {
     QString name = tr("Untitled");
     for (int n = 2; taken(name); ++n) name = tr("Untitled %1").arg(n);
     addDesign(std::make_unique<model::Document>(model::DocKind::Part, name.toStdString()), {});
+    return true;
+}
+
+bool Shell::newAssembly() {
+    const DocId old = activeDesign();
+    const bool blank = blankDesign(host_.documents().find(old), paths_.count(old) > 0);
+    auto taken = [&](const QString& name) {
+        for (const auto& id : host_.documents().ids()) {
+            if (!(blank && id == old) && designTitle(id) == name) return true;
+        }
+        return false;
+    };
+    QString name = tr("Untitled assembly");
+    for (int n = 2; taken(name); ++n) name = tr("Untitled assembly %1").arg(n);
+    auto doc = std::make_unique<model::Document>(model::DocKind::Part, name.toStdString());
+    if (auto problems = doc->execute(std::make_unique<model::MakeAssemblyCommand>()); !problems.empty()) {
+        showProblems(problems);
+        return false;
+    }
+    doc->clearHistory();  // a new design: nothing to undo yet
+    doc->markSaved();
+    addDesign(std::move(doc), {});
+    showMessage(tr("A new assembly. Put parts in it with Assemble > Insert part."));
     return true;
 }
 

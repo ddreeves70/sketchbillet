@@ -14,6 +14,7 @@
 #include <QDialog>
 #include <QDoubleSpinBox>
 #include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
 #include <QKeyEvent>
@@ -282,11 +283,11 @@ TEST_CASE("every toolbar button has a picture", "[app][icons]") {
             !b->objectName().endsWith(QStringLiteral(".primary")))
             CHECK(b->toolButtonStyle() == Qt::ToolButtonTextUnderIcon);
     }
-    // The top row (5), Import, Export and Check print (3), sb.modeling (15),
-    // sb.sketcher (2 on Model, 1 main, 5 drawing, 3 editing, 5 constraints), View
-    // options (1), the grid (2), the axes (2), the feature tree and Properties panels (2),
-    // and Save and Reset layout (2).
-    CHECK(buttons == 5 + 3 + 15 + 16 + 1 + 2 + 2 + 2 + 2);
+    // The top row (5), Import, Export and Check print (3), sb.modeling (15 on Model,
+    // 8 on Assemble), sb.sketcher (2 on Model, 1 main, 5 drawing, 3 editing, 5
+    // constraints), View options (1), the grid (2), the axes (2), the feature tree and
+    // Properties panels (2), and Save and Reset layout (2).
+    CHECK(buttons == 5 + 3 + 15 + 8 + 16 + 1 + 2 + 2 + 2 + 2);
     // The dropdown item shows the same picture as its button.
     CHECK_FALSE(app.shell->action("sb.modeling.box")->icon().isNull());
 }
@@ -2901,6 +2902,122 @@ TEST_CASE("an assembly opens in the app: the tree lists its components and parts
     CHECK(doc.components()[2].name == "Back wheel");
     CHECK(tree->topLevelItem(0)->child(2)->text(0) == QStringLiteral("Back wheel"));
     CHECK(app.host.selection().components() == std::vector{doc.components()[2].id});  // still picked
+}
+
+TEST_CASE("the Assemble tab: a new assembly, inserting parts, components, and their parts' files",
+          "[app][assembly]") {
+    App app;
+    auto* tabs = app.shell->findChild<QTabBar*>(QStringLiteral("sb.ribbon.tabs"));
+    REQUIRE(tabs);
+    auto shownTabs = [&] {
+        QStringList shown;
+        for (int i = 0; i < tabs->count(); ++i) {
+            if (tabs->isTabVisible(i)) shown << tabs->tabText(i);
+        }
+        return shown;
+    };
+    // A wheel, saved as a file of its own.
+    model::Document wheel(model::DocKind::Part, "Wheel");
+    REQUIRE(wheel
+                .execute(std::make_unique<model::AddFeatureCommand>(
+                    std::make_unique<model::BoxFeature>("Box1", kernel::Vec3{}, kernel::Vec3{10, 10, 4})))
+                .empty());
+    const QString wheelFile = app.dir.filePath(QStringLiteral("Wheel.sb"));
+    REQUIRE(io::writeFile(wheel, wheelFile.toStdWString()).empty());
+    QString answer;  // what the file window answers
+    QString asked;   // and what it was asked
+    app.shell->askFilePath = [&](const QString& title, const QString& types, bool save,
+                                 const QString& suggested) {
+        asked = title + QStringLiteral("|") + types + QStringLiteral("|") +
+                (save ? QStringLiteral("save") : QString()) + QStringLiteral("|") + suggested;
+        return answer;
+    };
+
+    // File > New assembly: the Assemble tab takes the Model tab's place.
+    CHECK(shownTabs() ==
+          QStringList{QStringLiteral("Model"), QStringLiteral("Inspect"), QStringLiteral("View")});
+    REQUIRE(app.shell->newAssembly());
+    settle();
+    const DocId carId = app.host.documents().active();
+    const auto& car = *app.host.documents().find(carId);
+    CHECK(car.kind() == model::DocKind::Assembly);
+    CHECK(car.name() == "Untitled assembly");
+    CHECK_FALSE(car.canUndo());
+    CHECK(shownTabs() ==
+          QStringList{QStringLiteral("Assemble"), QStringLiteral("Inspect"), QStringLiteral("View")});
+    CHECK_FALSE(app.shell->action("sb.modeling.box")->isEnabled());            // steps go in parts
+    CHECK_FALSE(app.shell->action("sb.modeling.add_component")->isEnabled());  // nothing picked
+    CHECK_FALSE(app.shell->action("sb.modeling.update_links")->isEnabled());   // nothing linked
+
+    // Insert part: picks a file, links it, and picks the new component.
+    answer = QString();  // closing the window does nothing
+    app.click("sb.modeling.insert_part");
+    CHECK(car.components().empty());
+    CHECK(asked == QStringLiteral("Insert part|SketchBillet designs (*.sb)||"));
+    answer = wheelFile;
+    app.click("sb.modeling.insert_part");
+    REQUIRE(car.components().size() == 1);
+    CHECK(car.components()[0].name == "Wheel 1");
+    CHECK(car.partLink(car.components()[0].part));
+    CHECK(app.host.selection().components() == std::vector{car.components()[0].id});
+    CHECK(app.shell->action("sb.modeling.update_links")->isEnabled());
+    CHECK(app.shell->action("sb.modeling.find_file")->isEnabled());        // linked
+    CHECK_FALSE(app.shell->action("sb.modeling.save_part")->isEnabled());  // has a file already
+
+    // Add another: one more Wheel.
+    app.click("sb.modeling.add_component");
+    REQUIRE(car.components().size() == 2);
+    CHECK(car.components()[1].part == car.components()[0].part);
+    CHECK(app.host.selection().components() == std::vector{car.components()[1].id});
+
+    // Ground: a check mark that follows the picked component.
+    CHECK_FALSE(app.shell->action("sb.modeling.ground")->isChecked());
+    app.click("sb.modeling.ground");
+    CHECK(car.components()[1].grounded);
+    CHECK(app.shell->action("sb.modeling.ground")->isChecked());
+    app.click("sb.modeling.ground");
+    CHECK_FALSE(car.components()[1].grounded);
+
+    // Make part inside, then save it as a file of its own again.
+    app.click("sb.modeling.make_inside");
+    CHECK_FALSE(car.partLink(car.components()[0].part));
+    CHECK(app.shell->action("sb.modeling.save_part")->isEnabled());
+    const QString saved = app.dir.filePath(QStringLiteral("Wheel copy.sb"));
+    answer = saved;
+    app.click("sb.modeling.save_part");
+    CHECK(asked == QStringLiteral("Save part as file|SketchBillet designs (*.sb)|save|Wheel.sb"));
+    REQUIRE(car.partLink(car.components()[0].part));
+    CHECK(QFileInfo::exists(saved));
+
+    // Find linked file: back to Wheel.sb.
+    answer = wheelFile;
+    app.click("sb.modeling.find_file");
+    CHECK(QString::fromStdString(car.partLink(car.components()[0].part)->path)
+              .endsWith(QStringLiteral("/Wheel.sb")));
+
+    // Insert copy and New part: inside parts.
+    app.click("sb.modeling.insert_copy");
+    REQUIRE(car.components().size() == 3);
+    app.click("sb.modeling.new_part");
+    REQUIRE(car.components().size() == 4);
+    CHECK(car.parts().size() == 2);  // the copy is the same Wheel, so it's another Wheel component
+    CHECK(car.components()[3].name == "Part1 1");
+
+    // Delete component.
+    app.click("sb.modeling.delete_component");
+    CHECK(car.components().size() == 3);
+    CHECK(car.parts().size() == 1);  // Part1 went with its last component
+
+    // A part design: the Model tab is back.
+    app.shell->newDesign();
+    settle();
+    CHECK(shownTabs() ==
+          QStringList{QStringLiteral("Model"), QStringLiteral("Inspect"), QStringLiteral("View")});
+    CHECK(app.shell->action("sb.modeling.box")->isEnabled());
+    app.host.documents().setActive(carId);
+    settle();
+    CHECK(shownTabs() ==
+          QStringList{QStringLiteral("Assemble"), QStringLiteral("Inspect"), QStringLiteral("View")});
 }
 
 TEST_CASE("opening a file that isn't a design explains why", "[app]") {

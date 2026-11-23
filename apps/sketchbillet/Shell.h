@@ -61,6 +61,10 @@ public:
     std::function<QString()> askImportPath;
     // Asks where to export (.stl, .3mf or .step). Tests replace it. Empty means cancelled.
     std::function<QString(const QString& suggested)> askExportPath;
+    // Asks for the file a plugin's action needs (ActionSpec::fromFile): one to open,
+    // or (save) a new one. Tests replace it. Empty means cancelled.
+    std::function<QString(const QString& title, const QString& types, bool save, const QString& suggested)>
+        askFilePath;
     // Shows the print check's findings. Tests replace it so no dialog opens.
     std::function<void(const model::PrintCheckResult& result)> showPrintCheck;
 
@@ -69,6 +73,8 @@ public:
     // replaced instead, so starting SketchBillet and opening a file leaves one tab.
     // Each returns what went wrong, if anything (also shown in the status bar).
     bool newDesign();
+    // File > New assembly: a new design that's an assembly, to put parts in.
+    bool newAssembly();
     Diagnostics openDesign(const std::filesystem::path& path);
     // Closes a design (File > Close, or its tab's x), asking first if it has
     // unsaved changes. Closing the last one leaves a new empty design. Returns

@@ -8,19 +8,33 @@ Each copy of a part in an assembly is a **component**. Four wheels are four
 components, Wheel 1 to Wheel 4, all made from one Wheel part. Change the Wheel
 part and all four change, because they're the same part.
 
-You build assemblies with `sketchbillet_cli` (below), and open them in the
-desktop app to look at them:
+Start one in the desktop app with **File > New assembly**, or with
+`sketchbillet_cli` (below). While an assembly is open, the **Assemble** tab takes
+the Model tab's place:
 
-![The toy car open in the desktop app: the feature tree lists its five components and two parts](images/app-assembly-car.png)
+![The toy car open in the desktop app: the Assemble tab, and the feature tree listing its five components and two parts](images/app-assembly-car.png)
 
 In the app, the feature tree lists the assembly's **Components** (each with its
 part, and whether it's grounded or free) and its **Parts** (each linked to its
 file, or inside the assembly). Click a component, in the tree or in the viewer,
 to pick it: Properties shows its part, its file, where it's placed and which way
 it faces. Rename it there, or tick **Grounded** to fix it where it is.
-Right-click it in the tree to rename it, ground it or delete it. Putting parts
-in, and moving components, from the app come next; joints, which hold parts
-together and say how they move (a wheel turning on its axle), after that.
+Right-click it in the tree to rename it, ground it or delete it.
+
+| Assemble tab | What it does |
+| --- | --- |
+| **Insert part** | Puts a part from a `.sb` file in, linked to the file |
+| **Insert copy** | Puts a copy of a part from a `.sb` file in, as an inside part |
+| **New part** | Adds a new, empty part, made inside the assembly |
+| **Add another** | Adds another copy of the picked component's part |
+| **Ground** | Fixes the picked component where it is, or lets it go |
+| **Delete** | Takes the picked component out |
+| **Update** | Uses the new part from each linked file that changed |
+| **Find file** | Links the picked component's part to its file where it is now |
+| **Make part inside**, **Save part as file** | In the Parts dropdown: switch the picked component's part between inside and linked |
+
+Moving components in the app comes next; joints, which hold parts together and
+say how they move (a wheel turning on its axle), after that.
 
 ## An example: a toy car
 

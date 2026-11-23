@@ -403,7 +403,17 @@ TEST_CASE("sb.modeling adds menu items that run its commands", "[plugin][host]")
                                           "sb.modeling.turn_off",
                                           "sb.modeling.turn_on",
                                           "sb.modeling.new_folder",
-                                          "sb.modeling.delete"});
+                                          "sb.modeling.delete",
+                                          "sb.modeling.insert_part",
+                                          "sb.modeling.insert_copy",
+                                          "sb.modeling.new_part",
+                                          "sb.modeling.add_component",
+                                          "sb.modeling.ground",
+                                          "sb.modeling.delete_component",
+                                          "sb.modeling.update_links",
+                                          "sb.modeling.find_file",
+                                          "sb.modeling.make_inside",
+                                          "sb.modeling.save_part"});
     CHECK(get(host, "sb.modeling").actions == ids);
 }
 
