@@ -131,6 +131,10 @@ Rules:
   and commit the PNG. Once the desktop app exists, add screenshots the same way.
 - Same writing rules as the app: plain words for a 14-year-old, units on every
   number, say how to fix problems.
+- Tutorial videos: a tutorial's video is a script in `tools/videos/scripts/` that
+  plays it in the desktop app (see `tools/videos/README.md`). The `videos.*` tests
+  play every script; a change that breaks one fixes the script in the same PR, and
+  a change to a tutorial changes its script and its `expect` numbers too.
 
 ## Plugin developer guide
 

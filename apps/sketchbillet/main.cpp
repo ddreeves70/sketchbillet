@@ -10,6 +10,9 @@
 //                                      `sketchbillet_cli open --edges` lists them (for screenshots)
 //   sketchbillet --faces Extrude1:6          ... or a face, as `open --faces` lists them
 //                                      (after --trigger sb.measure.measure, they're measured)
+//   sketchbillet --demo script.json          play a script of clicks and typing, for the
+//                                      tutorial videos (Demo.h); --demo-log log.jsonl
+//                                      writes its captions' times, --demo-speed 0 plays fast
 //   sketchbillet --settings file.ini         keep layouts in this file instead of the user's settings
 //   sketchbillet --screenshot out.png        save a picture of the window and quit
 //   sketchbillet --smoke-test                build the window, check it, and quit (CI)
@@ -33,10 +36,15 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QEventLoop>
+#include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMessageBox>
 #include <QPixmap>
 #include <QPushButton>
+#include <QScreen>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QStringList>
@@ -53,6 +61,7 @@
 #include "AppSettings.h"
 #include "AppUi.h"
 #include "CrashReport.h"
+#include "Demo.h"
 #include "Icons.h"
 #include "Shell.h"
 #include "Updates.h"
@@ -327,6 +336,35 @@ int main(int argc, char** argv) {
     if (args.contains(QStringLiteral("--smoke-test"))) return smokeTest(shell);
     if (const auto file = option(args, QStringLiteral("--screenshot")); !file.isEmpty())
         return screenshot(shell, file);
+
+    if (const auto demo = option(args, QStringLiteral("--demo")); !demo.isEmpty()) {
+        // Plays a script of clicks and typing (Demo.h), for the tutorial videos.
+        QFile file(demo);
+        QJsonParseError error{};
+        const auto script = file.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(file.readAll(), &error)
+                                                           : QJsonDocument();
+        if (!script.isObject()) {
+            std::fprintf(stderr, "SketchBillet couldn't read the demo %s: %s\n", qPrintable(demo),
+                         file.isOpen() ? qPrintable(error.errorString()) : "the file can't be opened");
+            return 1;
+        }
+        const auto speedText = option(args, QStringLiteral("--demo-speed"));
+        const double speed = speedText.isEmpty() ? 1.0 : speedText.toDouble();
+        // The whole screen, with no window frame: what the video shows.
+        shell.setGeometry(QGuiApplication::primaryScreen()->geometry());
+        shell.show();
+        auto* player =
+            new sb::app::DemoPlayer(shell, script.object().value(QStringLiteral("steps")).toArray(), speed,
+                                    option(args, QStringLiteral("--demo-log")));
+        QObject::connect(player, &sb::app::DemoPlayer::finished, &app, [player](bool ok) {
+            if (!ok) std::fprintf(stderr, "The demo stopped. %s\n", qPrintable(player->problem()));
+            QApplication::exit(ok ? 0 : 1);
+        });
+        player->start();
+        const int code = QApplication::exec();
+        shell.setWindowModified(false);  // a demo's design isn't asked about
+        return code;
+    }
 
     shell.show();
     QTimer::singleShot(0, &shell, [&] {

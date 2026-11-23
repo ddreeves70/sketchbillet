@@ -7,6 +7,8 @@ qt_add_library(sb_app_core STATIC
   AppUi.h
   CrashReport.cpp
   CrashReport.h
+  Demo.cpp
+  Demo.h
   Icons.cpp
   Icons.h
   Shell.cpp
