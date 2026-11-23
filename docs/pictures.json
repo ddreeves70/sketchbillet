@@ -726,7 +726,7 @@
         "run --open Car.sb --save Car.sb component.place \"component=Wheel 4\" origin=68,40,12 x=1,0,0 z=0,1,0"
       ],
       "app": {"open": "Car.sb"},
-      "crop": [0, 140, 1280, 545]
+      "crop": [0, 0, 1280, 685]
     },
     {
       "out": "docs/user-guide/images/app-properties.png",

@@ -102,6 +102,16 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            action  Model/Steps > Turn on  (feature.suppress)
            action  Model/Steps > New folder  (folder.add)
            action  Model/Steps > Delete step  (feature.delete)
+           action  Assemble/Insert > Insert part  (component.insert)
+           action  Assemble/Insert > Insert copy  (component.insert)
+           action  Assemble/Insert > New part  (component.new)
+           action  Assemble/Insert > Add another  (component.add)
+           action  Assemble/Component > Ground  (check mark)
+           action  Assemble/Component > Delete component  (component.delete)
+           action  Assemble/Parts > Update linked parts  (part.update)
+           action  Assemble/Parts > Find linked file  (part.relink)
+           action  Assemble/Parts > Make part inside  (part.make_inside)
+           action  Assemble/Parts > Save part as file  (part.save_as)
 ```
 
 ## Use plugins from a folder

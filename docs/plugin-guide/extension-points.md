@@ -113,6 +113,38 @@ ctx.addAction({.id = "sb.modeling.fillet", .text = "Fillet", .menu = "Model/Modi
                .tip = "Round the picked edges by 1 mm."});
 ```
 
+**A picked component.** In an assembly, `fromComponent` fills a `Text` argument
+with the picked component's name (like `Wheel 2`), and `fromComponentPart` with
+its part's name (like `Wheel`). The item is greyed out unless exactly one
+component is picked. This is how **Assemble > Delete component** works:
+
+```cpp
+ctx.addAction({.id = "sb.modeling.delete_component", .text = "Delete component",
+               .menu = "Assemble/Component",
+               .command = "component.delete",
+               .fromComponent = "component",
+               .tip = "Take the picked component out of the assembly."});
+```
+
+**A file.** `fromFile` fills a `Text` argument with a file the student picks:
+clicking the item opens a file window, and the file's full path goes in the
+argument. `fileTypes` says which files the window shows; `saveFile = true` asks
+for a new file instead of one to open, and `suggestedFile` gives the name it
+starts with. Closing the window does nothing. This is how **Assemble > Save part
+as file** works:
+
+```cpp
+ctx.addAction({.id = "sb.modeling.save_part", .text = "Save part as file",
+               .menu = "Assemble/Parts",
+               .command = "part.save_as",
+               .fromComponentPart = "part",
+               .fromFile = "file",
+               .fileTypes = "SketchBillet designs (*.sb)",
+               .saveFile = true,
+               .suggestedFile = [&] { return partName() + ".sb"; },
+               .tip = "Save the picked component's part as a .sb file of its own."});
+```
+
 **Buttons.** Every action is in its panel's dropdown. `.toolbar = true` also
 makes it a button on the panel: give that to the tools students use most, and
 leave the rest in the dropdown, so the toolbar stays short. If its words are too

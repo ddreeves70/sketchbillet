@@ -175,7 +175,10 @@ class PluginContext;
 /// which the move handles use while a body is dragged.
 /// Version 60 added picking an assembly's components (Selection::components(),
 /// Selection::setComponents() and SelectionChanged::components).
-inline constexpr int kPluginApiVersion = 60;
+/// Version 61 added actions that take the picked component or its part
+/// (ActionSpec::fromComponent, fromComponentPart) and a file the student picks
+/// (fromFile, fileTypes, saveFile, suggestedFile).
+inline constexpr int kPluginApiVersion = 61;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.
