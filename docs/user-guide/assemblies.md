@@ -8,10 +8,19 @@ Each copy of a part in an assembly is a **component**. Four wheels are four
 components, Wheel 1 to Wheel 4, all made from one Wheel part. Change the Wheel
 part and all four change, because they're the same part.
 
-Today you build assemblies with `sketchbillet_cli`. The desktop app shows them
-in a later version; until then it says to list them with
-`sketchbillet_cli open car.sb --components`. Joints, which hold parts together
-and say how they move (a wheel turning on its axle), come after that.
+You build assemblies with `sketchbillet_cli` (below), and open them in the
+desktop app to look at them:
+
+![The toy car open in the desktop app: the feature tree lists its five components and two parts](images/app-assembly-car.png)
+
+In the app, the feature tree lists the assembly's **Components** (each with its
+part, and whether it's grounded or free) and its **Parts** (each linked to its
+file, or inside the assembly). Click a component, in the tree or in the viewer,
+to pick it: Properties shows its part, its file, where it's placed and which way
+it faces. Rename it there, or tick **Grounded** to fix it where it is.
+Right-click it in the tree to rename it, ground it or delete it. Putting parts
+in, and moving components, from the app come next; joints, which hold parts
+together and say how they move (a wheel turning on its axle), after that.
 
 ## An example: a toy car
 

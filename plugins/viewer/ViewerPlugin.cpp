@@ -707,6 +707,14 @@ private:
             const DocId doc = ctx_.documents().active();
             if (ctx_.documents().find(doc)) ctx_.selection().set(doc, ids);
         });
+        connect(pane, &view::ViewWidget::componentsPicked, this, [this](const std::vector<InstanceId>& ids) {
+            const DocId doc = ctx_.documents().active();
+            if (!ctx_.documents().find(doc)) return;
+            if (ids.empty())
+                ctx_.selection().clear();
+            else
+                ctx_.selection().setComponents(doc, ids);
+        });
         auto picked = [this](const std::vector<view::ScenePick>& picks) {
             const DocId doc = ctx_.documents().active();
             if (ctx_.documents().find(doc))
@@ -1008,6 +1016,23 @@ view::SceneContent viewerScene(const plugin::DocumentList& docs, const plugin::S
     const auto* design = docs.find(id);
     if (!report || !design) return out;
     if (selection.doc() == id) out.selected = selection.features();
+    if (design->kind() == model::DocKind::Assembly) {
+        // Each component draws its part's bodies, placed. Components of the same
+        // part share the part's shapes, so the view meshes each shape once.
+        if (selection.doc() == id) out.selectedComponents = selection.components();
+        for (const auto& c : design->components()) {
+            const auto* part = design->findPart(c.part);
+            const auto* built = report->part(c.part);
+            if (!part || !built) continue;
+            for (const auto& body : built->bodies()) {
+                const auto* shape = built->shapeOf(body);
+                if (!shape) continue;
+                const auto color = part->colorOf(body);
+                out.bodies.push_back({body, *shape, false, {color.r, color.g, color.b}, c.id, c.placement});
+            }
+        }
+        return out;
+    }
     // Each body is drawn in its own color, or its material's (Document::colorOf()).
     auto colorOf = [design](const FeatureId& f) {
         const auto c = design->colorOf(f);

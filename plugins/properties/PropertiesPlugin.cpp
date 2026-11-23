@@ -281,6 +281,11 @@ private:
             showDesign();
             return;
         }
+        if (const auto& picked = ctx_.selection().components(); !picked.empty()) {
+            showComponent(picked);
+            return;
+        }
+        shownComponent_ = {};
         changing_->setVisible(!changingStep_.isNil());
         if (!changingStep_.isNil()) {
             // Picking a Fillet's or Chamfer's edges again.
@@ -334,8 +339,11 @@ private:
                 }
                 return;
             }
-            title_->setText(count > 1 ? tr("%1 steps selected").arg(count)
-                                      : tr("Pick a step in the feature tree to see its numbers."));
+            const auto* active = ctx_.documents().find(ctx_.documents().active());
+            const bool assembly = active && active->kind() == model::DocKind::Assembly;
+            title_->setText(count > 1  ? tr("%1 steps selected").arg(count)
+                            : assembly ? tr("Pick a component to see where it is.")
+                                       : tr("Pick a step in the feature tree to see its numbers."));
             status_->clear();
             return;
         }
@@ -358,6 +366,97 @@ private:
             }
         }
         status_->setText(problems.trimmed());
+    }
+
+    // An assembly's component: its name, its part (and that part's file, for a
+    // linked part), where it's placed, and whether it's grounded.
+    void showComponent(const std::vector<model::ComponentId>& picked) {
+        shown_ = FeatureId{};
+        status_->clear();
+        const auto* design = ctx_.documents().find(ctx_.selection().doc());
+        const auto* c = design && picked.size() == 1 ? design->findComponent(picked.front()) : nullptr;
+        if (!c) {
+            shownComponent_ = {};
+            clearForm();
+            title_->setText(tr("%1 components picked").arg(picked.size()));
+            return;
+        }
+        title_->setText(QString::fromStdString(c->name));
+        const auto unit = design->lengthUnit();
+        if (c->id != shownComponent_ || unit != unit_) {
+            shownComponent_ = c->id;
+            unit_ = unit;
+            clearForm();
+            auto* form = new QFormLayout(form_);
+            form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+            auto* name = new QLineEdit(form_);
+            name->setObjectName(QStringLiteral("component"));
+            form->addRow(tr("Name"), name);
+            connect(name, &QLineEdit::editingFinished, this, [this, name] {
+                const auto* d = ctx_.documents().find(ctx_.selection().doc());
+                const auto* now = d ? d->findComponent(shownComponent_) : nullptr;
+                const auto text = name->text().trimmed().toStdString();
+                if (!now || text == now->name) return;
+                auto problems = ctx_.documents().run(ctx_.selection().doc(), "component.rename",
+                                                     {{"component", now->name}, {"name", text}});
+                if (!problems.empty()) {
+                    ui_.showProblems(problems);
+                    name->setText(QString::fromStdString(now->name));
+                }
+            });
+            auto label = [this, form](const char* object, const QString& row) {
+                auto* l = new QLabel(form_);
+                l->setObjectName(QLatin1String(object));
+                l->setWordWrap(true);
+                form->addRow(row, l);
+                return l;
+            };
+            label("part", tr("Part"));
+            label("file", tr("File"));
+            label("place", tr("Place"));
+            label("facing", tr("Facing"));
+            auto* grounded = new QCheckBox(tr("Grounded: fixed where it is"), form_);
+            grounded->setObjectName(QStringLiteral("grounded"));
+            grounded->setToolTip(tr("A grounded component stays put. A free one can be moved."));
+            form->addRow(QString(), grounded);
+            connect(grounded, &QCheckBox::clicked, this, [this](bool on) {
+                const auto* d = ctx_.documents().find(ctx_.selection().doc());
+                const auto* now = d ? d->findComponent(shownComponent_) : nullptr;
+                if (!now) return;
+                auto problems = ctx_.documents().run(ctx_.selection().doc(), "component.ground",
+                                                     {{"component", now->name}, {"grounded", on}});
+                if (!problems.empty()) ui_.showProblems(problems);
+            });
+        }
+        // The values, each time (a rename or a move changes them).
+        filling_ = true;
+        if (auto* name = form_->findChild<QLineEdit*>(QStringLiteral("component")); name && !name->hasFocus())
+            name->setText(QString::fromStdString(c->name));
+        const auto* part = design->findPart(c->part);
+        const auto* link = part ? design->partLink(part->id()) : nullptr;
+        form_->findChild<QLabel*>(QStringLiteral("part"))
+            ->setText(part ? QString::fromStdString(part->name()) : tr("missing"));
+        QString file = tr("Inside this assembly");
+        if (link) {
+            const auto name = QString::fromStdString(link->path.substr(link->path.find_last_of('/') + 1));
+            file = link->found ? name
+                               : tr("%1 (can't be found: using the copy saved in the assembly)").arg(name);
+        }
+        auto* fileLabel = form_->findChild<QLabel*>(QStringLiteral("file"));
+        fileLabel->setText(file);
+        fileLabel->setToolTip(link ? QString::fromStdString(link->path) : QString());
+        auto length = [unit](double mm) { return qs(lengthText(mm, unit)); };
+        const auto& p = c->placement;
+        form_->findChild<QLabel*>(QStringLiteral("place"))
+            ->setText(tr("x %1, y %2, z %3").arg(length(p.origin.x), length(p.origin.y), length(p.origin.z)));
+        auto direction = [](const kernel::Vec3& v) {
+            auto n = [](double d) { return QString::number(std::abs(d) < 1e-12 ? 0.0 : d, 'g', 4); };
+            return QStringLiteral("%1, %2, %3").arg(n(v.x), n(v.y), n(v.z));
+        };
+        form_->findChild<QLabel*>(QStringLiteral("facing"))
+            ->setText(tr("x along %1; z along %2").arg(direction(p.xAxis), direction(p.zAxis)));
+        form_->findChild<QCheckBox*>(QStringLiteral("grounded"))->setChecked(c->grounded);
+        filling_ = false;
     }
 
     // The design's own settings (the feature tree's Document settings row).
@@ -1621,6 +1720,8 @@ private:
     }
 
     // The unit the shown design's lengths are in (its Document settings).
+    model::ComponentId shownComponent_;  // the component the form shows, if one
+
     LengthUnit unitNow() const {
         const auto* d = design();
         return d ? d->lengthUnit() : LengthUnit::Millimeter;

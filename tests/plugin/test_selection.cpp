@@ -115,3 +115,38 @@ TEST_CASE("the design itself can be picked, for its settings; picking steps un-p
     f.docs.close(f.doc);
     CHECK_FALSE(f.selection.designPicked());
 }
+
+TEST_CASE("an assembly's components can be picked; steps and deleted components drop them",
+          "[plugin][selection][assembly]") {
+    Fixture f;
+    REQUIRE(f.docs.run(f.doc, "assembly.new", {}).empty());
+    REQUIRE(f.docs.run(f.doc, "component.new", {{"name", std::string("Wheel")}}).empty());
+    REQUIRE(f.docs.run(f.doc, "component.add", {{"part", std::string("Wheel")}, {"count", std::int64_t{2}}})
+                .empty());
+    const auto components = f.docs.find(f.doc)->components();
+    REQUIRE(components.size() == 3);
+    const auto wheel1 = components[0].id;
+    const auto wheel3 = components[2].id;
+
+    f.selection.setComponents(f.doc, {wheel3, model::ComponentId::generate(), wheel1, wheel3});
+    CHECK(f.selection.components() == std::vector{wheel3, wheel1});  // in order, without strangers or repeats
+    CHECK(f.selection.containsComponent(wheel1));
+    CHECK(f.selection.doc() == f.doc);
+    REQUIRE(f.heard.size() == 1);
+    CHECK(f.heard.back().components == std::vector{wheel3, wheel1});
+    CHECK(f.heard.back().features.empty());
+    f.selection.setComponents(f.doc, {wheel3, wheel1});  // the same: nothing to tell
+    CHECK(f.heard.size() == 1);
+
+    // Deleting one drops it; undo doesn't bring it back into the pick.
+    REQUIRE(f.docs.run(f.doc, "component.delete", {{"component", std::string("Wheel 3")}}).empty());
+    CHECK(f.selection.components() == std::vector{wheel1});
+
+    // Picking the design's settings, or nothing, un-picks components.
+    f.selection.pickDesign(f.doc);
+    CHECK(f.selection.components().empty());
+    f.selection.setComponents(f.doc, {wheel1});
+    f.selection.clear();
+    CHECK(f.selection.components().empty());
+    CHECK(f.selection.doc().isNil());
+}

@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 
+#include "sb/model/Assembly.h"
 #include "sb/core/Id.h"
 #include "sb/plugin/Picks.h"
 
@@ -66,6 +67,9 @@ struct SelectionChanged {
     bool design =
         false;  ///< The design itself is picked (Document settings), not steps; see Selection::pickDesign().
     std::vector<PickedElement> elements;  ///< The picked edges, when edges are picked instead of steps.
+    /// The picked components of an assembly, in the order they were picked, when
+    /// components are picked instead of steps (see Selection::setComponents()).
+    std::vector<model::ComponentId> components;
 };
 
 /// What clicking a body in a viewer picks changed (see Selection::setPickMode()).

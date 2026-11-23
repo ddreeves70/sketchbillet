@@ -34,6 +34,7 @@ constexpr const char* kManifest = R"({
 
 // Where a folder row keeps its folder's id (a step row keeps its step's id in Qt::UserRole).
 constexpr int kFolderRole = Qt::UserRole + 1;
+constexpr int kComponentRole = Qt::UserRole + 2;  // an assembly's component row: its id
 
 const char* kindName(const model::Feature& f) {
     switch (f.type()) {
@@ -191,7 +192,11 @@ private:
         settings_->setEnabled(design != nullptr);
         const auto folders = design ? design->folders() : std::vector<model::Folder>{};
         tree_->setRootIsDecorated(!folders.empty());
-        if (design) {
+        const bool assembly = design && design->kind() == model::DocKind::Assembly;
+        tree_->setHeaderLabels({assembly ? tr("Name") : tr("Step"), tr("Kind"), tr("Status")});
+        if (assembly) {
+            fillAssembly(*design);
+        } else if (design) {
             std::map<FolderId, QTreeWidgetItem*> folderRows;
             for (std::size_t i = 0; i < design->featureCount(); ++i) {
                 const auto& f = design->featureAt(i);
@@ -254,6 +259,68 @@ private:
         showSelection();
     }
 
+    // An assembly: its Components (each with its part, grounded or free), then
+    // its Parts (each linked to its file, or inside).
+    void fillAssembly(const model::Document& design) {
+        tree_->setRootIsDecorated(true);
+        auto group = [this](const QString& name, const QString& tip) {
+            auto* row = new QTreeWidgetItem(tree_);
+            row->setText(0, name);
+            row->setFlags(Qt::ItemIsEnabled);  // a heading: not picked, not renamed
+            row->setToolTip(0, tip);
+            QFont bold = row->font(0);
+            bold.setBold(true);
+            row->setFont(0, bold);
+            row->setExpanded(true);
+            return row;
+        };
+        auto* components =
+            group(tr("Components"), tr("The parts put in this assembly: each is placed somewhere. "
+                                       "Several can be copies of one part."));
+        for (const auto& c : design.components()) {
+            auto* item = new QTreeWidgetItem(components);
+            const auto* part = design.findPart(c.part);
+            item->setText(0, QString::fromStdString(c.name));
+            item->setText(1, part ? QString::fromStdString(part->name()) : tr("missing"));
+            item->setText(2, c.grounded ? tr("grounded") : tr("free"));
+            item->setData(0, kComponentRole, QString::fromStdString(c.id.toString()));
+            item->setFlags(item->flags() | Qt::ItemIsEditable);
+            item->setToolTip(2, c.grounded ? tr("Fixed where it is.") : tr("Free to move."));
+        }
+        auto* parts =
+            group(tr("Parts"), tr("The parts this assembly uses, each once, however many copies of it "
+                                  "there are."));
+        for (const auto* part : design.parts()) {
+            auto* item = new QTreeWidgetItem(parts);
+            item->setFlags(Qt::ItemIsEnabled);
+            item->setText(0, QString::fromStdString(part->name()));
+            item->setText(1, tr("Part"));
+            const auto* link = design.partLink(part->id());
+            // Its file's name: link paths use forward slashes on every system.
+            const auto file =
+                link ? QString::fromStdString(link->path.substr(link->path.find_last_of('/') + 1))
+                     : QString();
+            if (!link) {
+                item->setText(2, tr("inside"));
+                item->setToolTip(0, tr("Made in this assembly, and kept only here."));
+            } else if (!link->found) {
+                setStatus(item, tr("not found"));  // red: something's wrong
+                item->setToolTip(0,
+                                 tr("Linked to %1, which can't be found: the copy saved in the assembly is "
+                                    "used.")
+                                     .arg(file));
+            } else {
+                item->setText(2, tr("linked"));
+                item->setToolTip(0, tr("Linked to %1: changing that file changes this assembly.").arg(file));
+            }
+        }
+    }
+
+    static model::ComponentId componentIdOf(const QTreeWidgetItem* item) {
+        return model::ComponentId::parse(item->data(0, kComponentRole).toString().toStdString())
+            .value_or(model::ComponentId{});
+    }
+
     QTreeWidgetItem* folderRow(const model::Folder& folder) {
         auto* row = new QTreeWidgetItem(tree_);
         row->setText(0, QString::fromStdString(folder.name));
@@ -303,6 +370,10 @@ private:
         const bool here = sel.doc() == ctx_.documents().active();
         pickedFolders_.clear();
         for (auto* item : rows()) {
+            if (const auto component = componentIdOf(item); !component.isNil()) {
+                item->setSelected(here && sel.containsComponent(component));
+                continue;
+            }
             const FolderId folder = folderIdOf(item);
             if (folder.isNil()) {
                 item->setSelected(here && sel.contains(idOf(item)));
@@ -324,6 +395,26 @@ private:
     // folder row picks all its steps; un-picking it un-picks them.
     void pickedRows() {
         if (filling_) return;
+        // An assembly's components: picked in the order they were clicked.
+        const DocId doc = ctx_.documents().active();
+        if (const auto* design = ctx_.documents().find(doc);
+            design && design->kind() == model::DocKind::Assembly) {
+            std::vector<model::ComponentId> now;
+            for (auto* item : rows()) {
+                const auto id = componentIdOf(item);
+                if (!id.isNil() && item->isSelected()) now.push_back(id);
+            }
+            std::vector<model::ComponentId> ordered;
+            for (const auto& id : ctx_.selection().components())
+                if (std::find(now.begin(), now.end(), id) != now.end()) ordered.push_back(id);
+            for (const auto& id : now)
+                if (std::find(ordered.begin(), ordered.end(), id) == ordered.end()) ordered.push_back(id);
+            if (ordered.empty())
+                ctx_.selection().clear();
+            else
+                ctx_.selection().setComponents(doc, ordered);
+            return;
+        }
         std::vector<FeatureId> now;
         std::vector<FeatureId> dropped;
         for (auto* item : rows()) {
@@ -359,6 +450,19 @@ private:
 
     void renamed(QTreeWidgetItem* item) {
         if (filling_) return;
+        if (const auto component = componentIdOf(item); !component.isNil()) {
+            const auto* design = ctx_.documents().find(ctx_.documents().active());
+            const auto* c = design ? design->findComponent(component) : nullptr;
+            const auto name = item->text(0).trimmed().toStdString();
+            if (!c || name == c->name) return;
+            auto problems = ctx_.documents().run(ctx_.documents().active(), "component.rename",
+                                                 {{"component", c->name}, {"name", name}});
+            if (!problems.empty()) {
+                ui_.showProblems(problems);
+                scheduleRefill();  // put the old name back
+            }
+            return;
+        }
         if (const FolderId folder = folderIdOf(item); !folder.isNil()) {
             const auto* design = ctx_.documents().find(ctx_.documents().active());
             const auto* f = design ? design->findFolder(folder) : nullptr;
@@ -407,6 +511,21 @@ private:
                         [run, steps, off] { run("feature.suppress", {{"steps", steps}, {"off", off}}); });
         };
 
+        if (const auto component = componentIdOf(item); !component.isNil()) {
+            const auto* c = design->findComponent(component);
+            if (!c) return;
+            const std::string name = c->name;
+            m.addAction(tr("Rename"), this, [this, item] { tree_->editItem(item, 0); });
+            m.addAction(c->grounded ? tr("Let go") : tr("Ground"), this, [run, name, grounded = c->grounded] {
+                run("component.ground", {{"component", name}, {"grounded", !grounded}});
+            });
+            m.addAction(tr("Delete component"), this,
+                        [run, name] { run("component.delete", {{"component", name}}); });
+            m.exec(tree_->viewport()->mapToGlobal(at));
+            return;
+        }
+        if (item->data(0, Qt::UserRole).toString().isEmpty() && folderIdOf(item).isNil())
+            return;  // a heading
         if (const FolderId folder = folderIdOf(item); !folder.isNil()) {
             m.addAction(tr("Rename folder"), this, [this, item] { tree_->editItem(item, 0); });
             addTurn(stepsOf(item));
