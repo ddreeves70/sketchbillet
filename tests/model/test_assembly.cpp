@@ -479,3 +479,38 @@ TEST_CASE("dragging a body in a part is one undo step of the assembly", "[model]
     CHECK(car.undoLabel() == before);  // both slides went back as one step
     CHECK(car.findPart(id)->featureCount() == 1);
 }
+
+TEST_CASE("Reset joints puts each hinge and slider back to its rest, as one undo step",
+          "[model][assembly][joints]") {
+    Document car(DocKind::Part, "Car");
+    makeAssembly(car);
+    REQUIRE(car.execute(std::make_unique<InsertPartCommand>(wheel(), 3)).empty());
+    const auto& c = car.components();
+    auto join = [&](const Component& a, const Component& b, JointKind kind, double value, double rest) {
+        Joint j;
+        j.kind = kind;
+        j.a.component = a.id;
+        j.b.component = b.id;
+        j.value = value;
+        j.rest = rest;
+        REQUIRE(car.execute(std::make_unique<AddJointCommand>(j)).empty());
+    };
+    join(c[0], c[1], JointKind::Revolute, 1.0, 0.25);
+    join(c[0], c[2], JointKind::Slider, 7.0, 0.0);
+    REQUIRE(car.execute(std::make_unique<ResetJointsCommand>()).empty());
+    CHECK(car.joints()[0].value == 0.25);
+    CHECK(car.joints()[1].value == 0.0);
+    CHECK(car.undoLabel() == "Reset joints");
+    REQUIRE(car.undo());
+    CHECK(car.joints()[0].value == 1.0);
+    CHECK(car.joints()[1].value == 7.0);
+
+    // Just one, by name.
+    REQUIRE(run(car, "joint.reset", {{"joint", std::string("Joint2")}}).empty());
+    CHECK(car.joints()[0].value == 1.0);
+    CHECK(car.joints()[1].value == 0.0);
+    REQUIRE(run(car, "joint.reset").empty());
+    const auto again = run(car, "joint.reset");
+    REQUIRE(again.size() == 1);
+    CHECK(again.front().code == "joint.at_rest");
+}

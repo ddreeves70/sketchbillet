@@ -35,6 +35,7 @@ constexpr const char* kManifest = R"({
 // Where a folder row keeps its folder's id (a step row keeps its step's id in Qt::UserRole).
 constexpr int kFolderRole = Qt::UserRole + 1;
 constexpr int kComponentRole = Qt::UserRole + 2;  // an assembly's component row: its id
+constexpr int kJointRole = Qt::UserRole + 3;      // an assembly's joint row: its id
 
 const char* kindName(const model::Feature& f) {
     switch (f.type()) {
@@ -195,7 +196,7 @@ private:
         const bool assembly = design && design->kind() == model::DocKind::Assembly;
         tree_->setHeaderLabels({assembly ? tr("Name") : tr("Step"), tr("Kind"), tr("Status")});
         if (assembly) {
-            fillAssembly(*design);
+            fillAssembly(*design, report);
         } else if (design) {
             std::map<FolderId, QTreeWidgetItem*> folderRows;
             for (std::size_t i = 0; i < design->featureCount(); ++i) {
@@ -259,9 +260,10 @@ private:
         showSelection();
     }
 
-    // An assembly: its Components (each with its part, grounded or free), then
-    // its Parts (each linked to its file, or inside).
-    void fillAssembly(const model::Document& design) {
+    // An assembly: its Components (each with its part, and grounded, joined or
+    // free), its Joints (if it has any), then its Parts (each linked to its file,
+    // or inside).
+    void fillAssembly(const model::Document& design, const model::RebuildReport* report) {
         tree_->setRootIsDecorated(true);
         auto group = [this](const QString& name, const QString& tip) {
             auto* row = new QTreeWidgetItem(tree_);
@@ -282,10 +284,40 @@ private:
             const auto* part = design.findPart(c.part);
             item->setText(0, QString::fromStdString(c.name));
             item->setText(1, part ? QString::fromStdString(part->name()) : tr("missing"));
-            item->setText(2, c.grounded ? tr("grounded") : tr("free"));
+            const bool joined = report && report->placedByJoint(c.id);
+            item->setText(2, c.grounded ? tr("grounded") : joined ? tr("joined") : tr("free"));
             item->setData(0, kComponentRole, QString::fromStdString(c.id.toString()));
             item->setFlags(item->flags() | Qt::ItemIsEditable);
-            item->setToolTip(2, c.grounded ? tr("Fixed where it is.") : tr("Free to move."));
+            item->setToolTip(2, c.grounded ? tr("Fixed where it is.")
+                                : joined   ? tr("A joint places it.")
+                                           : tr("Free to move."));
+        }
+        if (!design.joints().empty()) {
+            auto* joints =
+                group(tr("Joints"), tr("What holds the components together, and how they still move."));
+            for (const auto& j : design.joints()) {
+                auto* item = new QTreeWidgetItem(joints);
+                item->setText(0, QString::fromStdString(j.name));
+                item->setText(1, j.kind == model::JointKind::Revolute ? tr("Revolute")
+                                 : j.kind == model::JointKind::Slider ? tr("Slider")
+                                                                      : tr("Rigid"));
+                item->setData(0, kJointRole, QString::fromStdString(j.id.toString()));
+                item->setFlags(item->flags() | Qt::ItemIsEditable);
+                const auto* a = design.findComponent(j.a.component);
+                const auto* b = design.findComponent(j.b.component);
+                QString tip = tr("%1 on %2")
+                                  .arg(b ? QString::fromStdString(b->name) : tr("?"),
+                                       a ? QString::fromStdString(a->name) : tr("?"));
+                const auto* r = report ? report->joint(j.id) : nullptr;
+                QString status = j.off ? tr("off") : tr("ok");
+                if (r && !r->issues.empty()) {
+                    status = r->loop ? tr("loop") : tr("problem");
+                    for (const auto& d : r->issues)
+                        tip += QLatin1Char('\n') + QString::fromStdString(d.message);
+                }
+                setStatus(item, status);
+                for (int col = 0; col < 3; ++col) item->setToolTip(col, tip);
+            }
         }
         auto* parts =
             group(tr("Parts"), tr("The parts this assembly uses, each once, however many copies of it "
@@ -314,6 +346,10 @@ private:
                 item->setToolTip(0, tr("Linked to %1: changing that file changes this assembly.").arg(file));
             }
         }
+    }
+
+    static JointId jointIdOf(const QTreeWidgetItem* item) {
+        return JointId::parse(item->data(0, kJointRole).toString().toStdString()).value_or(JointId{});
     }
 
     static model::ComponentId componentIdOf(const QTreeWidgetItem* item) {
@@ -374,6 +410,10 @@ private:
                 item->setSelected(here && sel.containsComponent(component));
                 continue;
             }
+            if (const auto joint = jointIdOf(item); !joint.isNil()) {
+                item->setSelected(here && sel.containsJoint(joint));
+                continue;
+            }
             const FolderId folder = folderIdOf(item);
             if (folder.isNil()) {
                 item->setSelected(here && sel.contains(idOf(item)));
@@ -399,6 +439,21 @@ private:
         const DocId doc = ctx_.documents().active();
         if (const auto* design = ctx_.documents().find(doc);
             design && design->kind() == model::DocKind::Assembly) {
+            // Joints, when the row just clicked is one: a joint and a component
+            // aren't picked together.
+            if (const auto* current = tree_->currentItem(); current && !jointIdOf(current).isNil()) {
+                std::vector<JointId> joints;
+                for (auto* item : rows()) {
+                    const auto id = jointIdOf(item);
+                    if (!id.isNil() && item->isSelected()) joints.push_back(id);
+                }
+                if (joints.empty())
+                    ctx_.selection().clear();
+                else
+                    ctx_.selection().setJoints(doc, joints);
+                showSelection();
+                return;
+            }
             std::vector<model::ComponentId> now;
             for (auto* item : rows()) {
                 const auto id = componentIdOf(item);
@@ -450,6 +505,19 @@ private:
 
     void renamed(QTreeWidgetItem* item) {
         if (filling_) return;
+        if (const auto joint = jointIdOf(item); !joint.isNil()) {
+            const auto* design = ctx_.documents().find(ctx_.documents().active());
+            const auto* j = design ? design->findJoint(joint) : nullptr;
+            const auto name = item->text(0).trimmed().toStdString();
+            if (!j || name == j->name) return;
+            auto problems = ctx_.documents().run(ctx_.documents().active(), "joint.set",
+                                                 {{"joint", j->name}, {"name", name}});
+            if (!problems.empty()) {
+                ui_.showProblems(problems);
+                scheduleRefill();  // put the old name back
+            }
+            return;
+        }
         if (const auto component = componentIdOf(item); !component.isNil()) {
             const auto* design = ctx_.documents().find(ctx_.documents().active());
             const auto* c = design ? design->findComponent(component) : nullptr;
@@ -529,6 +597,17 @@ private:
             });
             m.addAction(tr("Delete component"), this,
                         [run, name] { run("component.delete", {{"component", name}}); });
+            m.exec(tree_->viewport()->mapToGlobal(at));
+            return;
+        }
+        if (const auto joint = jointIdOf(item); !joint.isNil()) {
+            const auto* j = design->findJoint(joint);
+            if (!j) return;
+            const std::string name = j->name;
+            m.addAction(tr("Rename"), this, [this, item] { tree_->editItem(item, 0); });
+            m.addAction(j->off ? tr("Turn on") : tr("Turn off"), this,
+                        [run, name, off = j->off] { run("joint.set", {{"joint", name}, {"off", !off}}); });
+            m.addAction(tr("Delete joint"), this, [run, name] { run("joint.delete", {{"joint", name}}); });
             m.exec(tree_->viewport()->mapToGlobal(at));
             return;
         }

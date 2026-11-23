@@ -383,4 +383,21 @@ private:
     std::size_t index_ = 0;
 };
 
+/// Puts joints back to their rest values (Joint::rest): Reset Joints. One undo
+/// step for all of them.
+class ResetJointsCommand final : public Command {
+public:
+    /// Prepares the change.
+    /// @param joints The joints to reset; empty for every joint of the assembly.
+    explicit ResetJointsCommand(std::vector<JointId> joints = {});
+
+    std::string label() const override { return "Reset joints"; }
+    Diagnostics apply(DocumentEditor& editor) override;
+    void revert(DocumentEditor& editor) override;
+
+private:
+    std::vector<JointId> only_;
+    std::vector<std::pair<JointId, double>> old_;  // each joint changed, and its value before
+};
+
 }  // namespace sb::model

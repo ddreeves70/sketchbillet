@@ -7,8 +7,8 @@
 #include <string_view>
 #include <vector>
 
-#include "sb/model/Assembly.h"
 #include "sb/core/Id.h"
+#include "sb/model/Assembly.h"
 #include "sb/plugin/Picks.h"
 
 /// The plugin system: manifests, the plugin host, the event bus and open documents.
@@ -70,6 +70,9 @@ struct SelectionChanged {
     /// The picked components of an assembly, in the order they were picked, when
     /// components are picked instead of steps (see Selection::setComponents()).
     std::vector<model::ComponentId> components;
+    /// The picked joints of an assembly, when joints are picked instead (see
+    /// Selection::setJoints()).
+    std::vector<JointId> joints;
 };
 
 /// What clicking a body in a viewer picks changed (see Selection::setPickMode()).

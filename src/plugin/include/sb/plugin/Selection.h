@@ -78,6 +78,22 @@ public:
     /// @param components The components, in the order they were picked.
     void setComponents(const DocId& doc, std::vector<model::ComponentId> components);
 
+    /// Gives the picked joints of an assembly (in the feature tree), in the order
+    /// they were picked; empty when steps or components are picked instead.
+    /// @return The joints.
+    const std::vector<JointId>& joints() const { return joints_; }
+
+    /// Says whether a joint is picked.
+    /// @param id The joint.
+    /// @return True if it's picked.
+    bool containsJoint(const JointId& id) const;
+
+    /// Picks joints of an assembly in place of anything else. Joints it doesn't
+    /// have are left out; none left clears the selection. Sends SelectionChanged.
+    /// @param doc The assembly.
+    /// @param joints The joints, in the order they were picked.
+    void setJoints(const DocId& doc, std::vector<JointId> joints);
+
     /// Gives the picked edges, faces or points, while the selection is those instead of steps.
     /// @return Them, in the order they were picked; empty when steps are selected.
     const std::vector<PickedElement>& elements() const { return elements_; }
@@ -131,6 +147,7 @@ private:
     std::vector<FeatureId> features_;
     std::vector<PickedElement> elements_;
     std::vector<model::ComponentId> components_;
+    std::vector<JointId> joints_;
     PickMode mode_ = PickMode::Bodies;
     FeatureId only_{};
     bool design_ = false;

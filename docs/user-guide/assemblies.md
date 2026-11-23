@@ -15,7 +15,7 @@ the Model tab's place:
 ![The toy car open in the desktop app: the Assemble tab, and the feature tree listing its five components and two parts](images/app-assembly-car.png)
 
 In the app, the feature tree lists the assembly's **Components** (each with its
-part, and whether it's grounded or free) and its **Parts** (each linked to its
+part, and whether it's grounded, joined or free), its **Joints**, and its **Parts** (each linked to its
 file, or inside the assembly). Click a component, in the tree or in the viewer,
 to pick it: Properties shows its part, its file, where it's placed and which way
 it faces. Rename it there, or tick **Grounded** to fix it where it is.
@@ -33,6 +33,7 @@ Right-click it in the tree to rename it, ground it or delete it.
 | **Find file** | Links the picked component's part to its file where it is now |
 | **Edit part** | Changes the picked component's part right here, in the assembly ([below](#changing-a-part)) |
 | **Open part** | Opens the picked component's part file beside the assembly, to change it there |
+| **Reset joints** | Puts every hinge and slider back to where it rests (its rest value) |
 | **Make part inside**, **Save part as file** | In the Parts dropdown: switch the picked component's part between inside and linked |
 
 **Moving a component:** pick a free one, and drag the arrows or the square that
@@ -42,8 +43,17 @@ of Undo. A grounded component has no arrows: it stays where it is. Press
 **Escape** before you let go to put it back.
 
 **Joints** hold parts together and say how they still move: a lid turning on its
-hinge, a wheel on its axle. For now they're made with
-[`sketchbillet_cli`](#joints); the Assemble tab gets them next.
+hinge, a wheel on its axle (see [Joints](#joints)). The feature tree lists them
+under **Joints**: click one to pick it, and Properties shows what it joins, its
+kind, how far it's turned or slid, and its limits; change any of them there. Its
+two sides and the line it turns about are drawn in green in the view while it's
+picked. Right-click it in the tree to rename it, turn it off or delete it.
+**Reset joints** on the Assemble tab puts every joint back to where it rests.
+
+![The tray with its cover opened 100 degrees on its hinge: Joint1 picked in the feature tree, its hinge line drawn in green, and Properties showing its kind, value and limits](images/app-joint.png)
+
+For now, joints are made with [`sketchbillet_cli`](#joints); the Assemble tab's
+joint tool comes next.
 
 ## Changing a part
 
@@ -296,6 +306,7 @@ it): you can move or copy the whole folder, and everything still links up.
 | Take a component out | [`component.delete`](../cli/commands.md#componentdelete) |
 | Join two components | [`joint.add`](../cli/commands.md#jointadd) |
 | Turn or slide a joint, or change it | [`joint.set`](../cli/commands.md#jointset) |
+| Put joints back to where they rest | [`joint.reset`](../cli/commands.md#jointreset) |
 | Take a joint out | [`joint.delete`](../cli/commands.md#jointdelete) |
 | List a component's edges or faces, for a joint | [`open --edges "Wheel 1"`](../cli/open.md#a-components-edges-faces-and-points) |
 | Update linked parts from their files | [`part.update`](../cli/commands.md#partupdate), or just open the assembly |

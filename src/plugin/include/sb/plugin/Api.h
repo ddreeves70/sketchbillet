@@ -184,7 +184,9 @@ class PluginContext;
 /// (DocumentList::editPart(), finishEditing(), editedPart(), editedComponent(),
 /// assemblyOf() and activeDesign(); active() gives the part being edited) and
 /// actions that open a design file (ActionSpec::openFile).
-inline constexpr int kPluginApiVersion = 63;
+/// Version 64 added picking an assembly's joints (Selection::joints(),
+/// Selection::setJoints() and SelectionChanged::joints).
+inline constexpr int kPluginApiVersion = 64;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

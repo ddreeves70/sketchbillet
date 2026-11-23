@@ -477,8 +477,14 @@ Each line is one pull request, in this order:
      sides typed like `Wheel 1:edge:3`, and `open --edges "Wheel 1"` to number
      them. The viewer and Properties show a joined component where its joint
      puts it; move handles leave it alone.
-   - Next: joints in the app (the tree's Joints, Properties, the joint tool),
-     then dragging along joints and Reset Joints.
+   - **Joints in the app** (built, Nov 23, 2026): the feature tree's Joints
+     (with their kind and any problem; rename, turn off, delete), picking a
+     joint (`Selection::setJoints()`, plugin API 64) draws its sides and line
+     in green, Properties changes every setting (`SetJointCommand`, quick
+     changes to one number merging), and Assemble > Reset Joints
+     (`ResetJointsCommand`, `joint.reset`).
+   - Next: the joint tool (picking a face or edge on a component in the
+     viewer), then dragging along joints.
 6. **Checks:** overlaps, the assembly's mass and center of gravity, measuring
    between components.
 7. **Exploded views.**

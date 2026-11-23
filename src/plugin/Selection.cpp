@@ -29,13 +29,16 @@ void Selection::set(const DocId& doc, std::vector<FeatureId> features) {
         }
     }
     const DocId newDoc = kept.empty() ? DocId{} : doc;
-    if (newDoc == doc_ && kept == features_ && !design_ && elements_.empty() && components_.empty()) return;
+    if (newDoc == doc_ && kept == features_ && !design_ && elements_.empty() && components_.empty() &&
+        joints_.empty())
+        return;
     doc_ = newDoc;
     features_ = std::move(kept);
     elements_.clear();
     components_.clear();
+    joints_.clear();
     design_ = false;
-    bus_.publish(SelectionChanged{doc_, features_, false, {}, {}});
+    bus_.publish(SelectionChanged{doc_, features_, false, {}, {}, {}});
 }
 
 void Selection::setElements(const DocId& doc, std::vector<PickedElement> elements) {
@@ -62,9 +65,10 @@ void Selection::setElements(const DocId& doc, std::vector<PickedElement> element
     doc_ = doc;
     features_.clear();
     components_.clear();
+    joints_.clear();
     elements_ = std::move(kept);
     design_ = false;
-    bus_.publish(SelectionChanged{doc_, features_, false, elements_, {}});
+    bus_.publish(SelectionChanged{doc_, features_, false, elements_, {}, {}});
 }
 
 void Selection::setPickOnly(const FeatureId& body) {
@@ -91,8 +95,9 @@ void Selection::pickDesign(const DocId& doc) {
     features_.clear();
     elements_.clear();
     components_.clear();
+    joints_.clear();
     design_ = true;
-    bus_.publish(SelectionChanged{doc_, features_, true, {}, {}});
+    bus_.publish(SelectionChanged{doc_, features_, true, {}, {}, {}});
 }
 
 bool Selection::containsComponent(const model::ComponentId& id) const {
@@ -118,9 +123,39 @@ void Selection::setComponents(const DocId& doc, std::vector<model::ComponentId> 
     doc_ = doc;
     features_.clear();
     elements_.clear();
+    joints_.clear();
     design_ = false;
     components_ = std::move(kept);
-    bus_.publish(SelectionChanged{doc_, features_, false, {}, components_});
+    bus_.publish(SelectionChanged{doc_, features_, false, {}, components_, {}});
+}
+
+bool Selection::containsJoint(const JointId& id) const {
+    return std::find(joints_.begin(), joints_.end(), id) != joints_.end();
+}
+
+void Selection::setJoints(const DocId& doc, std::vector<JointId> joints) {
+    const auto* design = docs_.find(doc);
+    std::vector<JointId> kept;
+    if (design) {
+        for (const auto& id : joints) {
+            if (design->findJoint(id) && std::find(kept.begin(), kept.end(), id) == kept.end())
+                kept.push_back(id);
+        }
+    }
+    if (kept.empty()) {
+        if (joints_.empty()) return;
+        joints_.clear();
+        set(DocId{}, {});
+        return;
+    }
+    if (doc == doc_ && kept == joints_) return;
+    doc_ = doc;
+    features_.clear();
+    elements_.clear();
+    components_.clear();
+    design_ = false;
+    joints_ = std::move(kept);
+    bus_.publish(SelectionChanged{doc_, features_, false, {}, {}, joints_});
 }
 
 void Selection::clear() {
@@ -131,6 +166,10 @@ void Selection::prune() {
     if (design_) return;  // the design is still there
     if (!components_.empty()) {
         setComponents(doc_, components_);  // drops components that are gone
+        return;
+    }
+    if (!joints_.empty()) {
+        setJoints(doc_, joints_);  // drops joints that are gone
         return;
     }
     if (!elements_.empty()) {

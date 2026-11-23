@@ -360,6 +360,18 @@ for (const auto& id : sel.components()) {
 `SelectionChanged::components` lists them. Picking steps, the design or edges
 un-picks components, and deleted components drop out.
 
+**Joints** are picked the same way, in the feature tree's Joints:
+`sel.setJoints(carId, {jointId})`, `sel.joints()` and
+`SelectionChanged::joints`. Components and joints aren't picked together. Where
+a joint's sides are now is in the latest rebuild:
+
+```cpp
+for (const auto& id : sel.joints()) {
+    const auto* r = ctx.documents().lastRebuild(sel.doc())->joint(id);
+    if (r && r->aFrame) ctx.log("Its sides meet at z = " + std::to_string(r->aFrame->origin.z) + " mm");
+}
+```
+
 Edges or faces can be picked instead of steps. While `pickMode()` is
 `PickMode::Edges` (**Select > Pick edges**), clicking a body in the viewer picks
 the edge under the mouse; while it's `PickMode::Faces` (**Sketch > New sketch on a

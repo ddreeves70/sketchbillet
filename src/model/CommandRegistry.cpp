@@ -1573,6 +1573,21 @@ CommandRegistry makeBuiltin() {
             return std::make_unique<DeleteJointCommand>(found->id);
         });
 
+    r.add({"joint.reset",
+           "Reset joints",
+           "Puts joints back to their rest values (rest=, 0 unless it's set): the cover shut, the arm down.",
+           {{"joint",
+             ArgType::Text,
+             "Just this joint, like Joint1. Leave it out for every joint.",
+             false,
+             {}}}},
+          [jointNamed](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+              if (!a.count("joint")) return std::make_unique<ResetJointsCommand>();
+              auto [found, problem] = jointNamed(doc, a);
+              if (!found) return std::move(problem);
+              return std::make_unique<ResetJointsCommand>(std::vector<JointId>{found->id});
+          });
+
     r.add({"part.make_inside",
            "Make part inside",
            "Makes a linked part an inside part: the assembly keeps its copy of the part and stops "
