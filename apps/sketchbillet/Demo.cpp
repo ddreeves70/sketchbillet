@@ -273,7 +273,7 @@ void DemoPlayer::runStep(const QJsonObject& step) {
         glide(at, [this, at, notches, then] {
             auto left = std::make_shared<int>(std::abs(notches));
             auto* tick = new QTimer(this);
-            connect(tick, &QTimer::timeout, this, [=, this] {
+            connect(tick, &QTimer::timeout, this, [=] {
                 if (*left <= 0) {
                     tick->stop();
                     tick->deleteLater();
