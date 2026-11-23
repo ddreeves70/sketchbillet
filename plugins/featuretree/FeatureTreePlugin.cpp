@@ -515,6 +515,14 @@ private:
             const auto* c = design->findComponent(component);
             if (!c) return;
             const std::string name = c->name;
+            if (!design->partLink(c->part)) {
+                // An inside part is changed here, in the assembly.
+                m.addAction(tr("Edit part"), this, [this, doc, component] {
+                    ctx_.selection().clear();
+                    auto problems = ctx_.documents().editPart(doc, component);
+                    if (!problems.empty()) ui_.showProblems(problems);
+                });
+            }
             m.addAction(tr("Rename"), this, [this, item] { tree_->editItem(item, 0); });
             m.addAction(c->grounded ? tr("Let go") : tr("Ground"), this, [run, name, grounded = c->grounded] {
                 run("component.ground", {{"component", name}, {"grounded", !grounded}});

@@ -4,7 +4,7 @@ Runs one modeling command, such as "add a box" or "cut a hole", on a new or save
 design. Then it rebuilds the design, prints every step, and saves it.
 
 ```text
-sketchbillet_cli run [--plugins <folder>]... [--open <in.sb>] [--save <out.sb>] [<command> [name=value]...]
+sketchbillet_cli run [--plugins <folder>]... [--open <in.sb>] [--save <out.sb>] [--part <name>] [<command> [name=value]...]
 ```
 
 | Option | Meaning |
@@ -13,6 +13,7 @@ sketchbillet_cli run [--plugins <folder>]... [--open <in.sb>] [--save <out.sb>] 
 | `name=value` | One setting for the command, e.g. `size=40,30,10`. Settings that aren't required can be left out |
 | `--open <in.sb>` | Start from this saved design. Without it, `run` starts a new, empty design |
 | `--save <out.sb>` | Save the result here. It may be the same file as `--open`. A new design is named after this file |
+| `--part <name>` | In an assembly: run the command in this inside part, like **Edit part** in the app. See [Change a part in an assembly](#change-a-part-in-an-assembly) |
 | `--plugins <folder>` | Load the plugins in this folder, so their commands can run. Can be given more than once |
 
 Without `--save`, nothing is saved: useful to try a command first.
@@ -81,6 +82,44 @@ $ sketchbillet_cli run --open Wheel.sb --save Wheel.sb feature.add_cylinder radi
 $ sketchbillet_cli run --open Cart.sb --save Cart.sb
 note [part.updated]: Wheel changed in Wheel.sb, so Cart uses the new Wheel.
 ...
+```
+
+## Change a part in an assembly
+
+`--part` runs the command in one of the assembly's
+[inside parts](../user-guide/assemblies.md#changing-a-part), as **Edit part**
+does in the app. Here the cart's Wheel becomes an inside part, and then both
+wheels get an axle 4 mm across (a radius of 2 mm) and 30 mm long, with one
+command:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open Cart.sb --save Cart.sb part.make_inside part=Wheel
+...
+$ sketchbillet_cli run --open Cart.sb --save Cart.sb --part Wheel feature.add_cylinder base=0,0,-12 radius=2 height=30 name=Axle
+Cart: assembly, 2 components, 1 part
+  Wheel 1      Wheel      grounded at 0, 0, 0 mm
+  Wheel 2      Wheel      free     at 30, 0, 0 mm
+Parts:
+  Wheel        3 steps  ok        mass 4.46 g (PLA), 2 in the assembly
+Mass in all: 8.91 g
+wrote Cart.sb
+```
+
+The Wheel has 3 steps now (the hub from above, and the axle), and both wheels
+have the axle. `sketchbillet_cli open
+Cart.sb --components` shows them, like any assembly.
+
+A linked part is changed in its own file instead, so `--part` says so:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --save Trolley.sb assembly.new
+...
+$ sketchbillet_cli run --open Trolley.sb --save Trolley.sb component.insert file=Wheel.sb
+...
+$ sketchbillet_cli run --open Trolley.sb --part Wheel feature.add_box size=1,1,1
+error: Wheel is linked to Wheel.sb, so change that file instead (run --open it --save it), and Trolley uses it. Or make it an inside part first: part.make_inside part="Wheel".
 ```
 
 ## Try a command without saving

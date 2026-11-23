@@ -20,6 +20,7 @@
 namespace sb::model {
 
 class Document;
+class Command;
 enum class DocKind;
 
 /// Write access to a Document, given only to Commands.
@@ -111,6 +112,22 @@ public:
     /// @param link The link, or nullopt for an inside part.
     /// @return The link it had before, or nullopt if it had none.
     std::optional<PartLink> setPartLink(const DocId& part, std::optional<PartLink> link);
+
+    /// Applies a command to one of an assembly's parts, as a change to the
+    /// assembly: what EditPartCommand does. The part's rollback marker is kept
+    /// right, as Document::execute() keeps the design's.
+    /// @param part The part's design id.
+    /// @param command The change to make in the part.
+    /// @param markerBefore Set to where the part's rollback marker was, for revertOnPart().
+    /// @return The command's problems (then the part is unchanged), or one if
+    ///         the assembly has no such part.
+    Diagnostics applyToPart(const DocId& part, Command& command, std::optional<FeatureId>& markerBefore);
+
+    /// Takes back a command applyToPart() made.
+    /// @param part The part's design id.
+    /// @param command The change applyToPart() made.
+    /// @param markerBefore Where the part's rollback marker was before it.
+    void revertOnPart(const DocId& part, Command& command, const std::optional<FeatureId>& markerBefore);
 
 private:
     friend class Document;

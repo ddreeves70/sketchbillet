@@ -52,7 +52,7 @@ grid** on the View tab.
 | Tab | Panels |
 | --- | --- |
 | **Model** | **Sketch** (new sketch, edit sketch, planes), **Create** (box, extrude, revolve, hole, cylinder), **Modify** (move, shell, fillet, chamfer, linked copy, change edges), **Combine** (union, cut, intersect), **Pattern** (row, around, mirror), **Inspect** (measure), **Select** (pick edges), **Insert** (import), **Make** (export, check for printing), **Steps** (copy, paste, duplicate, turn off and on, folders, delete) |
-| **Assemble** | **Insert** (insert part, insert copy, new part, add another), **Component** (ground, delete), **Parts** (update linked parts, find linked file, make part inside, save part as file). It shows instead of the Model tab while an [assembly](assemblies.md) is open |
+| **Assemble** | **Insert** (insert part, insert copy, new part, add another), **Component** (ground, delete), **Edit** (edit part, open part), **Parts** (update linked parts, find linked file, make part inside, save part as file). It shows instead of the Model tab while an [assembly](assemblies.md) is open |
 | **Sketch** | **Draw** (line, rectangle, circle, arc, spline, point), **Edit** (select, trim, round corner, delete), **Constrain** (coincident, horizontal, vertical, equal and the rest), **Dimension**, and the green **Finish sketch** at the right. It only shows while you edit a sketch |
 | **Inspect** | **Measure** (measure, check for printing), **Design** (parameters) |
 | **View** | **Display** (view options), **Grid** (show, snap, style, spacing), **Axes** (show the axes and their letters), **Panels** (open and close panels, a new viewer), **Layout** (save a layout, reset it, saved layouts) |
@@ -519,6 +519,9 @@ another, or for keeping an old version open while you make a new one.
 - A tab shows the design's file name, without `.sb`, once it's saved. Before
   that, new designs are called Untitled, Untitled 2 and so on.
 - Opening a design that's open already just shows its tab.
+- While you edit a part in an [assembly](assemblies.md#changing-a-part), a bar
+  under the tabs says so, with **Done** to go back to the assembly. The tab
+  is still the assembly's: saving saves the assembly, part and all.
 
 **Tip:** to copy steps from one design to another, pick them in the feature tree,
 press Ctrl+C, click the other design's tab and press Ctrl+V. See

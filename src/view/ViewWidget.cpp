@@ -289,6 +289,7 @@ struct ViewWidget::Impl {
     struct Shown {
         std::uint64_t shapeId = 0;  // the ShapeHandle it was made from
         bool ghost = false;
+        bool context = false;  // faded, and not picked: see SceneBody::context
         Rgb color;
         Handle(AIS_Shape) object;
         kernel::Placement placement;  // where it's drawn (a component's place)
@@ -802,7 +803,8 @@ void ViewWidget::setContent(const SceneContent& content) {
             const Impl::BodyKey key{body.feature, body.component};
             auto it = d.shown.find(key);
             if (it != d.shown.end() && it->second.shapeId == body.shape.id() &&
-                it->second.ghost == body.ghost && it->second.color == body.color &&
+                it->second.ghost == body.ghost && it->second.context == body.context &&
+                it->second.color == body.color &&
                 kernel::samePlacement(it->second.placement, body.placement, 0)) {
                 next.insert(d.shown.extract(it));
                 continue;
@@ -853,7 +855,9 @@ void ViewWidget::setContent(const SceneContent& content) {
             obj->Attributes()->SetDeviationAngle(0.1);  // radians: smooth round edges
             // Not a change: OCCT would throw away a reused drawing's mesh and make it again.
             obj->Attributes()->UpdatePreviousDeviationAngle();
-            if (body.ghost) {
+            if (body.context) {
+                obj->SetTransparency(0.85);  // the rest of the assembly, faded
+            } else if (body.ghost) {
                 obj->SetTransparency(0.7);
                 // Drawn just in front of the body it became part of, so their shared
                 // faces don't flicker between the two.
@@ -868,11 +872,12 @@ void ViewWidget::setContent(const SceneContent& content) {
                 obj->Attributes()->SetUnFreeBoundaryAspect(
                     new Prs3d_LineAspect(kEdges, Aspect_TOL_SOLID, 1.0));
             }
-            const bool wire = !body.ghost && d.style == DisplayStyle::Wireframe;
+            const bool see = body.ghost || body.context;  // see-through: always shaded
+            const bool wire = !see && d.style == DisplayStyle::Wireframe;
             d.context->Display(obj, wire ? AIS_WireFrame : AIS_Shaded, 0, false);
-            next[key] = {
-                body.shape.id(),  body.ghost,       body.color,         obj, body.placement, *shape, drawn,
-                std::move(edges), std::move(faces), std::move(vertices)};
+            next[key] = {body.shape.id(),    body.ghost, body.context, body.color,       obj,
+                         body.placement,     *shape,     drawn,        std::move(edges), std::move(faces),
+                         std::move(vertices)};
         }
         for (auto& [id, s] : d.shown) d.context->Remove(s.object, false);
         d.shown = std::move(next);
@@ -890,6 +895,7 @@ void ViewWidget::setContent(const SceneContent& content) {
         }
         for (const auto& [id, s] : d.shown) {
             d.context->Deactivate(s.object);
+            if (s.context) continue;  // the rest of an assembly: not picked
             if (!picking) {
                 d.context->Activate(s.object, 0);
             } else if (!s.ghost) {
@@ -1135,7 +1141,7 @@ void ViewWidget::setDisplayStyle(DisplayStyle style) {
     d.style = style;
     if (!d.context) return;  // used when the bodies are first shown
     try {
-        for (auto& [id, s] : d.shown) d.applyStyle(s.object, s.ghost);
+        for (auto& [id, s] : d.shown) d.applyStyle(s.object, s.ghost || s.context);
     } catch (const Standard_Failure& e) {
         d.fail(*this,
                drawFailed(d.where(QStringLiteral("changing how bodies are drawn: ") + failureText(e))));

@@ -665,15 +665,15 @@ void PluginHost::loadAll() {
                 } else if (!actionIds.insert(a.id).second) {
                     failures.push_back("Its menu item \"" + a.text + "\" has the same id as another one (" +
                                        a.id + "). Ask its author for a fixed version.");
-                } else if (a.command.empty() && !a.run) {
+                } else if (a.command.empty() && !a.run && !a.openFile) {
                     failures.push_back("Its menu item \"" + a.text +
                                        "\" does nothing: it has no command and no run function. Ask its "
                                        "author for a fixed version.");
-                } else if (a.run && !a.command.empty()) {
+                } else if ((a.run ? 1 : 0) + (a.command.empty() ? 0 : 1) + (a.openFile ? 1 : 0) > 1) {
                     failures.push_back("Its menu item \"" + a.text +
-                                       "\" has both a command and a run function; it can only have one. "
-                                       "Ask its author for a fixed version.");
-                } else if (!a.run && !commandNames.count(a.command)) {
+                                       "\" has more than one of a command, a run function and a file to "
+                                       "open; it can only have one. Ask its author for a fixed version.");
+                } else if (!a.run && !a.openFile && !commandNames.count(a.command)) {
                     failures.push_back("Its menu item \"" + a.text + "\" runs a command, " + a.command +
                                        ", that no loaded plugin has. Check its \"requires\" list.");
                 }

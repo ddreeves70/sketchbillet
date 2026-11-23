@@ -130,6 +130,18 @@ void bothAction(PluginContext& ctx) {
     ctx.addAction(
         {.id = "test.both.go", .text = "Go", .menu = "View", .command = "feature.add_box", .run = [] {}});
 }
+void openAction(PluginContext& ctx) {
+    ctx.addAction({.id = "test.open.go", .text = "Open", .menu = "View", .openFile = [] {
+                       return std::string("a.sb");
+                   }});
+}
+void openAndRunAction(PluginContext& ctx) {
+    ctx.addAction({.id = "test.openrun.go",
+                   .text = "Open",
+                   .menu = "View",
+                   .run = [] {},
+                   .openFile = [] { return std::string("a.sb"); }});
+}
 
 }  // namespace
 
@@ -164,5 +176,16 @@ TEST_CASE("an action can run plugin code and show a check mark", "[plugin][setti
     CHECK(empty->issues.at(0).message.find("no command and no run function") != std::string::npos);
     const auto* both = host.find("test.both");
     CHECK(both->state == PluginState::Failed);
-    CHECK(both->issues.at(0).message.find("both a command and a run function") != std::string::npos);
+    CHECK(both->issues.at(0).message.find("more than one of a command, a run function") != std::string::npos);
+}
+
+TEST_CASE("an action can open a design file instead", "[plugin][settings]") {
+    PluginHost host;
+    host.addBuiltin({manifest("test.open"), &openAction});
+    host.addBuiltin({manifest("test.openrun"), &openAndRunAction});
+    host.loadAll();
+    REQUIRE(host.find("test.open")->state == PluginState::Loaded);
+    REQUIRE(host.actions().size() == 1);
+    CHECK(host.actions()[0].openFile() == "a.sb");
+    CHECK(host.find("test.openrun")->state == PluginState::Failed);
 }

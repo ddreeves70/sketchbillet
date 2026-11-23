@@ -255,4 +255,51 @@ private:
     std::optional<PartLink> link_;  // and that part's link, if it was linked
 };
 
+/// Makes a change inside one of an assembly's inside parts, as one step of the
+/// assembly: what Edit Part does. The assembly keeps the undo history for its
+/// inside parts, so undoing the change works from the assembly. A linked part
+/// is changed in its own file instead, so it's refused.
+///
+/// @code
+/// // Car is an assembly with an inside part, Wheel: give the wheel a hub.
+/// auto hub = std::make_unique<AddCylinderCommand>(4.0, 10.0);
+/// car.execute(std::make_unique<EditPartCommand>(wheelId, std::move(hub)));
+/// car.undo();  // takes the hub back off
+/// @endcode
+class EditPartCommand final : public Command {
+public:
+    /// Prepares the change.
+    /// @param part The inside part's design id.
+    /// @param change The change to make in it, made for the part (see
+    ///        CommandRegistry::create() with the part as the design).
+    EditPartCommand(DocId part, std::unique_ptr<Command> change);
+    ~EditPartCommand() override;
+
+    /// Says what the change in the part does, with the part's name once applied,
+    /// like "Add cylinder in Wheel".
+    /// @return The label.
+    std::string label() const override;
+    Diagnostics apply(DocumentEditor& editor) override;
+    void revert(DocumentEditor& editor) override;
+    /// Merges the next change into this one when both are in the same part and
+    /// the change in it merges (dragging a body, say).
+    /// @param next The command that ran next.
+    /// @return True if it merged.
+    bool mergeWith(const Command& next) override;
+
+    /// Gives the part it changes.
+    /// @return The part's design id.
+    const DocId& part() const { return part_; }
+
+    /// Gives the change it makes in the part.
+    /// @return The change.
+    const Command& change() const { return *change_; }
+
+private:
+    DocId part_;
+    std::unique_ptr<Command> change_;
+    std::optional<FeatureId> markerBefore_;  // the part's rollback marker, for revert()
+    std::string partName_;                   // for label(), once applied
+};
+
 }  // namespace sb::model

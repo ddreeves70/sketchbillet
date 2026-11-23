@@ -300,12 +300,12 @@ void Shell::buildMenus() {
     save_->setShortcut(QKeySequence::Save);
     auto* saveAs = file->addAction(tr("Save &as..."), this, [this] {
         const auto path =
-            askSavePath(qs(host_.documents().find(activeDesign())->name()) + QStringLiteral(".sb"));
+            askSavePath(qs(host_.documents().find(activeFile())->name()) + QStringLiteral(".sb"));
         if (!path.isEmpty()) saveDesign(path.toStdWString());
     });
     saveAs->setObjectName(QStringLiteral("sb.shell.saveas"));
     saveAs->setShortcut(QKeySequence::SaveAs);
-    auto* closeAct = file->addAction(tr("&Close"), this, [this] { closeDesign(activeDesign()); });
+    auto* closeAct = file->addAction(tr("&Close"), this, [this] { closeDesign(activeFile()); });
     closeAct->setObjectName(QStringLiteral("sb.shell.close"));
     closeAct->setShortcut(QKeySequence::Close);
     closeAct->setStatusTip(
@@ -322,6 +322,7 @@ void Shell::buildMenus() {
         {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Backtab), QKeySequence::PreviousChild});
     connect(previous, &QAction::triggered, this, [this] { nextDesign(-1); });
     addAction(previous);
+    connect(ribbon_->doneButton(), &QToolButton::clicked, this, [this] { finishEditingPart(); });
     auto* tabs = ribbon_->designTabs();
     connect(tabs, &QTabBar::currentChanged, this, [this, tabs](int index) {
         if (syncingTabs_ || index < 0) return;
@@ -366,11 +367,11 @@ void Shell::buildMenus() {
     quit->setShortcut(QKeySequence::Quit);
 
     undo_ = new QAction(tr("Undo"), this);
-    connect(undo_, &QAction::triggered, this, [this] { host_.documents().undo(activeDesign()); });
+    connect(undo_, &QAction::triggered, this, [this] { host_.documents().undo(activeFile()); });
     undo_->setObjectName(QStringLiteral("sb.shell.undo"));
     undo_->setShortcut(QKeySequence::Undo);
     redo_ = new QAction(tr("Redo"), this);
-    connect(redo_, &QAction::triggered, this, [this] { host_.documents().redo(activeDesign()); });
+    connect(redo_, &QAction::triggered, this, [this] { host_.documents().redo(activeFile()); });
     redo_->setObjectName(QStringLiteral("sb.shell.redo"));
     redo_->setShortcuts(
         {QKeySequence(QStringLiteral("Ctrl+Y")), QKeySequence(QStringLiteral("Ctrl+Shift+Z"))});
@@ -780,6 +781,23 @@ void Shell::refreshActions() {
 
 void Shell::runAction(const plugin::ActionSpec& spec) {
     crash::note(spec.id);  // for a crash report, if this leads to one
+    if (spec.openFile) {
+        // A design file to open beside the others, in its own tab (a part's file).
+        std::string file;
+        try {
+            file = spec.openFile();
+        } catch (...) {
+            showProblems({{"action.failed", Severity::Error,
+                           tr("%1 stopped with an error. Ask the plugin's author for help.")
+                               .arg(qs(spec.text))
+                               .toStdString(),
+                           spec.plugin}});
+            return;
+        }
+        if (!file.empty()) openDesign(std::filesystem::path(std::u8string(file.begin(), file.end())));
+        refresh();
+        return;
+    }
     if (spec.run) {
         // The plugin's own code (a setting, a dialog), not a change to a design.
         try {
@@ -968,8 +986,12 @@ DocId Shell::activeDesign() const {
     return host_.documents().active();
 }
 
+DocId Shell::activeFile() const {
+    return host_.documents().activeDesign();
+}
+
 std::filesystem::path Shell::activePath() const {
-    auto it = paths_.find(activeDesign());
+    auto it = paths_.find(activeFile());
     return it == paths_.end() ? std::filesystem::path() : it->second;
 }
 
@@ -986,7 +1008,7 @@ bool Shell::askToSave(const DocId& id) {
     const auto* doc = docs.find(id);
     if (!doc || !doc->isModified()) return true;
     // Show the design being asked about, so the student knows which one it is.
-    if (docs.active() != id) {
+    if (docs.activeDesign() != id) {
         docs.setActive(id);
         refresh();
     }
@@ -1032,7 +1054,7 @@ void Shell::nextDesign(int step) {
         if (id && host_.documents().find(*id)) order.push_back(*id);
     }
     if (order.size() != ids.size()) order = ids;
-    const auto at = std::find(order.begin(), order.end(), activeDesign());
+    const auto at = std::find(order.begin(), order.end(), activeFile());
     const auto n = static_cast<int>(order.size());
     const int i = at == order.end() ? 0 : static_cast<int>(at - order.begin());
     host_.documents().setActive(order[static_cast<std::size_t>(((i + step) % n + n) % n)]);
@@ -1046,7 +1068,7 @@ static bool blankDesign(const model::Document* doc, bool saved) {
 void Shell::addDesign(std::unique_ptr<model::Document> doc, std::filesystem::path path) {
     auto& docs = host_.documents();
     // An empty, untouched design gives way to the one coming in.
-    const DocId old = activeDesign();
+    const DocId old = activeFile();
     const bool blank = blankDesign(docs.find(old), paths_.count(old) > 0);
     const DocId id = docs.add(std::move(doc));
     if (!path.empty()) paths_[id] = std::move(path);
@@ -1061,7 +1083,7 @@ void Shell::addDesign(std::unique_ptr<model::Document> doc, std::filesystem::pat
 bool Shell::newDesign() {
     // A name no other open design has: Untitled, Untitled 2, ... (the blank design
     // this one replaces doesn't count).
-    const DocId old = activeDesign();
+    const DocId old = activeFile();
     const bool blank = blankDesign(host_.documents().find(old), paths_.count(old) > 0);
     auto taken = [&](const QString& name) {
         for (const auto& id : host_.documents().ids()) {
@@ -1076,7 +1098,7 @@ bool Shell::newDesign() {
 }
 
 bool Shell::newAssembly() {
-    const DocId old = activeDesign();
+    const DocId old = activeFile();
     const bool blank = blankDesign(host_.documents().find(old), paths_.count(old) > 0);
     auto taken = [&](const QString& name) {
         for (const auto& id : host_.documents().ids()) {
@@ -1266,7 +1288,7 @@ Diagnostics Shell::importPart(const std::filesystem::path& path) {
 }
 
 Diagnostics Shell::saveDesign(const std::filesystem::path& path) {
-    const DocId id = activeDesign();
+    const DocId id = activeFile();
     const auto* doc = host_.documents().find(id);
     if (!doc) return {};
     auto problems = io::writeFile(*doc, path);
@@ -1276,9 +1298,38 @@ Diagnostics Shell::saveDesign(const std::filesystem::path& path) {
     }
     host_.documents().markSaved(id);
     paths_[id] = path;
-    showMessage(tr("Saved %1").arg(QString::fromStdWString(path.filename().wstring())));
+    // Open assemblies that link to this file use the part as it's saved now.
+    QStringList using_;
+    std::error_code ec;
+    const auto saved = std::filesystem::weakly_canonical(path, ec);
+    auto& docs = host_.documents();
+    for (const auto& other : docs.ids()) {
+        const auto* assembly = docs.find(other);
+        const auto* link = assembly ? assembly->partLink(id) : nullptr;
+        if (other == id || !link) continue;
+        const auto linked = std::filesystem::weakly_canonical(
+            std::filesystem::path(std::u8string(link->path.begin(), link->path.end())), ec);
+        if (linked != saved) continue;
+        if (docs.run(other, "part.update", {{"part", doc->name()}}).empty()) using_ << designTitle(other);
+    }
+    const QString file = QString::fromStdWString(path.filename().wstring());
+    showMessage(
+        using_.isEmpty()
+            ? tr("Saved %1").arg(file)
+            : tr("Saved %1. %2 uses the new %3 now.").arg(file, using_.join(tr(" and ")), qs(doc->name())));
     refresh();
     return {};
+}
+
+void Shell::finishEditingPart() {
+    auto& docs = host_.documents();
+    const DocId file = activeFile();
+    const auto component = docs.editedComponent(file);
+    if (!docs.finishEditing(file)) return;
+    // Back in the assembly, with the component that was edited picked.
+    if (docs.find(file) && docs.find(file)->findComponent(component))
+        host_.selection().setComponents(file, {component});
+    refresh();
 }
 
 // The picked step, if exactly one built step is picked; otherwise the one
@@ -1398,7 +1449,7 @@ Diagnostics Shell::exportDesign(const std::filesystem::path& path) {
 bool Shell::save() {
     auto path = activePath();
     if (path.empty()) {
-        const auto* doc = host_.documents().find(activeDesign());
+        const auto* doc = host_.documents().find(activeFile());
         const auto chosen = askSavePath(qs(doc ? doc->name() : "Untitled") + QStringLiteral(".sb"));
         if (chosen.isEmpty()) return false;
         path = chosen.toStdWString();
@@ -1480,6 +1531,17 @@ void Shell::pasteSteps() {
 void Shell::selectSteps(const QStringList& names) {
     const auto* doc = host_.documents().find(activeDesign());
     if (!doc) return;
+    if (doc->kind() == model::DocKind::Assembly) {
+        // An assembly's components, by name.
+        std::vector<model::ComponentId> picked;
+        for (const auto& name : names) {
+            for (const auto& c : doc->components()) {
+                if (qs(c.name) == name) picked.push_back(c.id);
+            }
+        }
+        host_.selection().setComponents(activeDesign(), std::move(picked));
+        return;
+    }
     std::vector<FeatureId> ids;
     for (const auto& name : names) {
         for (std::size_t i = 0; i < doc->featureCount(); ++i) {
@@ -1546,7 +1608,7 @@ void Shell::syncDesignTabs() {
         const auto path = paths_.find(id);
         tabs->setTabToolTip(at, path != paths_.end() ? QString::fromStdWString(path->second.wstring())
                                                      : tr("%1 isn't saved yet.").arg(title));
-        if (id == docs.active()) tabs->setCurrentIndex(at);
+        if (id == docs.activeDesign()) tabs->setCurrentIndex(at);
     }
     syncingTabs_ = false;
 }
@@ -1554,19 +1616,30 @@ void Shell::syncDesignTabs() {
 void Shell::refresh() {
     refreshPending_ = false;
     auto& docs = host_.documents();
+    // The open file: an assembly even while one of its parts is edited in it.
+    const auto* file = docs.find(activeFile());
     const auto* doc = docs.find(activeDesign());
-    setWindowTitle(tr("%1[*] - SketchBillet").arg(designTitle(activeDesign())));
-    setWindowModified(doc && doc->isModified());
+    setWindowTitle(tr("%1[*] - SketchBillet").arg(designTitle(activeFile())));
+    setWindowModified(file && file->isModified());
     syncDesignTabs();
+    if (activeDesign() != activeFile() && file && doc) {
+        const auto* c = file->findComponent(docs.editedComponent(activeFile()));
+        ribbon_->showEditing(
+            tr("Editing %1 in %2, where %3 is. The rest of %2 is faded. Changes to %1 "
+               "change every %1 in %2.")
+                .arg(qs(doc->name()), designTitle(activeFile()), qs(c ? c->name : doc->name())));
+    } else {
+        ribbon_->hideEditing();
+    }
 
-    undo_->setEnabled(doc && doc->canUndo());
-    redo_->setEnabled(doc && doc->canRedo());
+    undo_->setEnabled(file && file->canUndo());
+    redo_->setEnabled(file && file->canRedo());
     export_->setEnabled(doc != nullptr);
     copy_->setEnabled(doc && host_.selection().doc() == activeDesign() &&
                       !host_.selection().features().empty());
     paste_->setEnabled(doc && !clipboardSteps().isEmpty());
-    undo_->setText(doc && doc->canUndo() ? tr("Undo %1").arg(qs(doc->undoLabel())) : tr("Undo"));
-    redo_->setText(doc && doc->canRedo() ? tr("Redo %1").arg(qs(doc->redoLabel())) : tr("Redo"));
+    undo_->setText(file && file->canUndo() ? tr("Undo %1").arg(qs(file->undoLabel())) : tr("Undo"));
+    redo_->setText(file && file->canRedo() ? tr("Redo %1").arg(qs(file->redoLabel())) : tr("Redo"));
 
     refreshActions();
 }

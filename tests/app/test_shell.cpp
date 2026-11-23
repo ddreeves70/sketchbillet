@@ -284,10 +284,10 @@ TEST_CASE("every toolbar button has a picture", "[app][icons]") {
             CHECK(b->toolButtonStyle() == Qt::ToolButtonTextUnderIcon);
     }
     // The top row (5), Import, Export and Check print (3), sb.modeling (15 on Model,
-    // 8 on Assemble), sb.sketcher (2 on Model, 1 main, 5 drawing, 3 editing, 5
+    // 10 on Assemble), sb.sketcher (2 on Model, 1 main, 5 drawing, 3 editing, 5
     // constraints), View options (1), the grid (2), the axes (2), the feature tree and
     // Properties panels (2), and Save and Reset layout (2).
-    CHECK(buttons == 5 + 3 + 15 + 8 + 16 + 1 + 2 + 2 + 2 + 2);
+    CHECK(buttons == 5 + 3 + 15 + 10 + 16 + 1 + 2 + 2 + 2 + 2);
     // The dropdown item shows the same picture as its button.
     CHECK_FALSE(app.shell->action("sb.modeling.box")->icon().isNull());
 }
@@ -3024,6 +3024,158 @@ TEST_CASE("the Assemble tab: a new assembly, inserting parts, components, and th
     settle();
     CHECK(shownTabs() ==
           QStringList{QStringLiteral("Assemble"), QStringLiteral("Inspect"), QStringLiteral("View")});
+}
+
+TEST_CASE("Edit part changes an inside part in the assembly, with the rest faded; Done goes back",
+          "[app][assembly]") {
+    App app;
+    auto* tabs = app.shell->findChild<QTabBar*>(QStringLiteral("sb.ribbon.tabs"));
+    auto* bar = app.shell->findChild<QWidget*>(QStringLiteral("sb.ribbon.editing"));
+    REQUIRE(tabs);
+    REQUIRE(bar);
+    auto shownTabs = [&] {
+        QStringList shown;
+        for (int i = 0; i < tabs->count(); ++i) {
+            if (tabs->isTabVisible(i)) shown << tabs->tabText(i);
+        }
+        return shown;
+    };
+    // Car: a Body, and two Wheels inside it, the second 50 mm along.
+    model::Document car(model::DocKind::Part, "Car");
+    REQUIRE(car.execute(std::make_unique<model::MakeAssemblyCommand>()).empty());
+    auto part = [](const char* name, kernel::Vec3 size) {
+        auto p = std::make_unique<model::Document>(model::DocKind::Part, name);
+        REQUIRE(p->execute(std::make_unique<model::AddFeatureCommand>(
+                               std::make_unique<model::BoxFeature>("Box1", kernel::Vec3{}, size)))
+                    .empty());
+        return p;
+    };
+    REQUIRE(car.execute(std::make_unique<model::InsertPartCommand>(part("Body", {80, 40, 10}), 1)).empty());
+    REQUIRE(car
+                .execute(std::make_unique<model::InsertPartCommand>(
+                    part("Wheel", {10, 10, 4}), 2, kernel::Placement{{10, -5, 0}}, kernel::Vec3{50, 0, 0}))
+                .empty());
+    const auto path = app.dir.filePath(QStringLiteral("car.sb")).toStdWString();
+    REQUIRE(io::writeFile(car, path).empty());
+    REQUIRE(app.shell->openDesign(path).empty());
+    settle();
+    auto& docs = app.host.documents();
+    const DocId carId = docs.active();
+    const auto& assembly = *docs.find(carId);
+    const DocId wheelId = assembly.findPart("Wheel")->id();
+    const auto wheel2 = assembly.components()[2].id;
+    CHECK(bar->isHidden());
+
+    // Pick Wheel 2, and Edit part: the Wheel is the design being worked on.
+    CHECK_FALSE(app.shell->action("sb.modeling.edit_part")->isEnabled());  // nothing picked
+    app.host.selection().setComponents(carId, {wheel2});
+    settle();
+    CHECK(app.shell->action("sb.modeling.edit_part")->isEnabled());
+    CHECK_FALSE(app.shell->action("sb.modeling.open_part")->isEnabled());  // an inside part has no file
+    app.click("sb.modeling.edit_part");
+    CHECK(app.shell->activeDesign() == wheelId);
+    CHECK(app.shell->activeFile() == carId);
+    CHECK(app.doc().name() == "Wheel");
+    CHECK(app.host.selection().components().empty());
+    CHECK(bar->isVisibleTo(app.shell.get()));
+    CHECK(app.shell->findChild<QLabel*>(QStringLiteral("sb.ribbon.editing.text"))
+              ->text()
+              .startsWith(QStringLiteral("Editing Wheel in car, where Wheel 2 is.")));
+    // The Model tab, for the part's steps; the tree lists them.
+    CHECK(shownTabs() ==
+          QStringList{QStringLiteral("Model"), QStringLiteral("Inspect"), QStringLiteral("View")});
+    CHECK(app.shell->action("sb.modeling.box")->isEnabled());
+    auto* tree = app.tree();
+    REQUIRE(tree->topLevelItemCount() >= 1);
+    CHECK(tree->topLevelItem(0)->text(0) == QStringLiteral("Box1"));
+
+    // The viewer: the Wheel where it is, at its own origin, and the rest of Car
+    // around it, faded, from Wheel 2's point of view.
+    auto scene = plugins::viewerScene(docs, app.host.selection());
+    REQUIRE(scene.bodies.size() == 3);
+    CHECK_FALSE(scene.bodies[0].context);
+    CHECK(scene.bodies[0].component.isNil());
+    CHECK(scene.bodies[1].context);  // Body 1, at 0, 0, 0 in Car: -60, 5, 0 from Wheel 2
+    CHECK(scene.bodies[1].placement.origin.x == Approx(-60));
+    CHECK(scene.bodies[1].placement.origin.y == Approx(5));
+    CHECK(scene.bodies[2].context);  // Wheel 1, 50 mm behind
+    CHECK(scene.bodies[2].placement.origin.x == Approx(-50));
+
+    // A box added now goes in the Wheel, as a step of Car: both wheels get it.
+    app.click("sb.modeling.box");
+    CHECK(app.doc().featureCount() == 2);
+    CHECK(assembly.undoLabel() == "Add Box2 in Wheel");
+    CHECK(assembly.isModified());
+    CHECK(docs.lastRebuild(carId)->part(wheelId)->bodies().size() == 2);
+    CHECK(app.shell->undoAction()->text() == QStringLiteral("Undo Add Box2 in Wheel"));
+    app.shell->undoAction()->trigger();
+    settle();
+    CHECK(app.doc().featureCount() == 1);
+    CHECK(app.shell->activeDesign() == wheelId);  // still editing
+
+    // Done: back to Car, with Wheel 2 picked.
+    app.shell->findChild<QToolButton*>(QStringLiteral("sb.ribbon.editing.done"))->click();
+    settle();
+    CHECK(app.shell->activeDesign() == carId);
+    CHECK(bar->isHidden());
+    CHECK(app.host.selection().components() == std::vector{wheel2});
+    CHECK(shownTabs() ==
+          QStringList{QStringLiteral("Assemble"), QStringLiteral("Inspect"), QStringLiteral("View")});
+
+    // Undo taking the part away while it's edited goes back to Car by itself.
+    app.click("sb.modeling.edit_part");
+    REQUIRE(app.shell->activeDesign() == wheelId);
+    REQUIRE(docs.run(carId, "component.delete", {{"component", "Wheel 2"}}).empty());
+    settle();
+    CHECK(app.shell->activeDesign() == carId);
+    CHECK(bar->isHidden());
+}
+
+TEST_CASE("Open part opens a linked part's file beside the assembly; saving it updates the assembly",
+          "[app][assembly]") {
+    App app;
+    model::Document wheel(model::DocKind::Part, "Wheel");
+    REQUIRE(wheel
+                .execute(std::make_unique<model::AddFeatureCommand>(
+                    std::make_unique<model::BoxFeature>("Box1", kernel::Vec3{}, kernel::Vec3{10, 10, 4})))
+                .empty());
+    const QString wheelFile = app.dir.filePath(QStringLiteral("Wheel.sb"));
+    REQUIRE(io::writeFile(wheel, wheelFile.toStdWString()).empty());
+    app.shell->askFilePath = [&](const QString&, const QString&, bool, const QString&) { return wheelFile; };
+    REQUIRE(app.shell->newAssembly());
+    settle();
+    const DocId carId = app.shell->activeFile();
+    app.click("sb.modeling.insert_part");
+    const auto& car = *app.host.documents().find(carId);
+    REQUIRE(car.components().size() == 1);
+    CHECK_FALSE(app.shell->action("sb.modeling.edit_part")->isEnabled());  // linked: edited in its file
+    REQUIRE(app.shell->action("sb.modeling.open_part")->isEnabled());
+
+    // Open part: Wheel.sb in a tab of its own.
+    app.click("sb.modeling.open_part");
+    CHECK(app.shell->activeDesign() == wheel.id());
+    CHECK(app.shell->activeFile() == wheel.id());
+    CHECK(app.host.documents().ids().size() == 2);
+    CHECK(app.doc().name() == "Wheel");
+
+    // Change it and save it: Car uses the new Wheel, as one step of Car's.
+    app.click("sb.modeling.box");
+    REQUIRE(app.doc().featureCount() == 2);
+    REQUIRE(app.shell->save());
+    settle();
+    CHECK(app.host.documents().lastRebuild(carId)->part(wheel.id())->bodies().size() == 2);
+    CHECK(car.findPart(wheel.id())->featureCount() == 2);
+    CHECK(car.isModified());
+    CHECK(app.shell->statusBar()->currentMessage() ==
+          QStringLiteral("Saved Wheel.sb. Untitled assembly uses the new Wheel now."));
+
+    // Open part again: its tab, not a second one.
+    app.host.documents().setActive(carId);
+    app.host.selection().setComponents(carId, {car.components()[0].id});
+    settle();
+    app.click("sb.modeling.open_part");
+    CHECK(app.shell->activeDesign() == wheel.id());
+    CHECK(app.host.documents().ids().size() == 2);
 }
 
 TEST_CASE("opening a file that isn't a design explains why", "[app]") {

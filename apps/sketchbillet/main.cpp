@@ -2,7 +2,8 @@
 //
 //   sketchbillet [file.sb]                 open a design (or start with an empty one)
 //   sketchbillet --open file.sb            the same
-//   sketchbillet --select Step1,Step2        pick steps after opening (for screenshots)
+//   sketchbillet --select Step1,Step2        pick steps (in an assembly, components) after opening
+//                                      (for screenshots)
 //   sketchbillet --trigger id1,id2           click menu items and buttons by object name, e.g.
 //                                      sb.viewer.layout.fourpanes (for screenshots)
 //   sketchbillet --edges Extrude1:9,12       then pick edges of a body, numbered as

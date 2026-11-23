@@ -180,7 +180,11 @@ class PluginContext;
 /// (fromFile, fileTypes, saveFile, suggestedFile).
 /// Version 62 added previews of a moved component of an assembly (sb.viewer/7:
 /// IViewer::previewComponent(), viewer::BodyPreview::component).
-inline constexpr int kPluginApiVersion = 62;
+/// Version 63 added editing an assembly's inside part in the assembly
+/// (DocumentList::editPart(), finishEditing(), editedPart(), editedComponent(),
+/// assemblyOf() and activeDesign(); active() gives the part being edited) and
+/// actions that open a design file (ActionSpec::openFile).
+inline constexpr int kPluginApiVersion = 63;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.
