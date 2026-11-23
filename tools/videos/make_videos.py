@@ -6,8 +6,11 @@ screen, and puts captions, a title card and an end card on it.
     python3 tools/videos/make_videos.py --sketchbillet-app build/dev/apps/sketchbillet/sketchbillet \\
         [--out build/videos] [names...]
 
-Linux only (it records an Xvfb screen with ffmpeg). Needs Xvfb, ffmpeg (with
-libx264 and libass) and Pillow. For each script it writes, in --out/<name>/:
+On Linux it records a virtual screen (Xvfb), so you can keep working. On
+Windows it records your main screen: SketchBillet fills it while a video plays,
+so leave the mouse and keyboard alone until it's done. Needs ffmpeg (with
+libx264 and libass), Pillow, and on Linux Xvfb. For each script it writes, in
+--out/<name>/:
 
     <name>.mp4      1920 x 1080, 30 frames a second, captions burnt in
     <name>.srt      the captions, to upload as subtitles instead (or as well)
@@ -55,14 +58,28 @@ BLUE = (120, 173, 233)
 PAPER = (247, 249, 252)
 
 
+WINDOWS = sys.platform.startswith("win")
+FONT_FOLDERS = [Path("/usr/share/fonts/opentype/inter"), Path("/usr/share/fonts/truetype/dejavu"),
+                Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"]
+
+
 def font(size, bold=False):
     from PIL import ImageFont
-    for name in (["Inter-Bold.otf", "DejaVuSans-Bold.ttf"] if bold else ["Inter-Regular.otf", "DejaVuSans.ttf"]):
-        for folder in ("/usr/share/fonts/opentype/inter", "/usr/share/fonts/truetype/dejavu"):
-            path = Path(folder) / name
+    names = (["Inter-Bold.otf", "DejaVuSans-Bold.ttf", "segoeuib.ttf", "arialbd.ttf"] if bold
+             else ["Inter-Regular.otf", "DejaVuSans.ttf", "segoeui.ttf", "arial.ttf"])
+    for name in names:
+        for folder in FONT_FOLDERS:
+            path = folder / name
             if path.exists():
                 return ImageFont.truetype(str(path), size)
     return ImageFont.load_default()
+
+
+def caption_font():
+    """The font the captions are drawn in: Inter if it's there, else the system's own."""
+    if (FONT_FOLDERS[0] / "Inter-Regular.otf").exists():
+        return "Inter"
+    return "Segoe UI" if WINDOWS else "DejaVu Sans"
 
 
 def wrap(draw, text, fnt, width):
@@ -158,8 +175,8 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,Inter,46,&H00FFFFFF,&H00FFFFFF,&H30201810,&H30201810,0,0,0,0,100,100,0,0,3,14,0,2,220,220,60,1
-Style: Chapter,Inter,36,&H00302018,&H00302018,&H00E9AD78,&H00E9AD78,1,0,0,0,100,100,0,0,3,12,0,8,40,40,232,1
+Style: Caption,{caption_font()},46,&H00FFFFFF,&H00FFFFFF,&H30201810,&H30201810,0,0,0,0,100,100,0,0,3,14,0,2,220,220,60,1
+Style: Chapter,{caption_font()},36,&H00302018,&H00302018,&H00E9AD78,&H00E9AD78,1,0,0,0,100,100,0,0,3,12,0,8,40,40,232,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -179,36 +196,69 @@ def write_srt(path, caps):
     path.write_text("\n".join(out), encoding="utf-8")
 
 
-def record(app, script_path, script, workdir, raw, log, display):
-    """Plays the script on the app on an Xvfb screen, recording it. Returns the
-    recording's start time (seconds since 1970)."""
-    xvfb = subprocess.Popen(["Xvfb", display, "-screen", "0", f"{SIZE[0]}x{SIZE[1]}x24", "-nolisten", "tcp"],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    try:
+def app_argv(app, script_path, script, workdir, log):
+    argv = [str(app), "--settings", str(workdir / "settings.ini"), "--demo", str(script_path),
+            "--demo-log", str(log)]
+    if script.get("open"):
+        argv.append(script["open"])
+    return argv
+
+
+def start_time(err, launched, name):
+    """When the recording's first frame was taken (seconds since 1970). ffmpeg
+    says so ("start: 1795459813.331") when its screen grabber stamps frames with
+    the clock; otherwise it's about when ffmpeg started."""
+    found = re.search(r"start: (\d+\.\d+)", err)
+    if found and abs(float(found.group(1)) - launched) < 60:
+        return float(found.group(1))
+    if "Press [q] to stop" in err or "frame=" in err:
+        return launched + 0.3
+    sys.exit(f"{name}: couldn't tell when the recording started:\n{err[-2000:]}")
+
+
+def screen_size():
+    """The main screen's size in pixels, on Windows (a scaled-up screen too)."""
+    import ctypes
+    ctypes.windll.user32.SetProcessDPIAware()
+    return ctypes.windll.user32.GetSystemMetrics(0), ctypes.windll.user32.GetSystemMetrics(1)
+
+
+def record(app, script_path, script, workdir, raw, log, display, scale):
+    """Plays the script on the app, recording the screen. Returns the recording's
+    start time (seconds since 1970)."""
+    server = None
+    if WINDOWS:
+        # The main screen, as it is: the app fills it (--demo shows it full screen).
+        width, height = screen_size()
+        grab_input = ["-f", "gdigrab", "-draw_mouse", "1", "-framerate", str(FPS), "-offset_x", "0",
+                      "-offset_y", "0", "-video_size", f"{width}x{height}", "-i", "desktop"]
+        env = dict(os.environ)
+        if scale:
+            env["QT_SCALE_FACTOR"] = str(scale)
+    else:
+        server = subprocess.Popen(["Xvfb", display, "-screen", "0", f"{SIZE[0]}x{SIZE[1]}x24", "-nolisten", "tcp"],
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         time.sleep(1.0)
+        grab_input = ["-f", "x11grab", "-draw_mouse", "1", "-framerate", str(FPS), "-video_size",
+                      f"{SIZE[0]}x{SIZE[1]}", "-i", display]
         env = dict(os.environ, DISPLAY=display, QT_QPA_PLATFORM="xcb", LIBGL_ALWAYS_SOFTWARE="1",
-                   QT_SCALE_FACTOR="1.5", QT_QPA_PLATFORMTHEME="")
-        grab = subprocess.Popen(["ffmpeg", "-y", "-loglevel", "info", "-f", "x11grab", "-draw_mouse", "1",
-                                 "-framerate", str(FPS), "-video_size", f"{SIZE[0]}x{SIZE[1]}", "-i", display]
-                                + ENCODE + [str(raw)],
+                   QT_SCALE_FACTOR=str(scale or 1.5), QT_QPA_PLATFORMTHEME="")
+    try:
+        launched = time.time()
+        grab = subprocess.Popen(["ffmpeg", "-y", "-loglevel", "info"] + grab_input + ENCODE + [str(raw)],
                                 stdin=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
-        argv = [str(app), "--settings", str(workdir / "settings.ini"), "--demo", str(script_path),
-                "--demo-log", str(log)]
-        if script.get("open"):
-            argv.append(script["open"])
-        played = subprocess.run(argv, cwd=workdir, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        time.sleep(1.0)  # grabbing before anything happens
+        played = subprocess.run(app_argv(app, script_path, script, workdir, log), cwd=workdir, env=env,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         time.sleep(0.5)
         _, err = grab.communicate(b"q", timeout=120)
         if played.returncode != 0:
             sys.exit(f"{script_path.name}: the demo stopped:\n{played.stdout.decode(errors='replace')}")
-        # x11grab stamps frames with the clock: "start: 1795459813.331" is the first frame.
-        found = re.search(r"start: (\d+\.\d+)", err.decode(errors="replace"))
-        if not found:
-            sys.exit(f"{script_path.name}: couldn't tell when the recording started:\n{err.decode()[-2000:]}")
-        return float(found.group(1))
+        return start_time(err.decode(errors="replace"), launched, script_path.name)
     finally:
-        xvfb.send_signal(signal.SIGTERM)
-        xvfb.wait()
+        if server:
+            server.send_signal(signal.SIGTERM)
+            server.wait()
 
 
 def run_setup(cli, script, work, name):
@@ -243,10 +293,14 @@ def check(app, cli, script_path):
     with tempfile.TemporaryDirectory(prefix="sb_video_check_") as tmp:
         work = Path(tmp)
         run_setup(cli, script, work, name)
-        # On a virtual screen, with the real 3D view the video shows.
-        env = dict(os.environ, QT_QPA_PLATFORM="xcb", LIBGL_ALWAYS_SOFTWARE="1", QT_SCALE_FACTOR="1.5")
-        argv = [shutil.which("xvfb-run"), "-a", "-s", f"-screen 0 {SIZE[0]}x{SIZE[1]}x24", str(app),
-                "--settings", str(work / "settings.ini"), "--demo", str(script_path), "--demo-speed", "0"]
+        argv = [str(app), "--settings", str(work / "settings.ini"), "--demo", str(script_path),
+                "--demo-speed", "0"]
+        env = dict(os.environ)
+        if not WINDOWS:
+            # On a virtual screen, with the real 3D view the video shows. (On
+            # Windows it plays on the screen, for a few seconds.)
+            env.update(QT_QPA_PLATFORM="xcb", LIBGL_ALWAYS_SOFTWARE="1", QT_SCALE_FACTOR="1.5")
+            argv = [shutil.which("xvfb-run"), "-a", "-s", f"-screen 0 {SIZE[0]}x{SIZE[1]}x24"] + argv
         if script.get("open"):
             argv.append(script["open"])
         played = subprocess.run(argv, cwd=work, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -257,7 +311,7 @@ def check(app, cli, script_path):
     print(f"{name}: played to the end")
 
 
-def make(app, cli, script_path, out_root, display):
+def make(app, cli, script_path, out_root, display, scale):
     script = json.loads(script_path.read_text(encoding="utf-8"))
     name = script_path.stem
     out = out_root / name
@@ -268,7 +322,7 @@ def make(app, cli, script_path, out_root, display):
         work.mkdir()
         run_setup(cli, script, work, name)
         raw, log = tmp / "raw.mp4", tmp / "log.jsonl"
-        started = record(app, script_path, script, work, raw, log, display)
+        started = record(app, script_path, script, work, raw, log, display, scale)
         check_expect(cli, script, work, name)
         events = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines() if line.strip()]
         begin = next(e["t"] for e in events if e["event"] == "start") / 1000.0 - started - 0.6
@@ -281,8 +335,12 @@ def make(app, cli, script_path, out_root, display):
         write_ass(ass, caps, chapters)
         body = tmp / "2-body.mp4"
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{begin:.3f}", "-i", str(raw), "-t",
-                        f"{length:.3f}", "-vf", f"ass={ass}:fontsdir=/usr/share/fonts/opentype/inter"]
-                       + ENCODE + [str(body)], check=True)
+                        f"{length:.3f}", "-vf",
+                        # Any screen to 1920 x 1080, then the captions (a bare file name:
+                        # a Windows path's colon would need escaping in a filter).
+                        f"scale={SIZE[0]}:{SIZE[1]}:force_original_aspect_ratio=decrease,"
+                        f"pad={SIZE[0]}:{SIZE[1]}:(ow-iw)/2:(oh-ih)/2:color=white,setsar=1,ass={ass.name}"]
+                       + ENCODE + [str(body)], check=True, cwd=tmp)
 
         # Title and end cards.
         title, end = tmp / "title.png", tmp / "end.png"
@@ -292,7 +350,7 @@ def make(app, cli, script_path, out_root, display):
         encode_still(title, CARD_SECONDS, tmp / "1-title.mp4")
         encode_still(end, CARD_SECONDS, tmp / "3-end.mp4")
         listing = tmp / "parts.txt"
-        listing.write_text("".join(f"file '{tmp / p}'\n" for p in ("1-title.mp4", "2-body.mp4", "3-end.mp4")))
+        listing.write_text("".join(f"file '{(tmp / p).as_posix()}'\n" for p in ("1-title.mp4", "2-body.mp4", "3-end.mp4")))
         video = out / f"{name}.mp4"
         part = out / f"{name}.part.mp4"
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(listing),
@@ -321,29 +379,45 @@ def main():
     ap.add_argument("--sketchbillet-app", required=True)
     ap.add_argument("--sketchbillet-cli", help="for scripts with \"setup\" (default: next to the app)")
     ap.add_argument("--out", default=str(REPO / "build/videos"))
-    ap.add_argument("--display", default=":97", help="the Xvfb screen to record on")
+    ap.add_argument("--display", default=":97", help="the Xvfb screen to record on (Linux)")
+    ap.add_argument("--scale", type=float, default=None,
+                    help="how much bigger to draw the app: 1.5 on Linux's virtual screen; on Windows "
+                         "your display's own scaling, unless you give one")
     ap.add_argument("--check", action="store_true",
                     help="play each script fast on a virtual screen, and check what it made; record nothing")
     ap.add_argument("names", nargs="*", help="only scripts whose name contains one of these")
     args = ap.parse_args()
     app = Path(args.sketchbillet_app).resolve()
+    if not app.exists() and app.with_suffix(".exe").exists():
+        app = app.with_suffix(".exe")  # Windows: sketchbillet.exe
+    if not app.exists():
+        sys.exit(f"there's no SketchBillet app at {app}. Build it first, and give its path.")
     cli = Path(args.sketchbillet_cli).resolve() if args.sketchbillet_cli else \
-        app.parent.parent / "sketchbillet_cli" / "sketchbillet_cli"
+        app.parent.parent / "sketchbillet_cli" / ("sketchbillet_cli" + app.suffix)
     scripts = [s for s in sorted((HERE / "scripts").glob("*.json"))
                if not args.names or any(n in s.stem for n in args.names)]
     if not scripts:
         sys.exit("no video scripts match " + " ".join(args.names))
     if args.check:
-        if not shutil.which("xvfb-run"):
+        if not WINDOWS and not shutil.which("xvfb-run"):
             sys.exit("make_videos.py --check needs xvfb-run (apt install xvfb)")
         for script in scripts:
             check(app, cli, script)
         return
-    for tool in ("Xvfb", "ffmpeg"):
+    for tool in (["ffmpeg"] if WINDOWS else ["Xvfb", "ffmpeg"]):
         if not shutil.which(tool):
-            sys.exit(f"make_videos.py needs {tool} (apt install xvfb ffmpeg)")
+            sys.exit(f"make_videos.py needs {tool}: "
+                     + ("winget install Gyan.FFmpeg, then open a new Command Prompt" if WINDOWS
+                        else "apt install xvfb ffmpeg"))
+    try:
+        import PIL  # noqa: F401  (for the title and end cards)
+    except ImportError:
+        sys.exit("make_videos.py needs Pillow: " + ("py -m pip install pillow" if WINDOWS
+                                                    else "apt install python3-pil"))
+    if WINDOWS:
+        print("Recording your main screen: leave the mouse and keyboard alone until the videos are done.")
     for script in scripts:
-        make(app, cli, script, Path(args.out).resolve(), args.display)
+        make(app, cli, script, Path(args.out).resolve(), args.display, args.scale)
 
 
 if __name__ == "__main__":
