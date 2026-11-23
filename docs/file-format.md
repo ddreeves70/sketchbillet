@@ -378,6 +378,7 @@ part, and the Wheel part is saved once.
 car.sb
 ├── manifest.json                    kind "assembly", schema 2
 ├── components.json                  each component: its part, where it is, grounded or free
+├── joints.json                      the joints between components (only if it has any)
 ├── parameters.json                  the assembly's own named values (only if it has any)
 └── parts/
     ├── 017e13e9-....                an inside part: one folder per part, named after its id
@@ -390,8 +391,8 @@ car.sb
 ```
 
 The assembly's `manifest.json` is the same as a part's, with `"kind": "assembly"`
-and `"schema": 2`. Its `files` lists `components.json`, `parameters.json` if
-there is one, and each part's `parts/<id>/manifest.json`. The parts are listed
+and `"schema": 2`. Its `files` lists `components.json`, `joints.json` and
+`parameters.json` if there are any, and each part's `parts/<id>/manifest.json`. The parts are listed
 in the assembly's order (the order they were put in), and that is the order they
 open in.
 
@@ -458,12 +459,64 @@ copy.
 Components are listed in the assembly's order, which is the order a list or the
 feature tree shows them in.
 
+Where a joint puts a component isn't saved: its `placement` is where it was put
+by itself, and the joints place it again each time the assembly is built. Take
+the joint out, and the component goes back there.
+
+### joints.json
+
+```json
+{
+  "joints": [
+    {
+      "a": {
+        "at": "end",
+        "body": "93a3c1a6-40d6-4ef9-86f7-89085b5e4361",
+        "component": "0a40363b-e9b6-4fed-bdbc-89b401ada34f",
+        "element": {"center": [20.0, 40.0, 10.0], "direction": [1.0, 0.0, 0.0], "geom": "line",
+                    "kind": "edge", "name": "E[93a3c1a6/back|93a3c1a6/top]", "radius": 0.0, "size": 40.0}
+      },
+      "angle": 0.0,
+      "b": {"component": "5c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f"},
+      "flip": true,
+      "highest": 0.0,
+      "id": "e2b54d6a-0c1f-4f5e-9d3a-1b2c3d4e5f60",
+      "kind": "revolute",
+      "lowest": -1.9198621771937625,
+      "name": "Joint1",
+      "off": false,
+      "offset": 0.0,
+      "rest": 0.0,
+      "value": -1.7453292519943295
+    }
+  ]
+}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `id`, `name` | The joint's UUID, which never changes, and its name, like `Joint1`. |
+| `kind` | `rigid`, `revolute` (turns about the joint) or `slider` (slides along it). |
+| `a`, `b` | Its two sides. `b` is placed against `a` (or `a` against `b`, when only `b` is placed already). |
+| `component` | The side's component. |
+| `body` | The id of the step whose body the side is on, in the component's part. Left out for the part's own origin. |
+| `element` | The face, edge or vertex picked on that body: a reference like a fillet's edges, found again by name when the part changes (see [features](#featuresidjson)). Left out for the part's own origin. |
+| `at` | `start` or `end` for a straight edge's end; left out for its middle. |
+| `flip` | `true` if `b` is turned round so the two sides point the same way; otherwise they point at each other. |
+| `angle`, `offset` | How far `b` is turned about the joint (radians) and the gap left along it (mm). |
+| `value`, `rest` | How far a revolute joint is turned (radians) or a slider slid (mm), and where Reset Joints puts it back to. 0 for a rigid joint. |
+| `lowest`, `highest` | The value's limits, in the same units. Left out when there's none. |
+| `off` | `true` if it's turned off: it places nothing. |
+
+Joints are listed in the order they were added: when two could place the same
+component, the earlier one does.
+
 ### Opening an assembly
 
 SketchBillet reads the manifest, then `parameters.json`, then each part in the
 order the manifest lists them (each one opened the same way as a part file), then
-`components.json`. Each part and each component is added through a command, so
-the same checks run as when a student builds the assembly.
+`components.json`, then `joints.json`. Each part, component and joint is added
+through a command, so the same checks run as when a student builds the assembly.
 
 Then it looks for each linked part's file: at its `path`; then by its file name
 in the assembly's folder; then by its `documentId` among the `.sb` files in the
@@ -482,11 +535,10 @@ Each of these but the first leaves a note saying what happened.
 An assembly is `file.damaged` if a part listed in the manifest has no folder, a
 part's `link.json` has no `path` or `documentId` or is for another design, a
 part in it is itself an assembly, a component is missing its id, name, part or
-placement, or a component's part isn't in `parts/`. An assembly that says it is
+placement, a component's part isn't in `parts/`, or a joint is missing its id,
+name, kind or sides, or joins components that aren't there. An assembly that says it is
 schema 1 is damaged too. A SketchBillet that only knows schema 1 says the file is
 `file.too_new` and to update SketchBillet.
-
-Joints between components (`joints.json`) come in a later version of schema 2.
 
 ## Changing the format
 
@@ -532,8 +584,6 @@ Joints between components (`joints.json`) come in a later version of schema 2.
 
 From the design document's file format plan, these come later:
 
-- Joints between an assembly's components (`joints.json`), planned on
-  [Assemblies](design/assemblies.md#file-format), Phase 4.
 - A `cache/` folder with built geometry for faster opening.
 - Keeping keys this SketchBillet doesn't understand when it saves a file from a newer
   minor version. Today they are dropped.

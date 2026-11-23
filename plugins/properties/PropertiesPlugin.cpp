@@ -446,7 +446,10 @@ private:
         fileLabel->setText(file);
         fileLabel->setToolTip(link ? QString::fromStdString(link->path) : QString());
         auto length = [unit](double mm) { return qs(lengthText(mm, unit)); };
-        const auto& p = c->placement;
+        // Where it is: placed by its joints, or where it was put.
+        const auto* report = ctx_.documents().lastRebuild(ctx_.selection().doc());
+        const auto* placed = report ? report->placementOf(c->id) : nullptr;
+        const auto& p = placed ? *placed : c->placement;
         form_->findChild<QLabel*>(QStringLiteral("place"))
             ->setText(tr("x %1, y %2, z %3").arg(length(p.origin.x), length(p.origin.y), length(p.origin.z)));
         auto direction = [](const kernel::Vec3& v) {

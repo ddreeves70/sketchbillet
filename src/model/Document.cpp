@@ -108,6 +108,10 @@ std::vector<Component>& DocumentEditor::components() {
     return doc_.components_;
 }
 
+std::vector<Joint>& DocumentEditor::joints() {
+    return doc_.joints_;
+}
+
 void DocumentEditor::addPart(std::unique_ptr<Document> part, std::size_t index) {
     if (!part) return;
     index = std::min(index, doc_.parts_.size());
@@ -208,6 +212,21 @@ bool RebuildReport::ok() const {
 const RebuildReport* RebuildReport::part(const DocId& id) const {
     const auto it = parts_.find(id);
     return it == parts_.end() ? nullptr : it->second.get();
+}
+
+const kernel::Placement* RebuildReport::placementOf(const ComponentId& id) const {
+    const auto it = placements_.find(id);
+    return it == placements_.end() ? nullptr : &it->second;
+}
+
+bool RebuildReport::placedByJoint(const ComponentId& id) const {
+    const auto it = byJoint_.find(id);
+    return it != byJoint_.end() && it->second;
+}
+
+const JointResult* RebuildReport::joint(const JointId& id) const {
+    const auto it = joints_.find(id);
+    return it == joints_.end() ? nullptr : &it->second;
 }
 
 // ---------------------------------------------------------------------------
@@ -350,6 +369,27 @@ std::string Document::uniqueComponentName(const std::string& part) const {
     for (int n = 1;; ++n) {
         std::string candidate = part + " " + std::to_string(n);
         if (!findComponent(std::string_view(candidate))) return candidate;
+    }
+}
+
+const Joint* Document::findJoint(const JointId& id) const {
+    for (const auto& j : joints_) {
+        if (j.id == id) return &j;
+    }
+    return nullptr;
+}
+
+const Joint* Document::findJoint(std::string_view name) const {
+    for (const auto& j : joints_) {
+        if (j.name == name) return &j;
+    }
+    return nullptr;
+}
+
+std::string Document::uniqueJointName() const {
+    for (int n = 1;; ++n) {
+        std::string candidate = "Joint" + std::to_string(n);
+        if (!findJoint(std::string_view(candidate))) return candidate;
     }
 }
 
@@ -555,6 +595,8 @@ RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolve
         report.parts_[part->id()] =
             std::make_shared<const RebuildReport>(part->regenerate(kernel, solver, last));
     }
+    // Then where each component goes, along its joints.
+    if (kind_ == DocKind::Assembly) placeComponents(report);
     std::set<FeatureId> usedAsInput;
     std::map<FeatureId, FeatureId> changedBy;  // a body, and the first step that took it as its input
     const ParameterValues values = parameters_.evaluate();  // before any step, as the design says

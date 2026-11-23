@@ -1,7 +1,10 @@
 #include "sb/model/AssemblyCommands.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdio>
 #include <filesystem>
+#include <numbers>
 
 namespace sb::model {
 
@@ -407,6 +410,17 @@ Diagnostics DeleteComponentCommand::apply(DocumentEditor& editor) {
     // Its part goes too when nothing else places it.
     const bool used = std::any_of(components.begin(), components.end(),
                                   [&](const Component& c) { return c.part == removed_->part; });
+    // Its joints go with it.
+    joints_.clear();
+    auto& joints = editor.joints();
+    for (std::size_t i = 0; i < joints.size();) {
+        if (joints[i].a.component == id_ || joints[i].b.component == id_) {
+            joints_.emplace_back(i + joints_.size(), joints[i]);
+            joints.erase(joints.begin() + static_cast<std::ptrdiff_t>(i));
+        } else {
+            ++i;
+        }
+    }
     if (!used) {
         link_ = editor.setPartLink(removed_->part, std::nullopt);
         auto [part, at] = editor.removePart(removed_->part);
@@ -426,6 +440,11 @@ void DeleteComponentCommand::revert(DocumentEditor& editor) {
     auto& components = editor.components();
     components.insert(components.begin() + static_cast<std::ptrdiff_t>(std::min(index_, components.size())),
                       *removed_);
+    auto& joints = editor.joints();
+    for (const auto& [at, joint] : joints_) {
+        joints.insert(joints.begin() + static_cast<std::ptrdiff_t>(std::min(at, joints.size())), joint);
+    }
+    joints_.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -469,6 +488,138 @@ bool EditPartCommand::mergeWith(const Command& next) {
     const auto* other = dynamic_cast<const EditPartCommand*>(&next);
     if (!other || other->part_ != part_ || !change_ || !other->change_) return false;
     return change_->mergeWith(*other->change_);
+}
+
+// ---------------------------------------------------------------------------
+// Joints
+// ---------------------------------------------------------------------------
+
+namespace {
+
+std::string valueText(const Joint& j, double v) {
+    char text[48];
+    if (j.kind == JointKind::Revolute) {
+        std::snprintf(text, sizeof text, "%g\xC2\xB0", std::round(v * 180.0 / std::numbers::pi * 1e6) / 1e6);
+    } else {
+        std::snprintf(text, sizeof text, "%g mm", std::round(v * 1e6) / 1e6);
+    }
+    return text;
+}
+
+}  // namespace
+
+std::optional<Diagnostic> checkJoint(const Document& assembly, const Joint& j) {
+    if (auto d = needAssembly(assembly)) return d;
+    const Component* a = assembly.findComponent(j.a.component);
+    const Component* b = assembly.findComponent(j.b.component);
+    if (!a || !b) return error("assembly.no_component", "A joint's component isn't in the assembly anymore.");
+    if (a->id == b->id) {
+        return error("joint.same_component", j.name + " joins " + a->name +
+                                                 " to itself. Pick a point on another component for its "
+                                                 "second side.");
+    }
+    for (const auto* side : {&j.a, &j.b}) {
+        if (side->body.isNil()) continue;
+        const Component* c = side == &j.a ? a : b;
+        const Document* part = assembly.findPart(c->part);
+        if (!part || !part->find(side->body)) {
+            return error("joint.no_body",
+                         "That body isn't in " + c->name + "'s part. Pick one of its bodies.");
+        }
+    }
+    if (const auto* other = assembly.findJoint(std::string_view(j.name)); other && other->id != j.id) {
+        return error("joint.name_taken", "There's a joint called " + j.name + " already. Pick another name.");
+    }
+    if (j.name.empty()) return error("joint.no_name", "A joint needs a name.");
+    if (j.kind == JointKind::Rigid) {
+        if (j.value != 0 || j.lowest || j.highest) {
+            return error("joint.rigid_value",
+                         j.name +
+                             " is rigid, so it doesn't move: it has no value or limits. Make it revolute "
+                             "(it turns) or a slider (it slides) first.");
+        }
+        return std::nullopt;
+    }
+    if (j.lowest && j.highest && *j.lowest > *j.highest) {
+        return error("joint.limits", j.name + "'s lowest, " + valueText(j, *j.lowest) +
+                                         ", is more than its highest, " + valueText(j, *j.highest) +
+                                         ". Swap them.");
+    }
+    if ((j.lowest && j.value < *j.lowest - 1e-12) || (j.highest && j.value > *j.highest + 1e-12)) {
+        return error("joint.out_of_limits",
+                     j.name + (j.kind == JointKind::Revolute ? " turns" : " slides") + " from " +
+                         (j.lowest ? valueText(j, *j.lowest) : std::string("any")) + " to " +
+                         (j.highest ? valueText(j, *j.highest) : std::string("any")) + ", so it can't be " +
+                         valueText(j, j.value) + ". Pick a value between them, or change its limits.");
+    }
+    return std::nullopt;
+}
+
+AddJointCommand::AddJointCommand(Joint joint) : joint_(std::move(joint)) {}
+
+Diagnostics AddJointCommand::apply(DocumentEditor& editor) {
+    if (joint_.id.isNil()) joint_.id = JointId::generate();
+    if (joint_.name.empty()) joint_.name = editor.document().uniqueJointName();
+    if (auto d = checkJoint(editor.document(), joint_)) return {*d};
+    editor.joints().push_back(joint_);
+    return {};
+}
+
+void AddJointCommand::revert(DocumentEditor& editor) {
+    auto& joints = editor.joints();
+    joints.erase(
+        std::remove_if(joints.begin(), joints.end(), [&](const Joint& j) { return j.id == joint_.id; }),
+        joints.end());
+}
+
+SetJointCommand::SetJointCommand(Joint joint, bool continuesPrevious)
+    : joint_(std::move(joint)), continues_(continuesPrevious) {}
+
+Diagnostics SetJointCommand::apply(DocumentEditor& editor) {
+    auto& joints = editor.joints();
+    const auto it =
+        std::find_if(joints.begin(), joints.end(), [&](const Joint& j) { return j.id == joint_.id; });
+    if (it == joints.end()) return {error("joint.missing", "That joint isn't in the assembly anymore.")};
+    if (auto d = checkJoint(editor.document(), joint_)) return {*d};
+    old_ = *it;
+    *it = joint_;
+    return {};
+}
+
+void SetJointCommand::revert(DocumentEditor& editor) {
+    for (auto& j : editor.joints()) {
+        if (j.id == old_.id) j = old_;
+    }
+}
+
+bool SetJointCommand::mergeWith(const Command& next) {
+    const auto* other = dynamic_cast<const SetJointCommand*>(&next);
+    if (!other || !other->continues_ || other->joint_.id != joint_.id) return false;
+    joint_ = other->joint_;  // old_ stays: undo goes back to before the drag
+    return true;
+}
+
+DeleteJointCommand::DeleteJointCommand(JointId id) : id_(id) {}
+
+std::string DeleteJointCommand::label() const {
+    return "Delete " + (removed_ ? removed_->name : std::string("joint"));
+}
+
+Diagnostics DeleteJointCommand::apply(DocumentEditor& editor) {
+    if (auto d = needAssembly(editor.document())) return {*d};
+    auto& joints = editor.joints();
+    const auto it = std::find_if(joints.begin(), joints.end(), [&](const Joint& j) { return j.id == id_; });
+    if (it == joints.end()) return {error("joint.missing", "That joint isn't in the assembly anymore.")};
+    removed_ = *it;
+    index_ = static_cast<std::size_t>(it - joints.begin());
+    joints.erase(it);
+    return {};
+}
+
+void DeleteJointCommand::revert(DocumentEditor& editor) {
+    if (!removed_) return;
+    auto& joints = editor.joints();
+    joints.insert(joints.begin() + static_cast<std::ptrdiff_t>(std::min(index_, joints.size())), *removed_);
 }
 
 }  // namespace sb::model

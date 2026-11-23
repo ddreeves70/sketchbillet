@@ -3,10 +3,12 @@
 /// @file
 /// Components: parts placed in an assembly (see docs/design/assemblies.md).
 
+#include <optional>
 #include <string>
 
 #include "sb/core/Id.h"
 #include "sb/kernel/Placement.h"
+#include "sb/model/Naming.h"
 
 namespace sb::model {
 
@@ -47,5 +49,69 @@ struct PartLink {
     /// its saved copy. Not saved in the file.
     bool found = true;
 };
+
+/// What a joint lets its two components still do (see docs/design/assemblies.md, "Joints").
+enum class JointKind {
+    Rigid,     ///< Nothing: they're fixed together.
+    Revolute,  ///< Turn about the joint's z, like a hinge. Its value is an angle.
+    Slider,    ///< Slide along the joint's z. Its value is a distance.
+};
+
+/// Where on a straight edge a joint origin is.
+enum class OriginAt {
+    Middle,  ///< The edge's middle; for anything else, its center.
+    Start,   ///< A straight edge's first end.
+    End,     ///< A straight edge's other end.
+};
+
+/// One side of a joint: a point and a direction (the joint's z) on a
+/// component, picked on its part's geometry. The point and direction come from
+/// what's picked:
+///
+/// | Picked | Point | Direction |
+/// | --- | --- | --- |
+/// | A round edge | The circle's center | Along the circle's axis |
+/// | A flat face | The face's center | Straight out of the face |
+/// | A round face | The middle of its axis | Along the axis |
+/// | A straight edge | Its middle, or an end (`at`) | Along the edge |
+/// | A corner | The corner | The part's z |
+/// | Nothing | The part's origin | The part's z |
+struct JointOrigin {
+    ComponentId component{};  ///< The component.
+    /// The body of the component's part the element is on; nil for the part's
+    /// own origin.
+    FeatureId body{};
+    /// The face, edge or vertex picked on that body, found again by name after
+    /// the part changes (like a fillet's edges); none for the part's origin.
+    std::optional<GeometryRef> element;
+    OriginAt at = OriginAt::Middle;  ///< Where on a straight edge.
+};
+
+/// A joint: it places its second component (b) against its first (a), so their
+/// origins meet with their directions pointing at each other, like a peg dropped
+/// into a hole, and says how b can still move. If a isn't placed and b is (b
+/// grounded, say), it places a against b instead.
+struct Joint {
+    JointId id{};                       ///< Its UUID, which never changes.
+    std::string name;                   ///< Like "Joint1".
+    JointKind kind = JointKind::Rigid;  ///< How it still moves.
+    JointOrigin a;                      ///< The side that stays.
+    JointOrigin b;                      ///< The side that moves to meet it.
+    bool flip = false;                  ///< True to turn b the other way round: the directions the same way.
+    double angle = 0;                   ///< How far b is turned about the joint's z (radians).
+    double offset = 0;                  ///< The gap left along the joint's z (mm).
+    /// A revolute joint's turn (radians) or a slider's distance (mm), on top of
+    /// `angle` and `offset`; 0 for a rigid joint.
+    double value = 0;
+    double rest = 0;                ///< Where Reset Joints puts the value back to, in its units.
+    std::optional<double> lowest;   ///< The value's lowest, if it has one.
+    std::optional<double> highest;  ///< The value's highest, if it has one.
+    bool off = false;               ///< True to turn it off: it places nothing.
+};
+
+/// Gives a joint kind's name, as commands and files spell it.
+/// @param kind The kind.
+/// @return "rigid", "revolute" or "slider".
+const char* jointKindName(JointKind kind);
 
 }  // namespace sb::model

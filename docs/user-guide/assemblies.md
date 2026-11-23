@@ -41,8 +41,9 @@ Its picture moves while you drag; when you let go it's placed there, as one step
 of Undo. A grounded component has no arrows: it stays where it is. Press
 **Escape** before you let go to put it back.
 
-Joints, which hold parts together and say how they move (a wheel turning on its
-axle), come next.
+**Joints** hold parts together and say how they still move: a lid turning on its
+hinge, a wheel on its axle. For now they're made with
+[`sketchbillet_cli`](#joints); the Assemble tab gets them next.
 
 ## Changing a part
 
@@ -138,10 +139,105 @@ Mass in all: 46.41 g
 ## Grounded and free
 
 The first component in an assembly is **grounded**: fixed where it is. The
-others are **free**. When joints come, they'll move the free components to fit
-the grounded ones, so a car usually has its body grounded and its wheels free.
+others are **free**. [Joints](#joints) place the free components against the
+grounded ones, so a car usually has its body grounded and its wheels free.
 Fix or free a component with
 [`component.ground`](../cli/commands.md#componentground).
+
+## Joints
+
+A **joint** joins two components. It moves the second one so a point on it meets
+a point on the first, the two pointing at each other, like a peg dropped into a
+hole. Then the second one:
+
+| Kind | Still moves | Its value |
+| --- | --- | --- |
+| **Rigid** | Not at all: they're fixed together | None |
+| **Revolute** | Turns about the joint, like a hinge or a wheel on an axle | An angle, in degrees |
+| **Slider** | Slides along the joint, like a drawer | A distance, in mm |
+
+The point on each side is picked on its part:
+
+| Pick | The point | Which way it points |
+| --- | --- | --- |
+| A round edge (a hole's rim, an axle's end) | The circle's center | Straight out of the flat face it's on |
+| A flat face | Its center | Straight out of the face |
+| A straight edge | Its middle, or an end | Along the edge |
+| A point (a corner) | The point | The part's z |
+| Nothing | The part's origin | The part's z |
+
+Here a tray gets a cover on a hinge. The tray is 40 mm square and 10 mm tall,
+the cover 4 mm thick. [`open --edges`](../cli/open.md#a-components-edges-faces-and-points)
+numbers a component's edges: the tray's top back edge is its edge 12, and the
+cover's bottom back edge its edge 4.
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save Tray.sb feature.add_box size=40,40,10
+...
+$ sketchbillet_cli run --save Cover.sb feature.add_box size=40,40,4
+...
+$ sketchbillet_cli run --save Case.sb assembly.new
+...
+$ sketchbillet_cli run --open Case.sb --save Case.sb component.insert file=Tray.sb
+...
+$ sketchbillet_cli run --open Case.sb --save Case.sb component.insert file=Cover.sb at=60,0,0
+...
+$ sketchbillet_cli run --open Case.sb --save Case.sb joint.add kind=revolute a="Tray 1:edge:12" b="Cover 1:edge:4" flip=true lowest=-110 highest=0
+Case: assembly, 2 components, 2 parts
+  Tray 1       Tray       grounded at 0, 0, 0 mm
+  Cover 1      Cover      joined   at 0, 0, 10 mm
+Joints:
+  Joint1       revolute  Cover 1 on Tray 1, at 0°, from -110° to 0°
+Parts:
+  Tray         1 step   ok        mass 19.84 g (PLA), 1 in the assembly
+    linked to Tray.sb
+  Cover        1 step   ok        mass 7.94 g (PLA), 1 in the assembly
+    linked to Cover.sb
+Mass in all: 27.78 g
+wrote Case.sb
+```
+
+The cover is **joined** now: the joint puts it on the tray (its origin at 0, 0,
+10 mm), wherever it was before. Both edges point along x, so they'd point at
+each other, which would turn the cover upside down; `flip=true` turns it the
+other way round, so it sits the right way up. `lowest=-110 highest=0` lets it
+open up to 110°.
+
+Open it with [`joint.set`](../cli/commands.md#jointset). The hinge turns about x,
+and a turn the negative way lifts the cover's front:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open Case.sb --save Case.sb joint.set joint=Joint1 value=-100
+Case: assembly, 2 components, 2 parts
+  Tray 1       Tray       grounded at 0, 0, 0 mm
+  Cover 1      Cover      joined   at 0, 46.95, 49.39 mm
+Joints:
+  Joint1       revolute  Cover 1 on Tray 1, at -100°, from -110° to 0°
+Parts:
+  Tray         1 step   ok        mass 19.84 g (PLA), 1 in the assembly
+    linked to Tray.sb
+  Cover        1 step   ok        mass 7.94 g (PLA), 1 in the assembly
+    linked to Cover.sb
+Mass in all: 27.78 g
+wrote Case.sb
+```
+
+A component is placed from the one it's joined to, joint by joint, out from the
+grounded ones: a car's body, then its axles, then its wheels. A grounded
+component never moves. A joint between two components that are placed already
+(a lid with two hinges, say) makes a **loop**: it's fine if its two sides meet,
+as a second hinge on the same line does. If they don't, it says so, and moves
+nothing: SketchBillet can't move parts in loops yet.
+
+```text
+warning [joint.loop]: Joint5 makes a loop (Base 1, Arm 1, Link 1, Base 1), and its two sides are 3.20 mm apart. SketchBillet can't move parts in loops yet, so Joint5 doesn't move anything. Turn Joint5 off, or change a value in the loop so its sides meet.
+```
+
+If a change to a part takes away what a joint sits on, the joint says so and
+moves nothing, until its sides are picked again with `joint.set`. It never
+guesses.
 
 ## Linked and inside parts
 
@@ -198,6 +294,10 @@ it): you can move or copy the whole folder, and everything still links up.
 | Fix a component or let it go | [`component.ground`](../cli/commands.md#componentground) |
 | Rename a component | [`component.rename`](../cli/commands.md#componentrename) |
 | Take a component out | [`component.delete`](../cli/commands.md#componentdelete) |
+| Join two components | [`joint.add`](../cli/commands.md#jointadd) |
+| Turn or slide a joint, or change it | [`joint.set`](../cli/commands.md#jointset) |
+| Take a joint out | [`joint.delete`](../cli/commands.md#jointdelete) |
+| List a component's edges or faces, for a joint | [`open --edges "Wheel 1"`](../cli/open.md#a-components-edges-faces-and-points) |
 | Update linked parts from their files | [`part.update`](../cli/commands.md#partupdate), or just open the assembly |
 | Link a part to its file where it is now | [`part.relink`](../cli/commands.md#partrelink) |
 | Stop following the file: make a part inside | [`part.make_inside`](../cli/commands.md#partmake_inside) |

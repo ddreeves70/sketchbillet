@@ -234,7 +234,7 @@ private:
 };
 
 /// Takes a component out of an assembly. Its part goes too when no other
-/// component places it.
+/// component places it, and so do its joints.
 class DeleteComponentCommand final : public Command {
 public:
     /// Prepares the change.
@@ -252,7 +252,8 @@ private:
     std::size_t index_ = 0;
     std::unique_ptr<Document> part_;  // its part, if it went too
     std::size_t partIndex_ = 0;
-    std::optional<PartLink> link_;  // and that part's link, if it was linked
+    std::optional<PartLink> link_;                       // and that part's link, if it was linked
+    std::vector<std::pair<std::size_t, Joint>> joints_;  // its joints, which went too, and where they were
 };
 
 /// Makes a change inside one of an assembly's inside parts, as one step of the
@@ -300,6 +301,86 @@ private:
     std::unique_ptr<Command> change_;
     std::optional<FeatureId> markerBefore_;  // the part's rollback marker, for revert()
     std::string partName_;                   // for label(), once applied
+};
+
+/// Checks a joint before it goes in an assembly: its components are there and
+/// aren't the same one, its bodies are in their parts, its name is free, and its
+/// value is between its lowest and highest.
+/// @param assembly The assembly.
+/// @param joint The joint, new or changed.
+/// @return Why it can't go in, or nothing if it can.
+std::optional<Diagnostic> checkJoint(const Document& assembly, const Joint& joint);
+
+/// Adds a joint to an assembly: it places its second component against its
+/// first (see Joint). Where components go is worked out when the assembly
+/// rebuilds (RebuildReport::placementOf()).
+///
+/// @code
+/// Joint hinge;
+/// hinge.kind = JointKind::Revolute;
+/// hinge.a = {box.id, boxBody, boxEdge};
+/// hinge.b = {lid.id, lidBody, lidEdge};
+/// car.execute(std::make_unique<AddJointCommand>(hinge));
+/// @endcode
+class AddJointCommand final : public Command {
+public:
+    /// Prepares the change.
+    /// @param joint The joint. A nil id gets a new one; an empty name gets the
+    ///        next free one, like "Joint1".
+    explicit AddJointCommand(Joint joint);
+
+    std::string label() const override { return "Add " + joint_.name; }
+    Diagnostics apply(DocumentEditor& editor) override;
+    void revert(DocumentEditor& editor) override;
+
+    /// Gives the joint as it went in, after apply().
+    /// @return The joint, with its id and name.
+    const Joint& joint() const { return joint_; }
+
+private:
+    Joint joint_;
+};
+
+/// Changes a joint: its kind, origins, settings, value or limits, or its name.
+/// Changes that follow each other while dragging (`continuesPrevious`) are one
+/// undo step.
+class SetJointCommand final : public Command {
+public:
+    /// Prepares the change.
+    /// @param joint The joint as it's to be: the same id as the one it changes.
+    /// @param continuesPrevious True for the next part of the same drag.
+    explicit SetJointCommand(Joint joint, bool continuesPrevious = false);
+
+    std::string label() const override { return "Change " + joint_.name; }
+    Diagnostics apply(DocumentEditor& editor) override;
+    void revert(DocumentEditor& editor) override;
+    /// Merges the next change to the same joint, when it continues this one.
+    /// @param next The command that ran next.
+    /// @return True if it merged.
+    bool mergeWith(const Command& next) override;
+
+private:
+    Joint joint_;
+    Joint old_;
+    bool continues_;
+};
+
+/// Takes a joint out of an assembly. The component it placed goes back to its
+/// own placement (Component::placement): where it was before it was joined.
+class DeleteJointCommand final : public Command {
+public:
+    /// Prepares the change.
+    /// @param id The joint.
+    explicit DeleteJointCommand(JointId id);
+
+    std::string label() const override;
+    Diagnostics apply(DocumentEditor& editor) override;
+    void revert(DocumentEditor& editor) override;
+
+private:
+    JointId id_;
+    std::optional<Joint> removed_;
+    std::size_t index_ = 0;
 };
 
 }  // namespace sb::model

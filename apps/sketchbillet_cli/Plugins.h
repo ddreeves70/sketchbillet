@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 
 #include "sb/kernel/IKernel.h"
@@ -42,5 +43,19 @@ void printParameters(const model::Document& doc);
 // false if a part has a problem.
 bool printAssembly(const model::Document& doc, const model::RebuildReport& report, kernel::IKernel& kernel,
                    bool directions);
+
+// A body of a component's part, as `open --edges` and joint sides name it: "Wheel 1"
+// (its part's only body) or "Wheel 1:Hub" (a body by its step's name).
+struct ComponentBody {
+    const model::Component* component = nullptr;
+    const model::Document* part = nullptr;
+    const model::Feature* body = nullptr;
+    const model::ShapeNames* names = nullptr;  // the body's faces, edges and points, built
+};
+
+// Finds a component's body, or says why not in `why`.
+std::optional<ComponentBody> componentBody(const model::Document& assembly,
+                                           const model::RebuildReport& report, const std::string& component,
+                                           const std::string& body, std::string& why);
 
 }  // namespace sb::cli

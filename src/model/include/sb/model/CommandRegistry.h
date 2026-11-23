@@ -15,6 +15,7 @@
 #include "sb/core/Diagnostic.h"
 #include "sb/core/Id.h"
 #include "sb/kernel/Types.h"
+#include "sb/model/Assembly.h"
 #include "sb/model/Command.h"
 #include "sb/model/Naming.h"
 #include "sb/sketch/Sketch.h"
@@ -49,12 +50,16 @@ enum class ArgType {
     /// numbers as `sketchbillet_cli open <design.sb> --faces <body>` lists them, like 1,6.
     /// Read it with argGeometry().
     FaceList,
+    /// A JointOrigin: a point and direction on one of an assembly's components.
+    /// Picked in the app; on the command line, a component and what's picked on
+    /// it, like `Wheel 1:edge:3` (see `sketchbillet_cli help joint.add`).
+    JointSide,
 };
 
 /// One argument value. Which alternative is allowed depends on the ArgSpec's ArgType.
 using ArgValue = std::variant<double, std::int64_t, bool, std::string, kernel::Vec3, FeatureId,
                               std::vector<FeatureId>, FolderId, sketch::Point2, std::vector<sketch::Point2>,
-                              std::vector<GeometryRef>, GeometryRef>;
+                              std::vector<GeometryRef>, GeometryRef, JointOrigin>;
 
 /// Arguments for one command, by argument name.
 using Args = std::map<std::string, ArgValue>;

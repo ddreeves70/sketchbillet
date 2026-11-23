@@ -13,6 +13,7 @@ sketchbillet_cli open <file.sb> --edges <name>
 sketchbillet_cli open <file.sb> --faces <name>
 sketchbillet_cli open <file.sb> --points <name>
 sketchbillet_cli open <file.sb> --components
+sketchbillet_cli open <assembly.sb> --edges <component>
 ```
 
 | Option | Meaning |
@@ -27,6 +28,7 @@ sketchbillet_cli open <file.sb> --components
 | `--faces <name>` | Also list the faces of this step's body, numbered |
 | `--points <name>` | Also list the points (corners) of this step's body, numbered |
 | `--components` | For an [assembly](#an-assembly): also say which way each component faces |
+| `--edges "Wheel 1"` | For an assembly: list a component's edges (or `--faces`, `--points`), numbered as [joints](commands.md#jointadd) take them (see [below](#a-components-edges-faces-and-points)) |
 
 Each step shows one of these:
 
@@ -238,7 +240,9 @@ points of Tag: 10
 
 An [assembly](commands.md#assemblynew) has no steps of its own, so `open` lists
 its components instead: each one's part, whether it's grounded (fixed where it
-is) or free, and where its part's origin is. Then its parts, each built once
+is), joined (placed by a [joint](commands.md#jointadd)) or free, and where its
+part's origin is. Then its joints, if it has any: what each one joins, its kind,
+how far it's turned or slid, its limits, and anything wrong with it. Then its parts, each built once
 however many components use it, with its steps, mass and material, and how many
 are in the assembly, and the file each linked part is linked to. Last, the mass
 of everything together.
@@ -275,13 +279,39 @@ Mass in all: 13.46 g
 ```
 
 `--components` also says which way each component faces: where its part's x and
-z directions point. Exporting an assembly, and listing its parts' edges, faces
-and sketches, come in a later version:
+z directions point. Exporting an assembly, and listing its parts' sketches, come
+in a later version:
 
 <!-- cli-example exit=1 -->
 ```console
 $ sketchbillet_cli open Car.sb --export car.stl
-error: Car is an assembly. For now, list it with --components; exporting it and listing its edges, faces and sketches come in a later version.
+error: Car is an assembly. For now, list it with --components, or a component's edges, faces or points with --edges "Wheel 1"; exporting it and listing its sketches come in a later version.
+```
+
+### A component's edges, faces and points
+
+`--edges`, `--faces` and `--points` with a component's name list its part's
+edges, faces or points, numbered, to pick the sides of a
+[joint](commands.md#jointadd) with. Where they are is in the part's own place,
+as if the part's origin were at 0, 0, 0. A part with more than one body names
+the body too: `--edges "Wheel 1:Hub"`.
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli open Car.sb --faces "Wheel 2"
+Car: assembly, 4 components, 1 part
+  Wheel 1      Wheel      grounded at 0, 0, 0 mm
+  Wheel 2      Wheel      free     at 25, 0, 0 mm
+  Wheel 3      Wheel      free     at 50, 0, 0 mm
+  Wheel 4      Wheel      free     at 75, 0, 0 mm
+Parts:
+  Wheel        1 step   ok        mass 3.37 g (PLA), 4 in the assembly
+    linked to Wheel.sb
+Mass in all: 13.46 g
+faces of Cylinder1: 3
+   1  flat        452.39 mm^2  at 0.00,0.00,0.00  bottom of Cylinder1
+   2  cylinder    452.39 mm^2  at 0.00,0.00,3.00  side of Cylinder1
+   3  flat        452.39 mm^2  at 0.00,0.00,6.00  top of Cylinder1
 ```
 
 ## Files that can't be opened

@@ -16,6 +16,7 @@ sb_add_library(sb_model
     PrintCheck.cpp
     Measure.cpp
     Import.cpp
+    Joints.cpp
   DEPS
     sb::core
     sb::kernel

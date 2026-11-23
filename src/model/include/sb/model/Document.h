@@ -28,7 +28,24 @@ namespace sb::model {
 /// What kind of design a Document holds.
 enum class DocKind {
     Part,      ///< A single part made of features.
-    Assembly,  ///< Parts put together with mates (Phase 3).
+    Assembly,  ///< Parts put together, placed by joints.
+};
+
+/// How one joint of an assembly worked out in a rebuild.
+struct JointResult {
+    /// True if it placed one of its components; false if both were placed
+    /// already (it closes a loop: it's checked, but moves nothing), or it's off,
+    /// or an origin couldn't be found.
+    bool placed = false;
+    bool loop = false;  ///< True if it closes a loop of joints.
+    /// Where a's origin is, in the assembly (its point and z). Only when both
+    /// origins were found.
+    std::optional<kernel::Placement> aFrame;
+    /// Where b's origin is, in the assembly. Only when both origins were found.
+    std::optional<kernel::Placement> bFrame;
+    /// What's wrong: an origin that can't be found, or a loop whose sides don't
+    /// meet. Warnings: the rest of the assembly still builds.
+    Diagnostics issues;
 };
 
 /// The outcome of rebuilding a document: one result per feature, in document order.
@@ -57,6 +74,23 @@ public:
     /// @return Its rebuild, or nullptr if it isn't one of the assembly's parts.
     const RebuildReport* part(const DocId& id) const;
 
+    /// Gives where an assembly's component goes: placed by its joints, or its own
+    /// placement (Component::placement) if no joint places it.
+    /// @param id The component.
+    /// @return Its placement, or nullptr if it isn't one of the assembly's components.
+    const kernel::Placement* placementOf(const ComponentId& id) const;
+
+    /// Says whether a joint places a component (so it moves with the joint, not by
+    /// itself).
+    /// @param id The component.
+    /// @return True if a joint places it.
+    bool placedByJoint(const ComponentId& id) const;
+
+    /// Gives how one of an assembly's joints worked out.
+    /// @param id The joint.
+    /// @return Its result, or nullptr if the assembly has no such joint.
+    const JointResult* joint(const JointId& id) const;
+
     /// Lists the steps whose results were taken from the previous rebuild instead
     /// of being built again, because neither they nor anything they use changed.
     /// @return The reused steps, in document order (empty for a full rebuild).
@@ -74,6 +108,9 @@ private:
     // (formula warnings, a body used twice).
     std::map<FeatureId, std::size_t> formulaIssues_;
     std::map<DocId, std::shared_ptr<const RebuildReport>> parts_;  // an assembly's parts, built
+    std::map<ComponentId, kernel::Placement> placements_;          // where each component goes
+    std::map<ComponentId, bool> byJoint_;                          // which ones a joint placed
+    std::map<JointId, JointResult> joints_;                        // how each joint worked out
     const kernel::IKernel* kernel_ = nullptr;
     const sketch::ISketchSolver* solver_ = nullptr;
     LengthUnit unit_ = LengthUnit::Millimeter;
@@ -144,6 +181,28 @@ public:
     /// @param part The part's name, like "Wheel".
     /// @return The first free one of "Wheel 1", "Wheel 2", ...
     std::string uniqueComponentName(const std::string& part) const;
+
+    /// Gives an assembly's joints: each places one component against another, and
+    /// says how it still moves. Change them with the joint commands (AddJointCommand,
+    /// ...). The rebuild works out where each component goes
+    /// (RebuildReport::placementOf()).
+    /// @return The joints, in the order they were added: an earlier joint places a
+    ///         component before a later one does.
+    const std::vector<Joint>& joints() const { return joints_; }
+
+    /// Finds a joint by id.
+    /// @param id The joint.
+    /// @return It, or nullptr if the assembly has none with that id.
+    const Joint* findJoint(const JointId& id) const;
+
+    /// Finds a joint by name (exact).
+    /// @param name For example "Joint1".
+    /// @return It, or nullptr if the assembly has none by that name.
+    const Joint* findJoint(std::string_view name) const;
+
+    /// Makes a name for a new joint.
+    /// @return The first free one of "Joint1", "Joint2", ...
+    std::string uniqueJointName() const;
 
     /// Gives an assembly's inside parts: designs of their own, kept in the
     /// assembly. Each is built once, however many components place it. A part
@@ -389,6 +448,7 @@ private:
     std::string name_;
     std::vector<std::unique_ptr<Feature>> features_;
     std::vector<Component> components_;               // an assembly's components
+    std::vector<Joint> joints_;                       // and its joints
     std::vector<std::unique_ptr<Document>> parts_;    // an assembly's parts (inside and linked)
     std::map<DocId, PartLink> links_;                 // the linked ones' links; see partLink()
     std::map<FeatureId, std::uint64_t> revisions_;    // see revision(); set by DocumentEditor
@@ -403,6 +463,8 @@ private:
     // the step it's just after. Undo puts it back where it was before each command.
     std::optional<FeatureId> marker_;
     void tidyMarker();  // a marker after the last step is at the end
+    // Works out where an assembly's components go, from its joints (Joints.cpp).
+    void placeComponents(RebuildReport& report) const;
 
     std::vector<Entry> done_;
     std::vector<Entry> undone_;

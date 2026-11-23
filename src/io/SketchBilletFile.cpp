@@ -1382,7 +1382,84 @@ json placementJson(const kernel::Placement& p) {
     return {{"origin", vec3(p.origin)}, {"xAxis", vec3(p.xAxis)}, {"zAxis", vec3(p.zAxis)}};
 }
 
-// An assembly's files (schema 2): its components, and each inside part's files
+// A joint's side: its component, and what's picked on its part.
+json jointOriginJson(const model::JointOrigin& o) {
+    json j{{"component", o.component.toString()}};
+    if (!o.body.isNil()) j["body"] = o.body.toString();
+    if (o.element) j["element"] = refToJson(*o.element);
+    if (o.at != model::OriginAt::Middle) j["at"] = o.at == model::OriginAt::Start ? "start" : "end";
+    return j;
+}
+
+std::optional<model::JointOrigin> jointOriginFromJson(const json& j) {
+    if (!j.is_object()) return std::nullopt;
+    const auto component = model::ComponentId::parse(j.value("component", ""));
+    if (!component) return std::nullopt;
+    model::JointOrigin o;
+    o.component = *component;
+    if (j.contains("body")) {
+        const auto body = FeatureId::parse(j.value("body", ""));
+        if (!body) return std::nullopt;
+        o.body = *body;
+    }
+    if (j.contains("element")) {
+        o.element = refFromJson(j["element"]);
+        if (!o.element) return std::nullopt;
+    }
+    const std::string at = j.value("at", "middle");
+    o.at = at == "start" ? model::OriginAt::Start
+           : at == "end" ? model::OriginAt::End
+                         : model::OriginAt::Middle;
+    return o;
+}
+
+json jointJson(const model::Joint& joint) {
+    json j{{"id", joint.id.toString()},
+           {"name", joint.name},
+           {"kind", model::jointKindName(joint.kind)},
+           {"a", jointOriginJson(joint.a)},
+           {"b", jointOriginJson(joint.b)},
+           {"flip", joint.flip},
+           {"angle", joint.angle},
+           {"offset", joint.offset},
+           {"value", joint.value},
+           {"rest", joint.rest},
+           {"off", joint.off}};
+    if (joint.lowest) j["lowest"] = *joint.lowest;
+    if (joint.highest) j["highest"] = *joint.highest;
+    return j;
+}
+
+std::optional<model::Joint> jointFromJson(const json& j) {
+    if (!j.is_object()) return std::nullopt;
+    const auto id = JointId::parse(j.value("id", ""));
+    const auto a = jointOriginFromJson(j.value("a", json()));
+    const auto b = jointOriginFromJson(j.value("b", json()));
+    const std::string kind = j.value("kind", "");
+    if (!id || !a || !b || !j.contains("name") || !j["name"].is_string() ||
+        (kind != "rigid" && kind != "revolute" && kind != "slider"))
+        return std::nullopt;
+    model::Joint joint;
+    joint.id = *id;
+    joint.name = j["name"].get<std::string>();
+    joint.kind = kind == "revolute" ? model::JointKind::Revolute
+                 : kind == "slider" ? model::JointKind::Slider
+                                    : model::JointKind::Rigid;
+    joint.a = *a;
+    joint.b = *b;
+    joint.flip = j.value("flip", false);
+    joint.angle = readNumber(j.value("angle", json(0))).value_or(0);
+    joint.offset = readNumber(j.value("offset", json(0))).value_or(0);
+    joint.value = readNumber(j.value("value", json(0))).value_or(0);
+    joint.rest = readNumber(j.value("rest", json(0))).value_or(0);
+    if (j.contains("lowest")) joint.lowest = readNumber(j["lowest"]);
+    if (j.contains("highest")) joint.highest = readNumber(j["highest"]);
+    joint.off = j.value("off", false);
+    return joint;
+}
+
+// An assembly's files (schema 2): its components, its joints (joints.json, if
+// it has any), and each inside part's files
 // under parts/<the part's design id>/, as a part's .sb file has them.
 void assemblyEntries(const Document& doc, Entries& entries, const std::filesystem::path& folder) {
     json files = json::array({"components.json"});
@@ -1395,6 +1472,12 @@ void assemblyEntries(const Document& doc, Entries& entries, const std::filesyste
                               {"placement", placementJson(c.placement)}});
     }
     entries.emplace_back("components.json", dump(json{{"components", components}}));
+    if (!doc.joints().empty()) {
+        json joints = json::array();
+        for (const auto& j : doc.joints()) joints.push_back(jointJson(j));
+        entries.emplace_back("joints.json", dump(json{{"joints", joints}}));
+        files.push_back("joints.json");
+    }
     if (!doc.parameters().empty()) {
         entries.emplace_back("parameters.json", dump(parametersJson(doc)));
         files.push_back("parameters.json");
@@ -1623,6 +1706,26 @@ OpenResult readDesign(zip_t* za, const std::string& prefix, std::string_view dis
                 !issues.empty()) {
                 return fail(damaged(displayName, "component " + name + ": " + issues.front().code));
             }
+        }
+        // Its joints, after the components they join. (An assembly without joints
+        // has no joints.json.)
+        if (const auto joints = readJson("joints.json"); joints) {
+            const json jlist = joints->value("joints", json());
+            if (!jlist.is_array()) return fail(damaged(displayName, "joints.json has no joint list"));
+            for (const auto& jj : jlist) {
+                auto joint = jointFromJson(jj);
+                if (!joint) {
+                    return fail(damaged(displayName,
+                                        "a joint in joints.json is missing its id, name, kind or sides"));
+                }
+                const auto name = joint->name;
+                if (auto issues = doc->execute(std::make_unique<model::AddJointCommand>(std::move(*joint)));
+                    !issues.empty()) {
+                    return fail(damaged(displayName, "joint " + name + ": " + issues.front().code));
+                }
+            }
+        } else if (why.rfind("missing", 0) != 0) {
+            return fail(damaged(displayName, why));
         }
         doc->clearHistory();
         doc->markSaved();

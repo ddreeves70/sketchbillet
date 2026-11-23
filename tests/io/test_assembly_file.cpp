@@ -312,3 +312,81 @@ TEST_CASE("the checked-in schema 2 car with a linked part still opens", "[io][as
     test::FakeKernel kernel;
     CHECK(doc.regenerate(kernel).ok());
 }
+
+TEST_CASE("an assembly's joints are saved in joints.json and open as they were", "[io][assembly][joints]") {
+    auto doc = car();
+    const auto* body = doc->findComponent("Body 1");
+    const auto* wheel = doc->findComponent("Wheel 1");
+    const auto bodyBox = doc->findPart(body->part)->featureAt(0).id();
+    model::Joint hinge;
+    hinge.name = "Axle";
+    hinge.kind = model::JointKind::Revolute;
+    hinge.a = {body->id, bodyBox, model::GeometryRef{kernel::TopoKind::Edge, "edge between A and B", {}},
+               model::OriginAt::End};
+    hinge.b = {wheel->id, {}, std::nullopt, model::OriginAt::Middle};  // the wheel's own origin
+    hinge.flip = true;
+    hinge.angle = 0.25;
+    hinge.offset = 1.5;
+    hinge.value = 0.5;
+    hinge.rest = 0.1;
+    hinge.lowest = -1.0;
+    hinge.highest = 2.0;
+    REQUIRE(doc->execute(std::make_unique<model::AddJointCommand>(hinge)).empty());
+    model::Joint slide;
+    slide.kind = model::JointKind::Slider;
+    slide.a = {body->id, {}, std::nullopt, model::OriginAt::Middle};
+    slide.b = {doc->findComponent("Wheel 2")->id, {}, std::nullopt, model::OriginAt::Middle};
+    slide.off = true;
+    REQUIRE(doc->execute(std::make_unique<model::AddJointCommand>(slide)).empty());
+
+    io::Bytes bytes;
+    REQUIRE(io::writeBytes(*doc, bytes).empty());
+    const auto entries = readZip(bytes);
+    REQUIRE(entries.count("joints.json"));
+    CHECK(entries.at("manifest.json").find("\"joints.json\"") != std::string::npos);
+
+    auto opened = io::readBytes(bytes, "car.sb");
+    REQUIRE(opened.ok());
+    const auto& back = *opened.document;
+    REQUIRE(back.joints().size() == 2);
+    const auto& j = back.joints()[0];
+    CHECK(j.id == doc->joints()[0].id);
+    CHECK(j.name == "Axle");
+    CHECK(j.kind == model::JointKind::Revolute);
+    CHECK(j.a.component == body->id);
+    CHECK(j.a.body == bodyBox);
+    REQUIRE(j.a.element);
+    CHECK(j.a.element->name == "edge between A and B");
+    CHECK(j.a.at == model::OriginAt::End);
+    CHECK(j.b.component == wheel->id);
+    CHECK(j.b.body.isNil());
+    CHECK_FALSE(j.b.element);
+    CHECK(j.flip);
+    CHECK(j.angle == 0.25);
+    CHECK(j.offset == 1.5);
+    CHECK(j.value == 0.5);
+    CHECK(j.rest == 0.1);
+    CHECK(j.lowest == -1.0);
+    CHECK(j.highest == 2.0);
+    CHECK(back.joints()[1].name == "Joint1");
+    CHECK(back.joints()[1].kind == model::JointKind::Slider);
+    CHECK(back.joints()[1].off);
+    CHECK_FALSE(back.joints()[1].lowest);
+    CHECK_FALSE(back.canUndo());
+    io::Bytes again;
+    REQUIRE(io::writeBytes(back, again).empty());
+    CHECK(again == bytes);
+
+    // An assembly with no joints has no joints.json.
+    io::Bytes plain;
+    REQUIRE(io::writeBytes(*car(), plain).empty());
+    CHECK_FALSE(readZip(plain).count("joints.json"));
+
+    // A damaged joint says so.
+    auto damaged = entries;
+    damaged["joints.json"] = R"({"joints": [{"name": "Axle", "kind": "hinge"}]})";
+    const auto bad = io::readBytes(makeZip(damaged), "car.sb");
+    REQUIRE_FALSE(bad.ok());
+    CHECK(bad.issues.front().detail.find("a joint in joints.json is missing its id, name, kind or sides") !=
+          std::string::npos);
+}
