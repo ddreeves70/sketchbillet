@@ -1,0 +1,252 @@
+{
+  "title": "Tutorial 1: Keychain tag",
+  "subtitle": "Steps, boxes, cylinders, cutting a hole, and exporting for 3D printing",
+  "page": "docs/tutorials/01-keychain-tag.md",
+  "next": "Next: Tutorial 2, the desk organizer.",
+  "steps": [
+    {
+      "chapter": "A design is a list of steps"
+    },
+    {
+      "caption": "A SketchBillet design is a list of steps, like a recipe. The tag takes three: a plate, a cylinder for the hole, and the cut."
+    },
+    {
+      "chapter": "Step 1: Make the plate"
+    },
+    {
+      "caption": "Click Box on the Model tab. It adds a 20 mm box."
+    },
+    {
+      "click": "action:sb.modeling.box"
+    },
+    {
+      "caption": "Properties shows the new step. Call it Plate."
+    },
+    {
+      "type": "Plate",
+      "into": "#name"
+    },
+    {
+      "caption": "Make it 60 mm wide (x), 30 mm deep (y) and 4 mm tall (z)."
+    },
+    {
+      "type": "60",
+      "into": "#size.x"
+    },
+    {
+      "type": "30",
+      "into": "#size.y"
+    },
+    {
+      "type": "4",
+      "into": "#size.z"
+    },
+    {
+      "caption": "Click Fit all, under the view, to see the whole part. The mouse wheel zooms in and out."
+    },
+    {
+      "click": "action:sb.viewer.fit"
+    },
+    {
+      "scroll": "view:0.4,0.5",
+      "by": -1
+    },
+    {
+      "wait": 1.0
+    },
+    {
+      "caption": "The box starts at the origin, 0, 0, 0. x goes right, y goes back and z goes up."
+    },
+    {
+      "chapter": "Step 2: Add the hole's cylinder"
+    },
+    {
+      "caption": "Cylinder is in the Create dropdown. This one becomes the hole."
+    },
+    {
+      "click": "#sb.ribbon.model.create"
+    },
+    {
+      "click": "menu:Cylinder"
+    },
+    {
+      "type": "Hole",
+      "into": "#name"
+    },
+    {
+      "caption": "A hole 5 mm across: a radius of 2.5 mm."
+    },
+    {
+      "type": "2.5",
+      "into": "#radius"
+    },
+    {
+      "caption": "Make it 6 mm tall, and start it 1 mm below the plate, so it pokes out of both faces."
+    },
+    {
+      "type": "6",
+      "into": "#height"
+    },
+    {
+      "caption": "Put it 9 mm from the left edge, in the middle of the 30 mm depth: x 9, y 15, z -1."
+    },
+    {
+      "type": "9",
+      "into": "#base.x"
+    },
+    {
+      "type": "15",
+      "into": "#base.y"
+    },
+    {
+      "type": "-1",
+      "into": "#base.z"
+    },
+    {
+      "click": "action:sb.viewer.fit"
+    },
+    {
+      "scroll": "view:0.4,0.5",
+      "by": -1
+    },
+    {
+      "wait": 1.0
+    },
+    {
+      "chapter": "Step 3: Cut the hole"
+    },
+    {
+      "caption": "Pick Plate in the feature tree, then hold Ctrl and pick Hole. The first one picked is kept; the second is cut away."
+    },
+    {
+      "click": "tree:Plate"
+    },
+    {
+      "click": "tree:Hole",
+      "ctrl": true
+    },
+    {
+      "caption": "Click Cut."
+    },
+    {
+      "click": "action:sb.modeling.cut"
+    },
+    {
+      "caption": "Call the new step Tag."
+    },
+    {
+      "type": "Tag",
+      "into": "#name"
+    },
+    {
+      "wait": 1.0
+    },
+    {
+      "caption": "Turn the view to look at it: drag on an empty part of the view."
+    },
+    {
+      "drag": "view:0.22,0.8",
+      "by": [
+        420,
+        -40
+      ]
+    },
+    {
+      "wait": 1.0
+    },
+    {
+      "chapter": "Step 4: Check it and export it"
+    },
+    {
+      "caption": "File > Check for Printing checks it's closed all round, with no wall too thin."
+    },
+    {
+      "click": "#sb.ribbon.file"
+    },
+    {
+      "click": "menu:Check for Printing..."
+    },
+    {
+      "wait": 3.0
+    },
+    {
+      "click": "button:OK"
+    },
+    {
+      "caption": "File > Export writes a file for your 3D printer's slicer."
+    },
+    {
+      "click": "#sb.ribbon.file"
+    },
+    {
+      "click": "menu:Export..."
+    },
+    {
+      "caption": "Call it tag.stl, and save it."
+    },
+    {
+      "type": "tag.stl",
+      "into": "#fileNameEdit"
+    },
+    {
+      "wait": 1.0
+    },
+    {
+      "chapter": "Step 5: Choose what it's made of"
+    },
+    {
+      "caption": "Every body is PLA until you pick a material. Printing in PETG? Pick Plate, and choose PETG. The tag is cut from the plate, so it's PETG too."
+    },
+    {
+      "click": "tree:Plate"
+    },
+    {
+      "click": "#material"
+    },
+    {
+      "click": "list:PETG"
+    },
+    {
+      "wait": 1.0
+    },
+    {
+      "click": "tree:Tag"
+    },
+    {
+      "caption": "Properties shows the tag's mass in PETG."
+    },
+    {
+      "wait": 2.0
+    },
+    {
+      "chapter": "Save it"
+    },
+    {
+      "caption": "File > Save as keeps the design, so you can change any step later."
+    },
+    {
+      "click": "#sb.ribbon.file"
+    },
+    {
+      "click": "menu:Save as..."
+    },
+    {
+      "type": "tag.sb",
+      "into": "#fileNameEdit"
+    },
+    {
+      "caption": "Done! Next: Tutorial 2, the desk organizer."
+    },
+    {
+      "wait": 2.0
+    }
+  ],
+  "expect": {
+    "file": "tag.sb",
+    "lines": [
+      "Plate ok volume 7200.00 mm^3",
+      "Hole ok volume 117.81 mm^3",
+      "Tag ok volume 7121.46 mm^3 mass 9.04 g (PETG)"
+    ]
+  }
+}

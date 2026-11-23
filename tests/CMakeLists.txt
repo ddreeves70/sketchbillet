@@ -206,4 +206,16 @@ if(TARGET sb_app_core)
     add_test(NAME app.gl COMMAND ${SB_XVFB_RUN} -a -s "-screen 0 1280x1024x24" $<TARGET_FILE:sb_app_tests> "[gl]")
     set_tests_properties(app.gl PROPERTIES ENVIRONMENT "SB_SCREEN=1;QT_QPA_PLATFORM=xcb;LIBGL_ALWAYS_SOFTWARE=1")
   endif()
+  # The tutorial videos' scripts (tools/videos/): each plays to the end on the
+  # real app, fast, and makes what its guide page makes.
+  if(SB_XVFB_RUN AND Python3_FOUND AND TARGET sketchbillet AND TARGET sketchbillet_cli)
+    file(GLOB SB_VIDEO_SCRIPTS CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/tools/videos/scripts/*.json")
+    foreach(script_file IN LISTS SB_VIDEO_SCRIPTS)
+      get_filename_component(script_name "${script_file}" NAME_WE)
+      add_test(NAME "videos.${script_name}"
+        COMMAND Python3::Interpreter -I ${PROJECT_SOURCE_DIR}/tools/videos/make_videos.py --check
+                --sketchbillet-app $<TARGET_FILE:sketchbillet> --sketchbillet-cli $<TARGET_FILE:sketchbillet_cli>
+                ${script_name})
+    endforeach()
+  endif()
 endif()
