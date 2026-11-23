@@ -107,6 +107,8 @@ const char* typeName(ArgType t) {
             return "a folder in the design";
         case ArgType::Choice:
             return "one of the listed choices";
+        case ArgType::JointSide:
+            return "a point on a component";
     }
     return "a value";
 }
@@ -139,6 +141,8 @@ bool matches(ArgType t, const ArgValue& v) {
             return std::holds_alternative<std::vector<FeatureId>>(v);
         case ArgType::FolderRef:
             return std::holds_alternative<FolderId>(v);
+        case ArgType::JointSide:
+            return std::holds_alternative<JointOrigin>(v);
     }
     return false;
 }
@@ -1411,6 +1415,163 @@ CommandRegistry makeBuiltin() {
               if (!c) return std::move(problem);
               return std::make_unique<DeleteComponentCommand>(c->id);
           });
+
+    // --- Joints --------------------------------------------------------------
+
+    const std::vector<std::string> jointKinds{"rigid", "revolute", "slider"};
+    const std::string sideHelp =
+        " A component, and what's picked on it: Wheel 1:edge:3 (an edge's number, as sketchbillet_cli open "
+        "--edges lists it; a round edge's center), Base 1:face:6 (a face's center), Arm 1:corner:2, or just "
+        "Wheel 1 (its part's origin). Add :start or :end for a straight edge's end. A part with more than "
+        "one body names it too: Wheel 1:Hub:edge:3.";
+    // A joint's value in its units: degrees for a revolute joint, mm for a slider.
+    auto jointUnits = [](JointKind kind, double v) {
+        return kind == JointKind::Revolute ? v * std::numbers::pi / 180.0 : v;
+    };
+    auto jointKindOf = [](const std::string& text) {
+        return text == "revolute" ? JointKind::Revolute
+               : text == "slider" ? JointKind::Slider
+                                  : JointKind::Rigid;
+    };
+    // The settings joint.add and joint.set share.
+    auto applyJointArgs = [jointUnits, jointKindOf](Joint& j, const Args& a) {
+        if (a.count("kind")) {
+            const JointKind kind = jointKindOf(argText(a, "kind"));
+            if (kind != j.kind) {
+                // Another kind of motion: its value and limits meant something else.
+                j.kind = kind;
+                j.value = j.rest = 0;
+                j.lowest.reset();
+                j.highest.reset();
+            }
+        }
+        if (const auto it = a.find("a"); it != a.end()) j.a = std::get<JointOrigin>(it->second);
+        if (const auto it = a.find("b"); it != a.end()) j.b = std::get<JointOrigin>(it->second);
+        if (a.count("flip")) j.flip = argBool(a, "flip", false);
+        if (a.count("angle")) j.angle = argNumber(a, "angle") * std::numbers::pi / 180.0;
+        if (a.count("offset")) j.offset = argNumber(a, "offset");
+        if (a.count("limits") && !argBool(a, "limits", true)) {
+            j.lowest.reset();
+            j.highest.reset();
+        }
+        if (a.count("lowest")) j.lowest = jointUnits(j.kind, argNumber(a, "lowest"));
+        if (a.count("highest")) j.highest = jointUnits(j.kind, argNumber(a, "highest"));
+        if (a.count("value")) j.value = jointUnits(j.kind, argNumber(a, "value"));
+        if (a.count("rest")) j.rest = jointUnits(j.kind, argNumber(a, "rest"));
+        if (a.count("off")) j.off = argBool(a, "off", false);
+    };
+    auto jointSettings = [&jointKinds](bool adding) {
+        std::vector<ArgSpec> out;
+        if (!adding) out.push_back({"joint", ArgType::Text, "The joint, like Joint1.", true, {}});
+        out.push_back({"kind", ArgType::Choice,
+                       adding
+                           ? "rigid (fixed together), revolute (turns, like a hinge) or slider (slides). "
+                             "Default rigid."
+                           : "rigid, revolute or slider. Changing it sets its value and limits back to none.",
+                       false, jointKinds});
+        out.push_back({"a",
+                       ArgType::JointSide,
+                       adding ? "The side that stays, on one component." : "Its first side, again.",
+                       adding,
+                       {}});
+        out.push_back(
+            {"b",
+             ArgType::JointSide,
+             adding ? "The side that moves to meet it, on another component." : "Its second side, again.",
+             adding,
+             {}});
+        out.push_back({"value",
+                       ArgType::Number,
+                       "How far it's turned (degrees, revolute) or slid (mm, slider). Default 0.",
+                       false,
+                       {}});
+        out.push_back(
+            {"lowest", ArgType::Number, "Its value's lowest (degrees or mm). Default none.", false, {}});
+        out.push_back(
+            {"highest", ArgType::Number, "Its value's highest (degrees or mm). Default none.", false, {}});
+        if (!adding)
+            out.push_back({"limits", ArgType::Bool, "false to take its lowest and highest away.", false, {}});
+        out.push_back({"rest",
+                       ArgType::Number,
+                       "Where Reset Joints puts its value back to (degrees or mm). Default 0.",
+                       false,
+                       {}});
+        out.push_back({"flip",
+                       ArgType::Bool,
+                       "true to turn the second side round, so the two point the same way. Default false: "
+                       "they point at each other, like a peg dropped into a hole.",
+                       false,
+                       {}});
+        out.push_back({"angle",
+                       ArgType::Number,
+                       "Turns the second side about the joint (degrees). Default 0.",
+                       false,
+                       {}});
+        out.push_back({"offset",
+                       ArgType::Number,
+                       "A gap between the two sides, along the joint (mm). Default 0.",
+                       false,
+                       {}});
+        out.push_back({"off", ArgType::Bool, "true to turn it off: it places nothing.", false, {}});
+        out.push_back({"name",
+                       ArgType::Text,
+                       adding ? "Its name. Default Joint1, Joint2, ..." : "A new name for it.",
+                       false,
+                       {}});
+        return out;
+    };
+    auto jointNamed = [](const Document& doc,
+                         const Args& a) -> std::pair<const Joint*, std::unique_ptr<Command>> {
+        const std::string name = argText(a, "joint");
+        if (const auto* j = doc.findJoint(std::string_view(name))) return {j, nullptr};
+        std::string names;
+        for (const auto& j : doc.joints()) names += (names.empty() ? "" : ", ") + j.name;
+        return {nullptr, std::make_unique<ProblemCommand>(error(
+                             "joint.not_found",
+                             doc.name() + " has no joint called " + name + "." +
+                                 (names.empty() ? std::string(" It has none yet: add one with joint.add.")
+                                                : " Its joints are: " + names + ".")))};
+    };
+
+    r.add(
+        {"joint.add", "Add joint",
+         "Joins two components: the second one moves so its side meets the first's, the two pointing at "
+         "each other, and it can still turn (revolute) or slide (slider) there, or not move at all (rigid)." +
+             sideHelp,
+         jointSettings(true)},
+        [applyJointArgs](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+            Joint j;
+            j.name = argText(a, "name");
+            applyJointArgs(j, a);
+            if (doc.kind() == DocKind::Assembly && j.name.empty()) j.name = doc.uniqueJointName();
+            return std::make_unique<AddJointCommand>(std::move(j));
+        });
+
+    r.add({"joint.set", "Change joint",
+           "Changes a joint: how far it's turned or slid (value), its kind, its sides, limits and the rest. "
+           "Settings left out stay as they are." +
+               sideHelp,
+           jointSettings(false)},
+          [applyJointArgs, jointNamed](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+              auto [found, problem] = jointNamed(doc, a);
+              if (!found) return std::move(problem);
+              Joint j = *found;
+              applyJointArgs(j, a);
+              if (a.count("name")) j.name = argText(a, "name");
+              return std::make_unique<SetJointCommand>(std::move(j));
+          });
+
+    r.add(
+        {"joint.delete",
+         "Delete joint",
+         "Takes a joint out. The component it placed goes back to its own place: where it was before it was "
+         "joined.",
+         {{"joint", ArgType::Text, "The joint, like Joint1.", true, {}}}},
+        [jointNamed](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+            auto [found, problem] = jointNamed(doc, a);
+            if (!found) return std::move(problem);
+            return std::make_unique<DeleteJointCommand>(found->id);
+        });
 
     r.add({"part.make_inside",
            "Make part inside",

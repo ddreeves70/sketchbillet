@@ -351,14 +351,34 @@ int openDesign(int argc, char** argv) {
 
     // An assembly: its components and parts. Its steps are in its parts.
     if (doc.kind() == sb::model::DocKind::Assembly) {
-        if (argc != 3 && !showComponents) {
+        const bool listing = showEdges || showFaces || showPoints;
+        if (argc != 3 && !showComponents && !listing) {
             std::fprintf(stderr,
-                         "error: %s is an assembly. For now, list it with --components; exporting it and "
-                         "listing its edges, faces and sketches come in a later version.\n",
+                         "error: %s is an assembly. For now, list it with --components, or a component's "
+                         "edges, faces or points with --edges \"Wheel 1\"; exporting it and listing its "
+                         "sketches come in a later version.\n",
                          doc.name().c_str());
             return 1;
         }
-        return sb::cli::printAssembly(doc, report, *kernel, showComponents) ? 0 : 1;
+        const bool ok = sb::cli::printAssembly(doc, report, *kernel, showComponents);
+        if (listing) {
+            // A component's body: "Wheel 1", or "Wheel 1:Hub" for one of several.
+            const std::string which = argv[4];
+            const auto colon = which.find(':');
+            std::string why;
+            const auto found = sb::cli::componentBody(
+                doc, report, which.substr(0, colon),
+                colon == std::string::npos ? std::string() : which.substr(colon + 1), why);
+            if (!found) {
+                std::fprintf(stderr, "error: %s\n", why.c_str());
+                return 1;
+            }
+            printElements(*found->part, *found->body, *found->names,
+                          showEdges   ? sb::kernel::TopoKind::Edge
+                          : showFaces ? sb::kernel::TopoKind::Face
+                                      : sb::kernel::TopoKind::Vertex);
+        }
+        return ok ? 0 : 1;
     }
     if (showComponents) {
         std::fprintf(stderr, "error: %s is a part, not an assembly, so it has no components.\n",

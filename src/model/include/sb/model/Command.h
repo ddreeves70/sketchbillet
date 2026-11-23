@@ -90,6 +90,10 @@ public:
     /// @return The list (see Document::components()).
     std::vector<Component>& components();
 
+    /// Gives an assembly's joints to change in place.
+    /// @return The list (see Document::joints()).
+    std::vector<Joint>& joints();
+
     /// Adds an inside part to an assembly.
     /// @param part The part. The assembly takes ownership.
     /// @param index Where it goes in the list of parts; past the end means last.

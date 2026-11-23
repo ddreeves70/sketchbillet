@@ -1030,18 +1030,23 @@ void addAssemblyAround(const plugin::DocumentList& docs, const DocId& part, view
     const auto here = std::find_if(components.begin(), components.end(),
                                    [&](const model::Component& c) { return c.id == edited; });
     if (here == components.end()) return;
-    const kernel::Placement fromPart = kernel::inverse(here->placement);
+    // Where each component is: placed by its joints, or where it was put.
+    auto placed = [report](const model::Component& c) {
+        const auto* p = report->placementOf(c.id);
+        return p ? *p : c.placement;
+    };
+    const kernel::Placement fromPart = kernel::inverse(placed(*here));
     for (const auto& c : components) {
         if (c.id == edited) continue;
         const auto* other = assembly->findPart(c.part);
         const auto* built = report->part(c.part);
         if (!other || !built) continue;
-        const kernel::Placement placed = kernel::compose(fromPart, c.placement);
+        const kernel::Placement around = kernel::compose(fromPart, placed(c));
         for (const auto& body : built->bodies()) {
             const auto* shape = built->shapeOf(body);
             if (!shape) continue;
             const auto color = other->colorOf(body);
-            out.bodies.push_back({body, *shape, false, {color.r, color.g, color.b}, c.id, placed, true});
+            out.bodies.push_back({body, *shape, false, {color.r, color.g, color.b}, c.id, around, true});
         }
     }
 }
@@ -1067,7 +1072,9 @@ view::SceneContent viewerScene(const plugin::DocumentList& docs, const plugin::S
                 const auto* shape = built->shapeOf(body);
                 if (!shape) continue;
                 const auto color = part->colorOf(body);
-                out.bodies.push_back({body, *shape, false, {color.r, color.g, color.b}, c.id, c.placement});
+                const auto* at = report->placementOf(c.id);  // placed by its joints, or where it was put
+                out.bodies.push_back(
+                    {body, *shape, false, {color.r, color.g, color.b}, c.id, at ? *at : c.placement});
             }
         }
         return out;

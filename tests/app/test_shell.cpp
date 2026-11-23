@@ -3178,6 +3178,46 @@ TEST_CASE("Open part opens a linked part's file beside the assembly; saving it u
     CHECK(app.host.documents().ids().size() == 2);
 }
 
+TEST_CASE("a joined component is drawn, and shown in Properties, where its joint puts it",
+          "[app][assembly]") {
+    App app;
+    model::Document car(model::DocKind::Part, "Car");
+    REQUIRE(car.execute(std::make_unique<model::MakeAssemblyCommand>()).empty());
+    auto part = [](const char* name) {
+        auto p = std::make_unique<model::Document>(model::DocKind::Part, name);
+        REQUIRE(p->execute(std::make_unique<model::AddFeatureCommand>(std::make_unique<model::BoxFeature>(
+                               "Box1", kernel::Vec3{}, kernel::Vec3{10, 10, 4})))
+                    .empty());
+        return p;
+    };
+    REQUIRE(car.execute(std::make_unique<model::InsertPartCommand>(part("Body"), 1)).empty());
+    REQUIRE(
+        car.execute(std::make_unique<model::InsertPartCommand>(part("Lid"), 1, kernel::Placement{{50, 0, 0}}))
+            .empty());
+    // Lid's origin on Body's origin, the two pointing at each other: Lid turned over.
+    model::Joint j;
+    j.a.component = car.components()[0].id;
+    j.b.component = car.components()[1].id;
+    REQUIRE(car.execute(std::make_unique<model::AddJointCommand>(j)).empty());
+    const auto path = app.dir.filePath(QStringLiteral("car.sb")).toStdWString();
+    REQUIRE(io::writeFile(car, path).empty());
+    REQUIRE(app.shell->openDesign(path).empty());
+    settle();
+    const auto& doc = app.doc();
+    REQUIRE(doc.joints().size() == 1);
+    const auto lid = doc.components()[1].id;
+    const auto scene = plugins::viewerScene(app.host.documents(), app.host.selection());
+    REQUIRE(scene.bodies.size() == 2);
+    CHECK(scene.bodies[1].component == lid);
+    CHECK(kernel::samePlacement(scene.bodies[1].placement,
+                                kernel::Placement{{0, 0, 0}, {1, 0, 0}, {0, 0, -1}}, 1e-9));
+    // Picked, Properties shows where it is.
+    app.host.selection().setComponents(app.shell->activeDesign(), {lid});
+    settle();
+    CHECK(app.field<QLabel>("place")->text() == QStringLiteral("x 0 mm, y 0 mm, z 0 mm"));
+    CHECK(app.field<QLabel>("facing")->text() == QStringLiteral("x along 1, 0, 0; z along 0, 0, -1"));
+}
+
 TEST_CASE("opening a file that isn't a design explains why", "[app]") {
     App app;
     const auto problems =

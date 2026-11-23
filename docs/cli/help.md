@@ -57,6 +57,9 @@ Commands for sketchbillet_cli run:
   folder.add               New folder
   folder.delete            Remove folder
   folder.rename            Rename folder
+  joint.add                Add joint
+  joint.delete             Delete joint
+  joint.set                Change joint
   material.define          Define material
   material.delete          Delete material
   parameter.delete         Delete parameter

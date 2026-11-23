@@ -129,6 +129,8 @@ struct MaterialTag {};
 struct FolderTag {};
 /// Tag for sb::ConstraintId.
 struct ConstraintTag {};
+/// Tag for sb::JointId.
+struct JointTag {};
 
 /// Identifies a document (a part or an assembly).
 using DocId = Id<DocTag>;
@@ -148,6 +150,8 @@ using FolderId = Id<FolderTag>;
 using ConstraintId = Id<ConstraintTag>;
 /// Identifies a material a design added (a custom material).
 using MaterialId = Id<MaterialTag>;
+/// Identifies a joint between two components of an assembly.
+using JointId = Id<JointTag>;
 
 }  // namespace sb
 

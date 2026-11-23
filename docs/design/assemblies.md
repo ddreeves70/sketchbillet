@@ -4,7 +4,8 @@
 > Building it, step 1 (several designs open at once) is built (Nov 19, 2026),
 > step 2 (assembly documents, from the command line) is built (Nov 20, 2026),
 > step 3 (linked parts, from the command line) is built (Nov 20, 2026), and
-> step 4 (assemblies in the app) is built (Nov 23, 2026); the rest isn't yet. Two choices were made on Nov 13, 2026: an
+> step 4 (assemblies in the app) is built (Nov 23, 2026), and step 5's joints
+> are built from the command line (Nov 23, 2026); the rest isn't yet. Two choices were made on Nov 13, 2026: an
 > assembly's parts can live **inside** the assembly file or be **linked** to
 > other files, from the start; and parts move along **chains** of joints first,
 > with loops (like a four-bar linkage) later. Changes to `sb_model`, naming and
@@ -21,8 +22,8 @@ This page covers what the student gets, in the order it gets built:
 | --- | --- | --- |
 | 1. Where parts live | Parts made inside the assembly, or linked to their own `.sb` files | Built, from the command line |
 | 2. Components | Parts placed in the assembly, the same part more than once, one part fixed in place | Built, from the command line |
-| 3. Joints | Rigid, hinge (revolute) and slider joints that place parts and say how they move | Planned |
-| 4. Placing parts along chains | Exact, instant placement from joint to joint, smooth enough to drag | Planned |
+| 3. Joints | Rigid, hinge (revolute) and slider joints that place parts and say how they move | Built, from the command line |
+| 4. Placing parts along chains | Exact, instant placement from joint to joint, smooth enough to drag | Built (dragging: with the app) |
 | 5. In the app | The assembly tree, inserting parts, joining, dragging, editing a part | Built, but for joining (it comes with joints) |
 | 6. Checks | Parts that overlap, the whole assembly's mass and balance point, measuring between parts | Planned |
 | 7. Exploded views | Parts pulled apart to show how they fit, for pictures and drawings | Planned |
@@ -160,6 +161,17 @@ took it away. Pick Joint2, then Assemble > Change Joint Origins."
 
 **Joining** moves the second component so its origin meets the first's, with
 their z directions pointing at each other, like a peg dropped into a hole.
+
+Which way a side points has to be the same every time. A flat face points out of
+the part. A round edge on a flat face (a hole's rim, an axle's end) points out
+of that face too, so a peg's end and a hole's rim meet the right way round. A
+straight edge or a round face's axis has no "out": it points the way its largest
+part (x, y or z) is positive, so two edges along x point the same way, and a
+hinge between them usually needs **Flip** (decided Nov 23, 2026).
+
+Where a joint puts a component isn't saved in it: the component keeps its own
+placement, and the joints place it again on every rebuild. Taking a joint out
+puts the component back where it was before it was joined.
 **Flip** turns it the other way round, **Angle** turns it about z, and
 **Offset** leaves a gap along z (mm).
 
@@ -453,6 +465,20 @@ Each line is one pull request, in this order:
      file updates the open assemblies that link to it at once.
 5. **Joints:** rigid, revolute and slider; placing along chains; loops checked;
    limits; dragging along joints; the joint tool; `joint.add`, `joint.set`.
+   Built in pieces:
+   - **Joints from the command line** (built, Nov 23, 2026): `Joint` and
+     `JointOrigin` in `sb_model` (a side is a component, a body and a
+     `GeometryRef`, like a fillet's edges), `AddJointCommand`,
+     `SetJointCommand` (a drag's changes merge into one step) and
+     `DeleteJointCommand`; deleting a component deletes its joints. The
+     rebuild places components along the joints (`RebuildReport::placementOf()`,
+     `placedByJoint()`, `joint()`), checks loops and says when an origin can't be
+     found. `joints.json` in the file. `joint.add`, `joint.set`, `joint.delete`,
+     sides typed like `Wheel 1:edge:3`, and `open --edges "Wheel 1"` to number
+     them. The viewer and Properties show a joined component where its joint
+     puts it; move handles leave it alone.
+   - Next: joints in the app (the tree's Joints, Properties, the joint tool),
+     then dragging along joints and Reset Joints.
 6. **Checks:** overlaps, the assembly's mass and center of gravity, measuring
    between components.
 7. **Exploded views.**

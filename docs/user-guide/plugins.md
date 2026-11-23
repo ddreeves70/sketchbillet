@@ -50,6 +50,9 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command folder.add
            command folder.delete
            command folder.rename
+           command joint.add
+           command joint.delete
+           command joint.set
            command material.define
            command material.delete
            command parameter.delete

@@ -61,6 +61,9 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`component.place`](#componentplace) | Moves and turns a component |
 | [`component.rename`](#componentrename) | Renames a component |
 | [`component.delete`](#componentdelete) | Takes a component out of an assembly |
+| [`joint.add`](#jointadd) | Joins two components: rigid, turning (revolute) or sliding |
+| [`joint.set`](#jointset) | Turns or slides a joint, or changes its kind, sides or limits |
+| [`joint.delete`](#jointdelete) | Takes a joint out |
 | [`part.update`](#partupdate) | Updates linked parts from their files |
 | [`part.relink`](#partrelink) | Links a part to its file where it is now |
 | [`part.make_inside`](#partmake_inside) | Makes a linked part an inside part |
@@ -3090,6 +3093,141 @@ $ sketchbillet_cli run --open Car.sb --save Car.sb component.insert file=Wheel.s
 ...
 $ sketchbillet_cli run --open Car.sb component.delete component="Wheel 9"
 error [assembly.no_component]: Car has no component called Wheel 9. Its components are: Wheel 1, Wheel 2.
+```
+
+## joint.add
+
+Joins two components. The second one (`b`) moves so its side meets the first
+one's (`a`), the two pointing at each other, like a peg dropped into a hole. Then
+it stays there (`rigid`), turns there like a hinge (`revolute`) or slides there
+(`slider`). See [Joints](../user-guide/assemblies.md#joints) for how sides are
+picked and which way they point.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `a` | side | yes | The side that stays, like `Tray 1:edge:12` |
+| `b` | side | yes | The side that moves to meet it, like `Cover 1:edge:4` |
+| `kind` | `rigid`, `revolute` or `slider` | no | How it can still move. Default `rigid` |
+| `value` | number | no | How far it's turned (degrees) or slid (mm). Default 0 |
+| `lowest`, `highest` | number | no | The value's limits (degrees or mm). Default none |
+| `rest` | number | no | Where Reset Joints puts the value back to. Default 0 |
+| `flip` | true or false | no | `true` turns the second side round, so the two point the same way. Default false |
+| `angle` | number | no | Turns the second side about the joint, in degrees. Default 0 |
+| `offset` | number | no | A gap between the two sides, along the joint, in mm. Default 0 |
+| `off` | true or false | no | `true` turns it off: it places nothing |
+| `name` | text | no | Its name. Default `Joint1`, `Joint2`, ... |
+
+A **side** is a component and what's picked on it, by the numbers
+[`open --edges`, `--faces` or `--points`](open.md#a-components-edges-faces-and-points)
+lists for it:
+
+| Side | Its point | Its direction |
+| --- | --- | --- |
+| `Wheel 1` | The part's origin | The part's z |
+| `Wheel 1:edge:3`, a round edge | The circle's center | Straight out of the flat face it's on |
+| `Tray 1:edge:12`, a straight edge | Its middle (`:start` or `:end` for an end) | Along it |
+| `Box 1:face:6`, a flat face | Its center | Straight out of it |
+| `Arm 1:point:4` | The point | The part's z |
+
+A part with more than one body names it too: `Wheel 1:Hub:edge:3`.
+
+A tray with a cover on a hinge along its back edge. The tray's top back edge is
+its edge 12, and the cover's bottom back edge its edge 4. Both point along x, so
+`flip=true` keeps the cover the right way up:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save Tray.sb feature.add_box size=40,40,10
+...
+$ sketchbillet_cli run --save Cover.sb feature.add_box size=40,40,4
+...
+$ sketchbillet_cli run --save Case.sb assembly.new
+...
+$ sketchbillet_cli run --open Case.sb --save Case.sb component.insert file=Tray.sb
+...
+$ sketchbillet_cli run --open Case.sb --save Case.sb component.insert file=Cover.sb at=60,0,0
+...
+$ sketchbillet_cli run --open Case.sb --save Case.sb joint.add kind=revolute a="Tray 1:edge:12" b="Cover 1:edge:4" flip=true lowest=-110 highest=0
+Case: assembly, 2 components, 2 parts
+  Tray 1       Tray       grounded at 0, 0, 0 mm
+  Cover 1      Cover      joined   at 0, 0, 10 mm
+Joints:
+  Joint1       revolute  Cover 1 on Tray 1, at 0°, from -110° to 0°
+Parts:
+  Tray         1 step   ok        mass 19.84 g (PLA), 1 in the assembly
+    linked to Tray.sb
+  Cover        1 step   ok        mass 7.94 g (PLA), 1 in the assembly
+    linked to Cover.sb
+Mass in all: 27.78 g
+wrote Case.sb
+```
+
+A side that isn't on the component says how to find the numbers:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open Case.sb joint.add a="Tray 1:edge:20" b="Cover 1"
+error: a's edge must be from 1 to 12 on Tray 1 (20 isn't one). To see them: sketchbillet_cli open <design.sb> --edges "Tray 1"
+```
+
+## joint.set
+
+Changes a joint: most often its `value`, how far it's turned or slid. Settings
+left out stay as they are. It takes the same settings as
+[`joint.add`](#jointadd), and `joint`, the joint to change. `limits=false` takes
+its lowest and highest away. Changing its `kind` sets its value and limits back
+to none.
+
+Opening the cover (above) by 100°. It turns about the hinge's x, so opening it
+upward is a turn the negative way:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open Case.sb --save Case.sb joint.set joint=Joint1 value=-100
+Case: assembly, 2 components, 2 parts
+  Tray 1       Tray       grounded at 0, 0, 0 mm
+  Cover 1      Cover      joined   at 0, 46.95, 49.39 mm
+Joints:
+  Joint1       revolute  Cover 1 on Tray 1, at -100°, from -110° to 0°
+Parts:
+  Tray         1 step   ok        mass 19.84 g (PLA), 1 in the assembly
+    linked to Tray.sb
+  Cover        1 step   ok        mass 7.94 g (PLA), 1 in the assembly
+    linked to Cover.sb
+Mass in all: 27.78 g
+wrote Case.sb
+```
+
+A value past its limits says what they are:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open Case.sb joint.set joint=Joint1 value=-120
+error [joint.out_of_limits]: Joint1 turns from -110° to 0°, so it can't be -120°. Pick a value between them, or change its limits.
+```
+
+## joint.delete
+
+Takes a joint out. The component it placed goes back where it was before it was
+joined, free to move.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `joint` | text | yes | The joint, like `Joint1` |
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open Case.sb --save Case.sb joint.delete joint=Joint1
+Case: assembly, 2 components, 2 parts
+  Tray 1       Tray       grounded at 0, 0, 0 mm
+  Cover 1      Cover      free     at 60, 0, 0 mm
+Parts:
+  Tray         1 step   ok        mass 19.84 g (PLA), 1 in the assembly
+    linked to Tray.sb
+  Cover        1 step   ok        mass 7.94 g (PLA), 1 in the assembly
+    linked to Cover.sb
+Mass in all: 27.78 g
+wrote Case.sb
 ```
 
 ## part.update

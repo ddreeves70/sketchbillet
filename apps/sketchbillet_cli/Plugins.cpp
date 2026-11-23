@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <numbers>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -162,6 +163,7 @@ std::optional<model::ArgValue> parseArg(const model::ArgSpec& spec, const std::s
         case ArgType::GeometryList:
         case ArgType::Face:
         case ArgType::FaceList:
+        case ArgType::JointSide:
             return text;  // edge or face numbers: read once the design is rebuilt (see geometryArgs())
         case ArgType::Vec2List: {
             // Points split by "/", so the shell needs no quotes: 0,0/0,30/40,30.
@@ -261,6 +263,8 @@ const char* typeName(model::ArgType t) {
             return "folder name";
         case model::ArgType::Choice:
             return "choice";
+        case model::ArgType::JointSide:
+            return "component[:face|edge|corner:n]";
     }
     return "?";
 }
@@ -372,8 +376,133 @@ int listPlugins(int argc, char** argv) {
 // from 1) into lasting references to those edges. The body is the "body"
 // argument, or the body of the Fillet or Chamfer in "feature". Prints why and
 // returns false if they can't be read.
+// A joint side as typed: "Wheel 1", "Wheel 1:edge:3", "Wheel 1:Hub:face:2",
+// "Arm 1:point:4", with ":start" or ":end" after a straight edge's number.
+std::optional<model::JointOrigin> jointSide(const model::Document& assembly,
+                                            const model::RebuildReport& report, const std::string& name,
+                                            const std::string& text, std::string& why) {
+    std::vector<std::string> parts;
+    for (std::size_t from = 0;;) {
+        const auto colon = text.find(':', from);
+        parts.push_back(text.substr(from, colon == std::string::npos ? std::string::npos : colon - from));
+        if (colon == std::string::npos) break;
+        from = colon + 1;
+    }
+    const auto* c = assembly.findComponent(std::string_view(parts[0]));
+    if (!c) {
+        std::string names;
+        for (const auto& each : assembly.components()) names += (names.empty() ? "" : ", ") + each.name;
+        why = name + " must start with a component, like Wheel 1" +
+              (names.empty() ? std::string(".") : ": " + assembly.name() + "'s are " + names + ".");
+        return std::nullopt;
+    }
+    model::JointOrigin o;
+    o.component = c->id;
+    if (parts.size() == 1) return o;  // the part's own origin
+    auto kindOf = [](const std::string& word) -> std::optional<kernel::TopoKind> {
+        if (word == "face") return kernel::TopoKind::Face;
+        if (word == "edge") return kernel::TopoKind::Edge;
+        if (word == "point" || word == "corner") return kernel::TopoKind::Vertex;
+        return std::nullopt;
+    };
+    std::size_t at = 1;
+    std::string bodyName;
+    if (!kindOf(parts[1])) bodyName = parts[at++];
+    const auto kind = at < parts.size() ? kindOf(parts[at]) : std::nullopt;
+    const auto n = at + 1 < parts.size() ? toNumber(parts[at + 1]) : std::nullopt;
+    const std::string end = at + 2 < parts.size() ? parts[at + 2] : std::string();
+    if (!kind || !n || at + 3 < parts.size() || (!end.empty() && end != "start" && end != "end")) {
+        why = name + " must be a component, then face, edge or point and its number, like " + c->name +
+              ":edge:3 (" + text +
+              " isn't one). To see the numbers: sketchbillet_cli open <design.sb> --edges \"" + c->name +
+              "\"";
+        return std::nullopt;
+    }
+    const auto found = componentBody(assembly, report, c->name, bodyName, why);
+    if (!found) return std::nullopt;
+    const auto count = found->names->of(*kind).size();
+    if (*n != std::floor(*n) || *n < 1 || *n > static_cast<double>(count)) {
+        const char* word = *kind == kernel::TopoKind::Face   ? "face"
+                           : *kind == kernel::TopoKind::Edge ? "edge"
+                                                             : "point";
+        const char* list = *kind == kernel::TopoKind::Face   ? "--faces"
+                           : *kind == kernel::TopoKind::Edge ? "--edges"
+                                                             : "--points";
+        why = name + "'s " + word + " must be from 1 to " + std::to_string(count) + " on " + c->name + " (" +
+              parts[at + 1] + " isn't one). To see them: sketchbillet_cli open <design.sb> " + list + " \"" +
+              c->name + "\"";
+        return std::nullopt;
+    }
+    const auto order = model::listingOrder(found->names->elements, *kind);
+    o.body = found->body->id();
+    o.element = model::referTo(*found->names, *kind, order.at(static_cast<std::size_t>(*n) - 1));
+    o.at = end == "start" ? model::OriginAt::Start
+           : end == "end" ? model::OriginAt::End
+                          : model::OriginAt::Middle;
+    return o;
+}
+
+std::optional<ComponentBody> componentBody(const model::Document& assembly,
+                                           const model::RebuildReport& report, const std::string& component,
+                                           const std::string& body, std::string& why) {
+    const auto* c = assembly.findComponent(std::string_view(component));
+    const auto* part = c ? assembly.findPart(c->part) : nullptr;
+    const auto* built = c ? report.part(c->part) : nullptr;
+    if (!c || !part || !built) {
+        std::string names;
+        for (const auto& each : assembly.components()) names += (names.empty() ? "" : ", ") + each.name;
+        why = assembly.name() + " has no component called " + component + ". Its components are: " + names +
+              ".";
+        return std::nullopt;
+    }
+    const model::Feature* step = nullptr;
+    if (body.empty()) {
+        if (built->bodies().size() != 1) {
+            std::string names;
+            for (const auto& b : built->bodies())
+                names += (names.empty() ? "" : ", ") + part->find(b)->name();
+            why = c->name + "'s part, " + part->name() +
+                  (built->bodies().empty() ? ", has no bodies yet."
+                                           : ", has more than one body: say which, like " + c->name + ":" +
+                                                 part->find(built->bodies().front())->name() +
+                                                 " (its bodies are " + names + ").");
+            return std::nullopt;
+        }
+        step = part->find(built->bodies().front());
+    } else {
+        for (std::size_t i = 0; i < part->featureCount(); ++i) {
+            if (part->featureAt(i).name() == body) step = &part->featureAt(i);
+        }
+    }
+    const auto* r = step ? built->result(step->id()) : nullptr;
+    if (!r || !r->names) {
+        why = part->name() + " has no body called " + body + ".";
+        return std::nullopt;
+    }
+    return ComponentBody{c, part, step, r->names.get()};
+}
+
 bool geometryArgs(const model::CommandInfo& info, model::Args& values, const model::Document& doc,
                   kernel::IKernel& kernel, sketch::ISketchSolver& solver) {
+    // A joint's sides, on an assembly's components.
+    for (const auto& spec : info.args) {
+        if (spec.type != model::ArgType::JointSide || !values.count(spec.name)) continue;
+        if (doc.kind() != model::DocKind::Assembly) {
+            std::fprintf(stderr,
+                         "error: %s is a part, not an assembly, so it has no components to join. Start an "
+                         "assembly with assembly.new.\n",
+                         doc.name().c_str());
+            return false;
+        }
+        const auto report = doc.regenerate(kernel, &solver);
+        std::string why;
+        auto side = jointSide(doc, report, spec.name, std::get<std::string>(values[spec.name]), why);
+        if (!side) {
+            std::fprintf(stderr, "error: %s\n", why.c_str());
+            return false;
+        }
+        values[spec.name] = *side;
+    }
     for (const auto& spec : info.args) {
         const bool oneFace = spec.type == model::ArgType::Face;
         const bool faces = oneFace || spec.type == model::ArgType::FaceList;
@@ -721,6 +850,17 @@ std::string pointText(const kernel::Vec3& v, LengthUnit unit, bool length) {
 
 }  // namespace
 
+// A joint's value in its units: degrees, or mm.
+std::string jointValueText(const model::Joint& j, double v) {
+    char text[48];
+    if (j.kind == model::JointKind::Revolute) {
+        std::snprintf(text, sizeof text, "%g\xC2\xB0", std::round(v * 180.0 / std::numbers::pi * 100) / 100);
+    } else {
+        std::snprintf(text, sizeof text, "%g mm", std::round(v * 100) / 100);
+    }
+    return text;
+}
+
 bool printAssembly(const model::Document& doc, const model::RebuildReport& report, kernel::IKernel& kernel,
                    bool directions) {
     const auto count = doc.components().size();
@@ -729,14 +869,35 @@ bool printAssembly(const model::Document& doc, const model::RebuildReport& repor
                 doc.parts().size() == 1 ? "part" : "parts");
     for (const auto& c : doc.components()) {
         const auto* part = doc.findPart(c.part);
+        // Where it goes: placed by a joint ("joined"), or where it was put.
+        const auto* placed = report.placementOf(c.id);
+        const auto& at = placed ? *placed : c.placement;
         std::printf("  %-12s %-10s %-8s at %s\n", c.name.c_str(), part ? part->name().c_str() : "?",
-                    c.grounded ? "grounded" : "free",
-                    pointText(c.placement.origin, doc.lengthUnit(), true).c_str());
+                    c.grounded                   ? "grounded"
+                    : report.placedByJoint(c.id) ? "joined"
+                                                 : "free",
+                    pointText(at.origin, doc.lengthUnit(), true).c_str());
         if (directions) {
-            std::printf("    facing x %s, z %s\n",
-                        pointText(c.placement.xAxis, doc.lengthUnit(), false).c_str(),
-                        pointText(c.placement.zAxis, doc.lengthUnit(), false).c_str());
+            std::printf("    facing x %s, z %s\n", pointText(at.xAxis, doc.lengthUnit(), false).c_str(),
+                        pointText(at.zAxis, doc.lengthUnit(), false).c_str());
         }
+    }
+    // Each joint: what it joins, how it moves, and anything wrong with it.
+    if (!doc.joints().empty()) std::printf("Joints:\n");
+    for (const auto& j : doc.joints()) {
+        const auto* a = doc.findComponent(j.a.component);
+        const auto* b = doc.findComponent(j.b.component);
+        std::printf("  %-12s %-9s %s on %s", j.name.c_str(), model::jointKindName(j.kind),
+                    b ? b->name.c_str() : "?", a ? a->name.c_str() : "?");
+        if (j.kind != model::JointKind::Rigid) {
+            std::printf(", at %s", jointValueText(j, j.value).c_str());
+            if (j.lowest || j.highest)
+                std::printf(", from %s to %s", j.lowest ? jointValueText(j, *j.lowest).c_str() : "any",
+                            j.highest ? jointValueText(j, *j.highest).c_str() : "any");
+        }
+        if (j.off) std::printf(", off");
+        std::printf("\n");
+        if (const auto* r = report.joint(j.id)) printIssues(r->issues, "    ");
     }
     // Each part, built once, however many components place it.
     bool ok = true;

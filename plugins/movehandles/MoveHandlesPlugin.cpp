@@ -42,14 +42,15 @@ public:
         const auto* report = ctx_.documents().lastRebuild(docId);
         const auto* kernel = ctx_.documents().kernel();
         if (doc && kernel && report && doc->kind() == model::DocKind::Assembly) {
-            // A component: a grounded one stays where it is, so it has none.
+            // A component: a grounded one stays where it is, and a joint places a
+            // joined one, so they have none.
             const model::Component* c = nullptr;
             if (dragging_ && !component_.isNil()) {
                 c = doc->findComponent(component_);
             } else if (!dragging_ && ctx_.selection().doc() == docId &&
                        ctx_.selection().components().size() == 1) {
                 c = doc->findComponent(ctx_.selection().components().front());
-                if (c && c->grounded) c = nullptr;
+                if (c && (c->grounded || report->placedByJoint(c->id))) c = nullptr;
             }
             const auto box = c ? componentBounds(*report, *kernel, *c) : std::nullopt;
             if (!box) {
@@ -172,10 +173,12 @@ private:
             const auto* shape = built->shapeOf(body);
             if (!shape) continue;
             const auto b = kernel.bounds(*shape);
+            const auto* placed = report.placementOf(c.id);
             for (int corner = 0; corner < 8; ++corner) {
-                const auto p = kernel::apply(c.placement, kernel::Point3{corner & 1 ? b.max.x : b.min.x,
-                                                                         corner & 2 ? b.max.y : b.min.y,
-                                                                         corner & 4 ? b.max.z : b.min.z});
+                const auto p = kernel::apply(
+                    placed ? *placed : c.placement,
+                    kernel::Point3{corner & 1 ? b.max.x : b.min.x, corner & 2 ? b.max.y : b.min.y,
+                                   corner & 4 ? b.max.z : b.min.z});
                 if (!out) out = kernel::Box3{p, p};
                 out->min = {std::min(out->min.x, p.x), std::min(out->min.y, p.y), std::min(out->min.z, p.z)};
                 out->max = {std::max(out->max.x, p.x), std::max(out->max.y, p.y), std::max(out->max.z, p.z)};
