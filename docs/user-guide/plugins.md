@@ -52,6 +52,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command folder.rename
            command joint.add
            command joint.delete
+           command joint.reset
            command joint.set
            command material.define
            command material.delete
@@ -113,6 +114,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            action  Assemble/Component > Delete component  (component.delete)
            action  Assemble/Edit > Edit part  (runs plugin code)
            action  Assemble/Edit > Open part  (opens a file)
+           action  Assemble/Joints > Reset joints  (joint.reset)
            action  Assemble/Parts > Update linked parts  (part.update)
            action  Assemble/Parts > Find linked file  (part.relink)
            action  Assemble/Parts > Make part inside  (part.make_inside)

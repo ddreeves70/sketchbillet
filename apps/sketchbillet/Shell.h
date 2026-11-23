@@ -139,8 +139,8 @@ public:
     void finishEditingPart();
     std::filesystem::path activePath() const;
 
-    // Selects steps by name in the active design, or an assembly's components
-    // (for --select and tests).
+    // Selects steps by name in the active design, or an assembly's components or
+    // joints (for --select and tests).
     void selectSteps(const QStringList& names);
 
     // Picks edges (or faces) of one body, by their numbers (from 1) in the order

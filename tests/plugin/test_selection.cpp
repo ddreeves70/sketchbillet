@@ -150,3 +150,41 @@ TEST_CASE("an assembly's components can be picked; steps and deleted components 
     CHECK(f.selection.components().empty());
     CHECK(f.selection.doc().isNil());
 }
+
+TEST_CASE("an assembly's joints can be picked, in place of components; deleted ones drop out",
+          "[plugin][selection][assembly][joints]") {
+    Fixture f;
+    REQUIRE(f.docs.run(f.doc, "assembly.new", {}).empty());
+    REQUIRE(f.docs.run(f.doc, "component.new", {{"name", std::string("Wheel")}}).empty());
+    REQUIRE(f.docs.run(f.doc, "component.add", {{"part", std::string("Wheel")}, {"count", std::int64_t{2}}})
+                .empty());
+    const auto components = f.docs.find(f.doc)->components();
+    auto side = [](const model::Component& c) {
+        model::JointOrigin o;
+        o.component = c.id;
+        return o;
+    };
+    REQUIRE(f.docs.run(f.doc, "joint.add", {{"a", side(components[0])}, {"b", side(components[1])}}).empty());
+    REQUIRE(f.docs.run(f.doc, "joint.add", {{"a", side(components[0])}, {"b", side(components[2])}}).empty());
+    const auto joint1 = f.docs.find(f.doc)->joints()[0].id;
+    const auto joint2 = f.docs.find(f.doc)->joints()[1].id;
+
+    f.selection.setComponents(f.doc, {components[1].id});
+    f.selection.setJoints(f.doc, {joint2, JointId::generate(), joint1});
+    CHECK(f.selection.joints() == std::vector{joint2, joint1});
+    CHECK(f.selection.components().empty());  // one kind at a time
+    CHECK(f.selection.containsJoint(joint1));
+    CHECK(f.heard.back().joints == std::vector{joint2, joint1});
+    const auto heard = f.heard.size();
+    f.selection.setJoints(f.doc, {joint2, joint1});  // the same: nothing to tell
+    CHECK(f.heard.size() == heard);
+
+    REQUIRE(f.docs.run(f.doc, "joint.delete", {{"joint", std::string("Joint2")}}).empty());
+    CHECK(f.selection.joints() == std::vector{joint1});
+
+    f.selection.setComponents(f.doc, {components[0].id});
+    CHECK(f.selection.joints().empty());
+    f.selection.setJoints(f.doc, {joint1});
+    f.selection.set(f.doc, {});
+    CHECK(f.selection.joints().empty());
+}

@@ -116,6 +116,47 @@ void drawPlanes(plugin::PluginContext& ctx) {
     put("planes.names", std::move(names));
 }
 
+// Draws the picked joints of the active assembly: where each one's two sides
+// meet, and the line it turns about or slides along (its z), over the bodies.
+void drawJoints(plugin::PluginContext& ctx) {
+    plugin::Overlay axes, dots;
+    axes.color = {20, 150, 70, 255};
+    axes.size = 2.5;
+    axes.overBodies = true;
+    dots.shape = plugin::OverlayShape::Points;
+    dots.color = {20, 150, 70, 255};
+    dots.size = 9;
+    dots.overBodies = true;
+    const auto& docs = ctx.documents();
+    const DocId active = docs.active();
+    const auto* design = docs.find(active);
+    const auto* report = design ? docs.lastRebuild(active) : nullptr;
+    const auto& sel = ctx.selection();
+    if (design && report && design->kind() == model::DocKind::Assembly && sel.doc() == active) {
+        for (const auto& id : sel.joints()) {
+            const auto* r = report->joint(id);
+            if (!r || !r->aFrame) continue;
+            const auto& f = *r->aFrame;
+            constexpr double kHalf = 20;  // mm each way
+            axes.points.push_back({f.origin.x - kHalf * f.zAxis.x, f.origin.y - kHalf * f.zAxis.y,
+                                   f.origin.z - kHalf * f.zAxis.z});
+            axes.points.push_back({f.origin.x + kHalf * f.zAxis.x, f.origin.y + kHalf * f.zAxis.y,
+                                   f.origin.z + kHalf * f.zAxis.z});
+            dots.points.push_back(f.origin);
+            if (r->bFrame) dots.points.push_back(r->bFrame->origin);
+        }
+    }
+    auto put = [&ctx](const char* name, plugin::Overlay o) {
+        if (o.points.empty()) {
+            ctx.overlays().remove(name);
+        } else {
+            ctx.overlays().set(name, std::move(o));
+        }
+    };
+    put("joints.axes", std::move(axes));
+    put("joints.points", std::move(dots));
+}
+
 // The toolbar mode while an assembly is the design being worked on: the
 // Assemble tab shows instead of the Model tab.
 constexpr const char* kAssemblyMode = "sb.modeling.assembly";
@@ -287,6 +328,20 @@ void addAssembleTools(plugin::PluginContext& ctx) {
                 return link ? link->path : std::string();
             },
         .enabled = pickedLinked(true)});
+    ctx.addAction(
+        ActionSpec{.id = "sb.modeling.reset_joints",
+                   .text = "Reset joints",
+                   .menu = "Assemble/Joints",
+                   .command = "joint.reset",
+                   .toolbar = true,
+                   .buttonText = "Reset",
+                   .icon = std::string(icons::modeling::reset_joints_svg),
+                   .tip = "Put every hinge and slider back where it rests: the lid shut, the arm down.",
+                   .enabled = [assembly] {
+                       const auto* doc = assembly();
+                       return doc && std::any_of(doc->joints().begin(), doc->joints().end(),
+                                                 [](const model::Joint& j) { return j.value != j.rest; });
+                   }});
     ctx.addAction(ActionSpec{.id = "sb.modeling.update_links",
                              .text = "Update linked parts",
                              .menu = "Assemble/Parts",
@@ -348,9 +403,18 @@ void addAssembleTools(plugin::PluginContext& ctx) {
 
 void registerModeling(plugin::PluginContext& ctx) {
     // Construction planes are drawn in the view after every rebuild and pick.
-    ctx.listen<plugin::RebuildFinished>([&ctx](const auto&) { drawPlanes(ctx); });
-    ctx.listen<plugin::SelectionChanged>([&ctx](const auto&) { drawPlanes(ctx); });
-    ctx.listen<plugin::ActiveDocumentChanged>([&ctx](const auto&) { drawPlanes(ctx); });
+    ctx.listen<plugin::RebuildFinished>([&ctx](const auto&) {
+        drawPlanes(ctx);
+        drawJoints(ctx);
+    });
+    ctx.listen<plugin::SelectionChanged>([&ctx](const auto&) {
+        drawPlanes(ctx);
+        drawJoints(ctx);
+    });
+    ctx.listen<plugin::ActiveDocumentChanged>([&ctx](const auto&) {
+        drawPlanes(ctx);
+        drawJoints(ctx);
+    });
 
     const auto& builtin = model::CommandRegistry::builtin();
     for (const auto* info : builtin.commands()) {

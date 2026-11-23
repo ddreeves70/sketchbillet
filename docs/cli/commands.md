@@ -63,6 +63,7 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`component.delete`](#componentdelete) | Takes a component out of an assembly |
 | [`joint.add`](#jointadd) | Joins two components: rigid, turning (revolute) or sliding |
 | [`joint.set`](#jointset) | Turns or slides a joint, or changes its kind, sides or limits |
+| [`joint.reset`](#jointreset) | Puts joints back to their rest values |
 | [`joint.delete`](#jointdelete) | Takes a joint out |
 | [`part.update`](#partupdate) | Updates linked parts from their files |
 | [`part.relink`](#partrelink) | Links a part to its file where it is now |
@@ -3204,6 +3205,31 @@ A value past its limits says what they are:
 ```console
 $ sketchbillet_cli run --open Case.sb joint.set joint=Joint1 value=-120
 error [joint.out_of_limits]: Joint1 turns from -110° to 0°, so it can't be -120°. Pick a value between them, or change its limits.
+```
+
+## joint.reset
+
+Puts joints back to their rest values (`rest=`, 0 unless it's set): the cover
+shut, the arm down. It's one step of Undo for all of them.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `joint` | text | no | Just this joint, like `Joint1`. Default: every joint |
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open Case.sb joint.reset
+Case: assembly, 2 components, 2 parts
+  Tray 1       Tray       grounded at 0, 0, 0 mm
+  Cover 1      Cover      joined   at 0, 0, 10 mm
+Joints:
+  Joint1       revolute  Cover 1 on Tray 1, at 0°, from -110° to 0°
+Parts:
+  Tray         1 step   ok        mass 19.84 g (PLA), 1 in the assembly
+    linked to Tray.sb
+  Cover        1 step   ok        mass 7.94 g (PLA), 1 in the assembly
+    linked to Cover.sb
+Mass in all: 27.78 g
 ```
 
 ## joint.delete

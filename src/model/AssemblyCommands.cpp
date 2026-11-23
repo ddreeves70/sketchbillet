@@ -622,4 +622,32 @@ void DeleteJointCommand::revert(DocumentEditor& editor) {
     joints.insert(joints.begin() + static_cast<std::ptrdiff_t>(std::min(index_, joints.size())), *removed_);
 }
 
+ResetJointsCommand::ResetJointsCommand(std::vector<JointId> joints) : only_(std::move(joints)) {}
+
+Diagnostics ResetJointsCommand::apply(DocumentEditor& editor) {
+    if (auto d = needAssembly(editor.document())) return {*d};
+    old_.clear();
+    for (auto& j : editor.joints()) {
+        if (!only_.empty() && std::find(only_.begin(), only_.end(), j.id) == only_.end()) continue;
+        if (j.kind == JointKind::Rigid || j.value == j.rest) continue;
+        old_.emplace_back(j.id, j.value);
+        j.value = j.rest;
+    }
+    if (old_.empty()) {
+        return {
+            error("joint.at_rest", editor.document().joints().empty()
+                                       ? editor.document().name() + " has no joints to reset."
+                                       : "Every joint is at its rest already, so there's nothing to reset.")};
+    }
+    return {};
+}
+
+void ResetJointsCommand::revert(DocumentEditor& editor) {
+    for (auto& j : editor.joints()) {
+        for (const auto& [id, value] : old_) {
+            if (j.id == id) j.value = value;
+        }
+    }
+}
+
 }  // namespace sb::model

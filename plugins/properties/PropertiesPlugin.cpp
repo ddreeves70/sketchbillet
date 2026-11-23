@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "PropertiesIcons.h"
+#include "sb/model/AssemblyCommands.h"
 #include "sb/model/Commands.h"
 #include "sb/model/ConstructionPlane.h"
 #include "sb/model/Document.h"
@@ -282,10 +283,16 @@ private:
             return;
         }
         if (const auto& picked = ctx_.selection().components(); !picked.empty()) {
+            shownJoint_ = {};
             showComponent(picked);
             return;
         }
         shownComponent_ = {};
+        if (const auto& picked = ctx_.selection().joints(); !picked.empty()) {
+            showJoint(picked);
+            return;
+        }
+        shownJoint_ = {};
         changing_->setVisible(!changingStep_.isNil());
         if (!changingStep_.isNil()) {
             // Picking a Fillet's or Chamfer's edges again.
@@ -366,6 +373,215 @@ private:
             }
         }
         status_->setText(problems.trimmed());
+    }
+
+    // An assembly's joint: what it joins, its kind, how far it's turned or slid,
+    // its limits and its other settings. Each change is a joint.set, as one step
+    // (quick changes to one number merge, like a step's numbers).
+    void showJoint(const std::vector<JointId>& picked) {
+        shown_ = FeatureId{};
+        const DocId doc = ctx_.selection().doc();
+        const auto* design = ctx_.documents().find(doc);
+        const auto* j = design && picked.size() == 1 ? design->findJoint(picked.front()) : nullptr;
+        if (!j) {
+            shownJoint_ = {};
+            clearForm();
+            status_->clear();
+            title_->setText(tr("%1 joints picked").arg(picked.size()));
+            return;
+        }
+        title_->setText(QString::fromStdString(j->name));
+        const auto unit = design->lengthUnit();
+        if (j->id != shownJoint_ || unit != unit_) {
+            shownJoint_ = j->id;
+            unit_ = unit;
+            buildJointForm();
+        }
+        filling_ = true;
+        for (auto& u : jointUpdaters_) u(*j);
+        filling_ = false;
+        QString problems;
+        if (const auto* report = ctx_.documents().lastRebuild(doc)) {
+            if (const auto* r = report->joint(j->id)) {
+                for (const auto& d : r->issues)
+                    problems += QString::fromStdString(d.message) + QLatin1Char('\n');
+            }
+        }
+        status_->setStyleSheet(QString());
+        status_->setText(problems.trimmed());
+    }
+
+    // Changes the shown joint, as one step: a quick run of changes to one number
+    // merges into the step before.
+    void changeJoint(const QString& field, const std::function<void(model::Joint&)>& change) {
+        if (filling_) return;
+        const DocId doc = ctx_.selection().doc();
+        const auto* design = ctx_.documents().find(doc);
+        const auto* now = design ? design->findJoint(shownJoint_) : nullptr;
+        if (!now) return;
+        model::Joint copy = *now;
+        change(copy);
+        const bool merge = field == lastField_ && lastEdit_.isValid() && lastEdit_.elapsed() < kMergeMs;
+        lastField_ = field;
+        lastEdit_.start();
+        auto problems = ctx_.documents().execute(doc, std::make_unique<model::SetJointCommand>(copy, merge));
+        if (!problems.empty()) {
+            ui_.showProblems(problems);
+            schedule();  // show it as it still is
+        }
+    }
+
+    void buildJointForm() {
+        clearForm();
+        jointUpdaters_.clear();
+        auto* form = new QFormLayout(form_);
+        form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+        const QString mm = QLatin1Char(' ') + qs(std::string(unitSymbol(unit_)));
+        // A value in its units: degrees for a revolute joint, the design's unit for a slider.
+        auto shownValue = [this](const model::Joint& j, double v) {
+            return j.kind == model::JointKind::Revolute ? v * 180.0 / std::numbers::pi : toUnit(v, unit_);
+        };
+        auto storedValue = [this](const model::Joint& j, double v) {
+            return j.kind == model::JointKind::Revolute ? v * std::numbers::pi / 180.0 : fromUnit(v, unit_);
+        };
+        auto valueSuffix = [mm](const model::Joint& j) {
+            return j.kind == model::JointKind::Revolute ? QStringLiteral("\u00B0") : mm;
+        };
+
+        auto* name = new QLineEdit(form_);
+        name->setObjectName(QStringLiteral("jointname"));
+        form->addRow(tr("Name"), name);
+        connect(name, &QLineEdit::editingFinished, this, [this, name] {
+            const auto text = name->text().trimmed().toStdString();
+            changeJoint(QStringLiteral("name"), [text](model::Joint& j) { j.name = text; });
+        });
+        jointUpdaters_.push_back([name](const model::Joint& j) {
+            if (!name->hasFocus()) name->setText(QString::fromStdString(j.name));
+        });
+
+        auto* joins = new QLabel(form_);
+        joins->setObjectName(QStringLiteral("joins"));
+        joins->setWordWrap(true);
+        form->addRow(tr("Joins"), joins);
+        jointUpdaters_.push_back([this, joins](const model::Joint& j) {
+            const auto* d = ctx_.documents().find(ctx_.selection().doc());
+            const auto* a = d ? d->findComponent(j.a.component) : nullptr;
+            const auto* b = d ? d->findComponent(j.b.component) : nullptr;
+            joins->setText(tr("%1 on %2").arg(b ? qs(b->name) : tr("?"), a ? qs(a->name) : tr("?")));
+        });
+
+        auto* kind = new QComboBox(form_);
+        kind->setObjectName(QStringLiteral("jointkind"));
+        kind->addItem(tr("Rigid: fixed together"), static_cast<int>(model::JointKind::Rigid));
+        kind->addItem(tr("Revolute: turns, like a hinge"), static_cast<int>(model::JointKind::Revolute));
+        kind->addItem(tr("Slider: slides"), static_cast<int>(model::JointKind::Slider));
+        form->addRow(tr("Kind"), kind);
+        connect(kind, &QComboBox::activated, this, [this, kind](int) {
+            const auto k = static_cast<model::JointKind>(kind->currentData().toInt());
+            changeJoint(QStringLiteral("kind"), [k](model::Joint& j) {
+                if (j.kind == k) return;
+                // Another kind of motion: its value and limits meant something else.
+                j.kind = k;
+                j.value = j.rest = 0;
+                j.lowest.reset();
+                j.highest.reset();
+            });
+        });
+        jointUpdaters_.push_back([kind](const model::Joint& j) {
+            kind->setCurrentIndex(kind->findData(static_cast<int>(j.kind)));
+        });
+
+        // How far it's turned or slid, and its limits: not for a rigid joint.
+        auto number = [this, form, shownValue, storedValue, valueSuffix](
+                          const char* object, const QString& label,
+                          std::function<double(const model::Joint&)> get,
+                          std::function<void(model::Joint&, double)> set) {
+            auto* s = spin(QLatin1String(object), false, QString(), false);
+            s->setRange(-100000, 100000);
+            form->addRow(label, s);
+            connect(s, &QDoubleSpinBox::valueChanged, this, [this, object, set, storedValue](double v) {
+                changeJoint(QLatin1String(object), [&](model::Joint& j) { set(j, storedValue(j, v)); });
+            });
+            jointUpdaters_.push_back([s, get, shownValue, valueSuffix](const model::Joint& j) {
+                s->setEnabled(j.kind != model::JointKind::Rigid);
+                s->setSuffix(valueSuffix(j));
+                s->setValue(shownValue(j, get(j)));
+            });
+            return s;
+        };
+        number(
+            "jointvalue", tr("Value"), [](const model::Joint& j) { return j.value; },
+            [](model::Joint& j, double v) { j.value = v; });
+        auto* limits = new QCheckBox(tr("Limits: it moves only between these"), form_);
+        limits->setObjectName(QStringLiteral("jointlimits"));
+        form->addRow(QString(), limits);
+        connect(limits, &QCheckBox::clicked, this, [this](bool on) {
+            changeJoint(QStringLiteral("limits"), [on](model::Joint& j) {
+                if (!on) {
+                    j.lowest.reset();
+                    j.highest.reset();
+                    return;
+                }
+                // To start with, just room for where it is now.
+                j.lowest = std::min(0.0, j.value);
+                j.highest = std::max(0.0, j.value);
+            });
+        });
+        jointUpdaters_.push_back([limits](const model::Joint& j) {
+            limits->setEnabled(j.kind != model::JointKind::Rigid);
+            limits->setChecked(j.lowest || j.highest);
+        });
+        auto* lowest = number(
+            "jointlowest", tr("Lowest"), [](const model::Joint& j) { return j.lowest.value_or(0); },
+            [](model::Joint& j, double v) { j.lowest = v; });
+        auto* highest = number(
+            "jointhighest", tr("Highest"), [](const model::Joint& j) { return j.highest.value_or(0); },
+            [](model::Joint& j, double v) { j.highest = v; });
+        jointUpdaters_.push_back([lowest, highest](const model::Joint& j) {
+            lowest->setEnabled(j.kind != model::JointKind::Rigid && j.lowest.has_value());
+            highest->setEnabled(j.kind != model::JointKind::Rigid && j.highest.has_value());
+        });
+        number(
+            "jointrest", tr("Rest"), [](const model::Joint& j) { return j.rest; },
+            [](model::Joint& j, double v) { j.rest = v; });
+
+        auto* angle = spin(QStringLiteral("jointangle"), false, QStringLiteral("\u00B0"), false);
+        angle->setRange(-360, 360);
+        form->addRow(tr("Turned"), angle);
+        connect(angle, &QDoubleSpinBox::valueChanged, this, [this](double v) {
+            changeJoint(QStringLiteral("angle"),
+                        [v](model::Joint& j) { j.angle = v * std::numbers::pi / 180.0; });
+        });
+        auto* offset = spin(QStringLiteral("jointoffset"), false, mm);
+        form->addRow(tr("Gap"), offset);
+        connect(offset, &QDoubleSpinBox::valueChanged, this, [this](double v) {
+            const double gap = fromUnit(v, unit_);
+            changeJoint(QStringLiteral("offset"), [gap](model::Joint& j) { j.offset = gap; });
+        });
+        jointUpdaters_.push_back([this, angle, offset](const model::Joint& j) {
+            angle->setValue(j.angle * 180.0 / std::numbers::pi);
+            offset->setValue(toUnit(j.offset, unit_));
+        });
+
+        auto check = [this, form](const char* object, const QString& text, const QString& tip,
+                                  std::function<bool(const model::Joint&)> get,
+                                  std::function<void(model::Joint&, bool)> set) {
+            auto* box = new QCheckBox(text, form_);
+            box->setObjectName(QLatin1String(object));
+            box->setToolTip(tip);
+            form->addRow(QString(), box);
+            connect(box, &QCheckBox::clicked, this, [this, object, set](bool on) {
+                changeJoint(QLatin1String(object), [&](model::Joint& j) { set(j, on); });
+            });
+            jointUpdaters_.push_back([box, get](const model::Joint& j) { box->setChecked(get(j)); });
+        };
+        check(
+            "jointflip", tr("Flip: turn the second side round"),
+            tr("The two sides point at each other, like a peg in a hole. Flipped, they point the same way."),
+            [](const model::Joint& j) { return j.flip; }, [](model::Joint& j, bool on) { j.flip = on; });
+        check(
+            "jointoff", tr("Off: it places nothing"), tr("Turn a joint off to try the assembly without it."),
+            [](const model::Joint& j) { return j.off; }, [](model::Joint& j, bool on) { j.off = on; });
     }
 
     // An assembly's component: its name, its part (and that part's file, for a
@@ -1724,6 +1940,8 @@ private:
 
     // The unit the shown design's lengths are in (its Document settings).
     model::ComponentId shownComponent_;  // the component the form shows, if one
+    JointId shownJoint_;                 // or the joint
+    std::vector<std::function<void(const model::Joint&)>> jointUpdaters_;  // fill the joint's form
 
     LengthUnit unitNow() const {
         const auto* d = design();

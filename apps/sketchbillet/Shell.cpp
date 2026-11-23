@@ -1532,14 +1532,21 @@ void Shell::selectSteps(const QStringList& names) {
     const auto* doc = host_.documents().find(activeDesign());
     if (!doc) return;
     if (doc->kind() == model::DocKind::Assembly) {
-        // An assembly's components, by name.
+        // An assembly's components, or its joints, by name.
         std::vector<model::ComponentId> picked;
+        std::vector<JointId> joints;
         for (const auto& name : names) {
             for (const auto& c : doc->components()) {
                 if (qs(c.name) == name) picked.push_back(c.id);
             }
+            for (const auto& j : doc->joints()) {
+                if (qs(j.name) == name) joints.push_back(j.id);
+            }
         }
-        host_.selection().setComponents(activeDesign(), std::move(picked));
+        if (!joints.empty())
+            host_.selection().setJoints(activeDesign(), std::move(joints));
+        else
+            host_.selection().setComponents(activeDesign(), std::move(picked));
         return;
     }
     std::vector<FeatureId> ids;

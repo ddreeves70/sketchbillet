@@ -284,10 +284,10 @@ TEST_CASE("every toolbar button has a picture", "[app][icons]") {
             CHECK(b->toolButtonStyle() == Qt::ToolButtonTextUnderIcon);
     }
     // The top row (5), Import, Export and Check print (3), sb.modeling (15 on Model,
-    // 10 on Assemble), sb.sketcher (2 on Model, 1 main, 5 drawing, 3 editing, 5
+    // 11 on Assemble), sb.sketcher (2 on Model, 1 main, 5 drawing, 3 editing, 5
     // constraints), View options (1), the grid (2), the axes (2), the feature tree and
     // Properties panels (2), and Save and Reset layout (2).
-    CHECK(buttons == 5 + 3 + 15 + 10 + 16 + 1 + 2 + 2 + 2 + 2);
+    CHECK(buttons == 5 + 3 + 15 + 11 + 16 + 1 + 2 + 2 + 2 + 2);
     // The dropdown item shows the same picture as its button.
     CHECK_FALSE(app.shell->action("sb.modeling.box")->icon().isNull());
 }
@@ -3216,6 +3216,92 @@ TEST_CASE("a joined component is drawn, and shown in Properties, where its joint
     settle();
     CHECK(app.field<QLabel>("place")->text() == QStringLiteral("x 0 mm, y 0 mm, z 0 mm"));
     CHECK(app.field<QLabel>("facing")->text() == QStringLiteral("x along 1, 0, 0; z along 0, 0, -1"));
+}
+
+TEST_CASE("joints in the app: the tree lists them, Properties changes them, Reset puts them back",
+          "[app][assembly][joints]") {
+    App app;
+    model::Document car(model::DocKind::Part, "Car");
+    REQUIRE(car.execute(std::make_unique<model::MakeAssemblyCommand>()).empty());
+    auto part = [](const char* name) {
+        auto p = std::make_unique<model::Document>(model::DocKind::Part, name);
+        REQUIRE(p->execute(std::make_unique<model::AddFeatureCommand>(std::make_unique<model::BoxFeature>(
+                               "Box1", kernel::Vec3{}, kernel::Vec3{10, 10, 4})))
+                    .empty());
+        return p;
+    };
+    REQUIRE(car.execute(std::make_unique<model::InsertPartCommand>(part("Body"), 1)).empty());
+    REQUIRE(car.execute(std::make_unique<model::InsertPartCommand>(part("Lid"), 1)).empty());
+    model::Joint hinge;
+    hinge.kind = model::JointKind::Revolute;
+    hinge.a.component = car.components()[0].id;
+    hinge.b.component = car.components()[1].id;
+    REQUIRE(car.execute(std::make_unique<model::AddJointCommand>(hinge)).empty());
+    const auto path = app.dir.filePath(QStringLiteral("car.sb")).toStdWString();
+    REQUIRE(io::writeFile(car, path).empty());
+    REQUIRE(app.shell->openDesign(path).empty());
+    settle();
+    const auto& doc = app.doc();
+    const auto joint = doc.joints().front().id;
+
+    // The tree: Components (the lid joined), then Joints, then Parts.
+    auto* tree = app.tree();
+    REQUIRE(tree->topLevelItemCount() == 3);
+    CHECK(tree->topLevelItem(0)->child(1)->text(2) == QStringLiteral("joined"));
+    auto* joints = tree->topLevelItem(1);
+    CHECK(joints->text(0) == QStringLiteral("Joints"));
+    REQUIRE(joints->childCount() == 1);
+    CHECK(joints->child(0)->text(0) == QStringLiteral("Joint1"));
+    CHECK(joints->child(0)->text(1) == QStringLiteral("Revolute"));
+    CHECK(joints->child(0)->text(2) == QStringLiteral("ok"));
+    CHECK(joints->child(0)->toolTip(0) == QStringLiteral("Lid 1 on Body 1"));
+    CHECK(tree->topLevelItem(2)->text(0) == QStringLiteral("Parts"));
+
+    // Picking its row picks the joint, and Properties shows it.
+    tree->setCurrentItem(joints->child(0));
+    settle();
+    REQUIRE(app.host.selection().joints() == std::vector{joint});
+    CHECK(app.field<QLabel>("joins")->text() == QStringLiteral("Lid 1 on Body 1"));
+    CHECK(app.field<QComboBox>("jointkind")->currentIndex() == 1);
+    auto* value = app.field<QDoubleSpinBox>("jointvalue");
+    CHECK(value->isEnabled());
+    CHECK(value->suffix() == QStringLiteral("°"));
+
+    // Turning it 30 degrees in Properties: one step.
+    value->setValue(30);
+    settle();
+    CHECK(doc.findJoint(joint)->value == Approx(30 * std::numbers::pi / 180));
+    CHECK(doc.undoLabel() == "Change Joint1");
+    auto* flip = app.field<QCheckBox>("jointflip");
+    flip->click();
+    settle();
+    CHECK(doc.findJoint(joint)->flip);
+
+    // A limit it's past says so, and changes nothing.
+    auto* limits = app.field<QCheckBox>("jointlimits");
+    limits->click();
+    settle();
+    REQUIRE(doc.findJoint(joint)->highest);
+    CHECK(*doc.findJoint(joint)->highest == Approx(30 * std::numbers::pi / 180));
+    app.field<QDoubleSpinBox>("jointvalue")->setValue(45);
+    settle();
+    CHECK(doc.findJoint(joint)->value == Approx(30 * std::numbers::pi / 180));
+    CHECK(app.shell->lastProblems().front().code == "joint.out_of_limits");
+
+    // Its two sides and its line are drawn while it's picked.
+    REQUIRE(app.host.overlays().find("sb.modeling.joints.points"));
+
+    // Reset joints: back to 0.
+    REQUIRE(app.shell->action("sb.modeling.reset_joints")->isEnabled());
+    app.click("sb.modeling.reset_joints");
+    CHECK(doc.findJoint(joint)->value == 0);
+    CHECK_FALSE(app.shell->action("sb.modeling.reset_joints")->isEnabled());
+
+    // Renamed in the tree.
+    tree = app.tree();
+    tree->topLevelItem(1)->child(0)->setText(0, QStringLiteral("Hinge"));
+    settle();
+    CHECK(doc.findJoint(joint)->name == "Hinge");
 }
 
 TEST_CASE("opening a file that isn't a design explains why", "[app]") {

@@ -729,6 +729,21 @@
       "crop": [0, 0, 1280, 685]
     },
     {
+      "out": "docs/user-guide/images/app-joint.png",
+      "size": "1280x800",
+      "commands": [
+        "run --save Tray.sb feature.add_box size=40,40,10",
+        "run --save Cover.sb feature.add_box size=40,40,4",
+        "run --save Case.sb assembly.new",
+        "run --open Case.sb --save Case.sb component.insert file=Tray.sb",
+        "run --open Case.sb --save Case.sb component.insert file=Cover.sb at=60,0,0",
+        "run --open Case.sb --save Case.sb joint.add kind=revolute \"a=Tray 1:edge:12\" \"b=Cover 1:edge:4\" flip=true lowest=-110 highest=0",
+        "run --open Case.sb --save Case.sb joint.set joint=Joint1 value=-100"
+      ],
+      "app": {"open": "Case.sb", "select": ["Joint1"]},
+      "crop": [0, 0, 1280, 685]
+    },
+    {
       "out": "docs/user-guide/images/app-edit-part.png",
       "size": "1280x800",
       "commands": [

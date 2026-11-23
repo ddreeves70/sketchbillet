@@ -73,6 +73,7 @@ TEST_CASE("The built-in registry lists its commands sorted by name", "[model][re
                                               "folder.rename",
                                               "joint.add",
                                               "joint.delete",
+                                              "joint.reset",
                                               "joint.set",
                                               "material.define",
                                               "material.delete",
