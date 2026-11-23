@@ -134,7 +134,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            action  Assemble/Insert > Insert part  (component.insert)
            action  Assemble/Insert > Insert copy  (component.insert)
            action  Assemble/Insert > New part  (component.new)
-           action  Assemble/Insert > Add another  (component.add)
+           action  Assemble/Insert > Add another  (runs plugin code)
            action  Assemble/Component > Ground  (check mark)
            action  Assemble/Component > Delete component  (component.delete)
            action  Assemble/Parts > Update linked parts  (part.update)
@@ -252,7 +252,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            action  Assemble/Insert > Insert part  (component.insert)
            action  Assemble/Insert > Insert copy  (component.insert)
            action  Assemble/Insert > New part  (component.new)
-           action  Assemble/Insert > Add another  (component.add)
+           action  Assemble/Insert > Add another  (runs plugin code)
            action  Assemble/Component > Ground  (check mark)
            action  Assemble/Component > Delete component  (component.delete)
            action  Assemble/Parts > Update linked parts  (part.update)
@@ -281,7 +281,7 @@ failed   test.badname 1.0.0  Test badname
 failed   test.noentry 1.0.0  Test noentry
            error [plugin.library_bad]: The Test noentry plugin's program file isn't a SketchBillet plugin (it has no SB_PLUGIN_ENTRY). Ask its author for a fixed version. (...)
 failed   test.oldapi 1.0.0  Test oldapi
-           error [plugin.api_version]: The Test oldapi plugin was built for a different version of SketchBillet (plugin API 0; this SketchBillet uses 61). Get a version of the plugin made for this SketchBillet. (...)
+           error [plugin.api_version]: The Test oldapi plugin was built for a different version of SketchBillet (plugin API 0; this SketchBillet uses 62). Get a version of the plugin made for this SketchBillet. (...)
 ```
 
 Every reason and its fix is listed in the plugin guide's

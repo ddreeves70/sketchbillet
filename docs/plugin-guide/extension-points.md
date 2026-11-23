@@ -495,7 +495,7 @@ all-panes grid changed.
 
 A **view tool** lets the student draw with the mouse on a plane, the way the
 sketcher's Line and Circle tools do. The viewer (`sb.viewer`) offers it as the
-`sb.viewer/6` service, described by its contract header `sb/viewer/Viewer.h`.
+`sb.viewer/7` service, described by its contract header `sb/viewer/Viewer.h`.
 While your tool runs, a left click in any pane tells you the point on the plane
 (in mm) instead of turning the view or picking; moving the mouse tells you too, so
 you can draw a preview with an overlay. Panning and zooming still work, and Escape
@@ -567,7 +567,7 @@ to drag, like the arrows SketchBillet's own `sb.movehandles` plugin puts on a pi
 body. The viewer draws handles over the design, so they can always be grabbed,
 lights up the one under the mouse, and tells you how far it's been dragged (in
 mm): along an arrow, or across a square's flat plane. It changes nothing itself:
-you decide what a drag does. Handles use the same `sb.viewer/6` service as
+you decide what a drag does. Handles use the same `sb.viewer/7` service as
 tools, and aren't shown while a tool runs.
 
 ```cpp
@@ -615,6 +615,9 @@ void dropped(const std::string& id, const sb::kernel::Vec3& by) override {
 void cancelled() override { viewer->clearPreview(); }
 ```
 
+In an assembly, `previewComponent()` draws a whole component moved, all its
+bodies, the same way; `sb.movehandles` drops it with `model::PlaceComponentCommand`.
+
 A preview isn't a step: steps that use the body catch up when the design
 changes. If you do change the design during a drag, commands like
 `model::SlideBodyCommand` take `continuesPrevious`, so each part of a drag joins
@@ -627,7 +630,7 @@ click, like the three planes SketchBillet's **New sketch** shows (XY, XZ and YZ)
 The one under the mouse lights up, and the viewer tells you which was clicked,
 by its id. Clicking anywhere else picks as usual, and a drag still turns the
 view, so the student can turn round to see a plane before clicking it. Choices
-use the same `sb.viewer/6` service.
+use the same `sb.viewer/7` service.
 
 ```cpp
 #include "sb/viewer/Viewer.h"
@@ -660,7 +663,7 @@ away.
 
 A **number box** is a small box in the viewer, at a point of the design, for the
 student to type a number in, like the box SketchBillet's sketcher opens on a
-dimension that's clicked. They use the same `sb.viewer/6` service.
+dimension that's clicked. They use the same `sb.viewer/7` service.
 
 ```cpp
 #include "sb/viewer/Viewer.h"

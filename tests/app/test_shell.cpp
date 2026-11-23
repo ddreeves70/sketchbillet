@@ -2968,7 +2968,13 @@ TEST_CASE("the Assemble tab: a new assembly, inserting parts, components, and th
     app.click("sb.modeling.add_component");
     REQUIRE(car.components().size() == 2);
     CHECK(car.components()[1].part == car.components()[0].part);
+    CHECK(car.components()[1].placement.origin.x == 20);  // beside it: the wheel's 10 mm, and 10 mm more
     CHECK(app.host.selection().components() == std::vector{car.components()[1].id});
+    REQUIRE(app.host.documents().undo(carId));  // one step
+    CHECK(car.components().size() == 1);
+    REQUIRE(app.host.documents().redo(carId));
+    app.host.selection().setComponents(carId, {car.components()[1].id});
+    settle();
 
     // Ground: a check mark that follows the picked component.
     CHECK_FALSE(app.shell->action("sb.modeling.ground")->isChecked());

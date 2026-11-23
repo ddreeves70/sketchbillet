@@ -925,3 +925,44 @@ TEST_CASE("components share a shape, each drawn where it's placed; clicking one 
     REQUIRE(waitFor([&] { return picks == 3; }));
     CHECK(last.empty());
 }
+
+TEST_CASE("a component's preview draws all its bodies moved, and no other component",
+          "[view][gl][assembly]") {
+    Fixture f;
+    const auto left = InstanceId::generate();
+    const auto right = InstanceId::generate();
+    const auto lid = FeatureId::generate();  // the right component has two bodies
+    auto top = f.kernel->makeBox({-10, -10, 20}, 20, 20, 10).shape;
+    SceneContent c;
+    c.bodies = {{f.boxId, f.box, false, {}, left, kernel::Placement{{-100, 0, 0}}},
+                {f.boxId, f.box, false, {}, right, kernel::Placement{{100, 0, 0}}},
+                {lid, top, false, {}, right, kernel::Placement{{100, 0, 0}}}};
+    f.view.setContent(c);
+    f.view.setStandardView(StandardView::Front);
+    f.view.fitAll();
+    settle(f.view);
+    const auto leftAt = f.view.toScreen({-100, -10, 10});
+    const auto rightAt = f.view.toScreen({100, -10, 10});
+    const auto lidAt = f.view.toScreen({100, -10, 25});
+    REQUIRE(leftAt);
+    REQUIRE(rightAt);
+    REQUIRE(lidAt);
+    auto colorAt = [&](QPoint p) {
+        const QImage img = f.view.grabFramebuffer();
+        const double ratio = f.view.devicePixelRatioF();
+        return img.pixelColor(int(p.x() * ratio), int(p.y() * ratio));
+    };
+    REQUIRE_FALSE(isBackground(colorAt(*rightAt)));
+    REQUIRE_FALSE(isBackground(colorAt(*lidAt)));
+
+    // Up 500 mm: both of the right one's bodies go, and the left one stays.
+    f.view.setComponentPreview(right, kernel::Motion{{0, 0, 500}});
+    settle(f.view);
+    CHECK(isBackground(colorAt(*rightAt)));
+    CHECK(isBackground(colorAt(*lidAt)));
+    CHECK_FALSE(isBackground(colorAt(*leftAt)));
+    f.view.clearPreview();
+    settle(f.view);
+    CHECK_FALSE(isBackground(colorAt(*rightAt)));
+    CHECK_FALSE(isBackground(colorAt(*lidAt)));
+}

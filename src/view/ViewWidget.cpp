@@ -336,14 +336,16 @@ struct ViewWidget::Impl {
     double dimensionScale = 0;               // mm per pixel the dimensions were last drawn at
     ScreenAxes dimensionScreen;              // which way the screen faced when they were
     bool ready = false;
-    bool clickAdds = false;                // the last click had Ctrl or Shift held
-    std::optional<FeatureId> previewBody;  // a body drawn moved (setPreview())
-    gp_Trsf previewMove;                   // how
+    bool clickAdds = false;                      // the last click had Ctrl or Shift held
+    std::optional<FeatureId> previewBody;        // a body drawn moved (setPreview())
+    std::optional<InstanceId> previewComponent;  // or a component (setComponentPreview())
+    gp_Trsf previewMove;                         // how
 
     // Draws the previewed body moved, and every other body where it is.
     void applyPreview() {
         for (auto& [id, s] : shown) {
-            const bool moved = previewBody && *previewBody == id.feature && id.component.isNil();
+            const bool moved = (previewBody && *previewBody == id.feature && id.component.isNil()) ||
+                               (previewComponent && *previewComponent == id.component);
             if (moved || s.object->HasTransformation())
                 context->SetLocation(s.object, moved ? TopLoc_Location(previewMove) : TopLoc_Location());
         }
@@ -1031,9 +1033,10 @@ const std::vector<ViewHandle>& ViewWidget::handles() const {
     return impl_->handles;
 }
 
-void ViewWidget::setPreview(const FeatureId& body, const kernel::Motion& motion) {
-    auto& d = *impl_;
-    // Turned about the line, then slid: as kernel::IKernel::transform() moves it.
+namespace {
+
+// Turned about the line, then slid: as kernel::IKernel::transform() moves a body.
+gp_Trsf motionTrsf(const kernel::Motion& motion) {
     gp_Trsf turn;
     const auto& a = motion.axis;
     if (motion.angle != 0 && a.x * a.x + a.y * a.y + a.z * a.z > 1e-18) {
@@ -1043,8 +1046,30 @@ void ViewWidget::setPreview(const FeatureId& body, const kernel::Motion& motion)
     }
     gp_Trsf slide;
     slide.SetTranslation(gp_Vec(motion.offset.x, motion.offset.y, motion.offset.z));
+    return slide * turn;
+}
+
+}  // namespace
+
+void ViewWidget::setPreview(const FeatureId& body, const kernel::Motion& motion) {
+    auto& d = *impl_;
     d.previewBody = body;
-    d.previewMove = slide * turn;
+    d.previewComponent.reset();
+    d.previewMove = motionTrsf(motion);
+    if (!d.context) return;
+    try {
+        d.applyPreview();
+    } catch (const Standard_Failure& e) {
+        d.fail(*this, drawFailed(d.where(QStringLiteral("showing a moved body: ") + failureText(e))));
+    }
+    update();
+}
+
+void ViewWidget::setComponentPreview(const InstanceId& component, const kernel::Motion& motion) {
+    auto& d = *impl_;
+    d.previewComponent = component;
+    d.previewBody.reset();
+    d.previewMove = motionTrsf(motion);
     if (!d.context) return;
     try {
         d.applyPreview();
@@ -1056,8 +1081,9 @@ void ViewWidget::setPreview(const FeatureId& body, const kernel::Motion& motion)
 
 void ViewWidget::clearPreview() {
     auto& d = *impl_;
-    if (!d.previewBody) return;
+    if (!d.previewBody && !d.previewComponent) return;
     d.previewBody.reset();
+    d.previewComponent.reset();
     if (!d.context) return;
     try {
         d.applyPreview();

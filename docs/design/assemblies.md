@@ -436,7 +436,13 @@ Each line is one pull request, in this order:
      part, and a file the student picks (`ActionSpec::fromComponent`,
      `fromComponentPart`, `fromFile`; plugin API 61). Model tools are greyed out
      on an assembly.
-   - Next: moving components with the move handles, and Edit Part / Open Part.
+   - **Moving components** (built, Nov 23, 2026): `sb.movehandles` puts its
+     handles on a picked free component (none on a grounded one), previews it
+     moved while it's dragged (`IViewer::previewComponent()`, `sb.viewer/7`,
+     plugin API 62) and places it on dropping (`PlaceComponentCommand`, one
+     step). Add another puts the copy beside the picked component, facing the
+     same way.
+   - Next: Edit Part / Open Part.
 5. **Joints:** rigid, revolute and slider; placing along chains; loops checked;
    limits; dragging along joints; the joint tool; `joint.add`, `joint.set`.
 6. **Checks:** overlaps, the assembly's mass and center of gravity, measuring
