@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "ViewerIcons.h"
+#include "sb/kernel/Placement.h"
 #include "sb/model/Document.h"
 #include "sb/plugin/Events.h"
 #include "sb/ui/UiRegistry.h"
@@ -1017,6 +1018,36 @@ void registerViewer(plugin::PluginContext& ctx) {
 
 }  // namespace
 
+namespace {
+
+void addAssemblyAround(const plugin::DocumentList& docs, const DocId& part, view::SceneContent& out) {
+    const DocId assemblyId = docs.assemblyOf(part);
+    const auto* assembly = docs.find(assemblyId);
+    const auto* report = docs.lastRebuild(assemblyId);
+    if (!assembly || !report) return;
+    const auto edited = docs.editedComponent(assemblyId);
+    const auto& components = assembly->components();
+    const auto here = std::find_if(components.begin(), components.end(),
+                                   [&](const model::Component& c) { return c.id == edited; });
+    if (here == components.end()) return;
+    const kernel::Placement fromPart = kernel::inverse(here->placement);
+    for (const auto& c : components) {
+        if (c.id == edited) continue;
+        const auto* other = assembly->findPart(c.part);
+        const auto* built = report->part(c.part);
+        if (!other || !built) continue;
+        const kernel::Placement placed = kernel::compose(fromPart, c.placement);
+        for (const auto& body : built->bodies()) {
+            const auto* shape = built->shapeOf(body);
+            if (!shape) continue;
+            const auto color = other->colorOf(body);
+            out.bodies.push_back({body, *shape, false, {color.r, color.g, color.b}, c.id, placed, true});
+        }
+    }
+}
+
+}  // namespace
+
 view::SceneContent viewerScene(const plugin::DocumentList& docs, const plugin::Selection& selection) {
     view::SceneContent out;
     const DocId id = docs.active();
@@ -1066,6 +1097,10 @@ view::SceneContent viewerScene(const plugin::DocumentList& docs, const plugin::S
         if (r && r->status == model::FeatureStatus::Ok && r->shape.valid())
             out.bodies.push_back({picked, r->shape, true, colorOf(picked)});
     }
+    // Editing a part in an assembly: the rest of the assembly is drawn around
+    // it, faded, where it is from the part's point of view (the part stays at its
+    // own origin, so its sketches and steps are where they always are).
+    addAssemblyAround(docs, id, out);
     // Picking edges: the picked ones, found by name in this rebuild.
     out.pickEdges = selection.pickMode() == plugin::PickMode::Edges;
     out.pickFaces = selection.pickMode() == plugin::PickMode::Faces;

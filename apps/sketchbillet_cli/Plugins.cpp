@@ -351,8 +351,10 @@ int listPlugins(int argc, char** argv) {
         for (const auto& svc : p.services) std::printf("           service %s\n", svc.c_str());
         for (const auto& a : host.actions()) {
             if (a.plugin != m.id) continue;
-            // An action runs a command, or the plugin's own code (often with a check mark).
+            // An action runs a command, or the plugin's own code (often with a check
+            // mark), or opens a design file.
             const std::string what = !a.command.empty() ? a.command
+                                     : a.openFile       ? std::string("opens a file")
                                      : a.checked        ? std::string("check mark")
                                                         : std::string("runs plugin code");
             std::printf("           action  %s > %s  (%s)\n", a.menu.c_str(), a.text.c_str(), what.c_str());
@@ -500,7 +502,7 @@ int runCommand(int argc, char** argv) {
     auto usage = [] {
         std::fprintf(stderr,
                      "usage: sketchbillet_cli run [--plugins <folder>]... [--open <in.sb>] [--save <out.sb>] "
-                     "[<command> [name=value]...]\n");
+                     "[--part <name>] [<command> [name=value]...]\n");
         return 2;
     };
     std::vector<std::string_view> args(argv + 2, argv + argc);
@@ -510,8 +512,10 @@ int runCommand(int argc, char** argv) {
     if (!loadPlugins(host, args)) return 2;
     const auto openPath = takeOption(args, "--open");
     const auto savePath = takeOption(args, "--save");
+    const auto partName = takeOption(args, "--part");
     // No command: open and save again (an assembly's linked parts, updated as it opened).
     if (args.empty() && !(openPath && savePath)) return usage();
+    if (partName && args.empty()) return usage();
 
     for (const auto& p : host.plugins()) {
         if (p.state != plugin::PluginState::Loaded) {
@@ -538,7 +542,42 @@ int runCommand(int argc, char** argv) {
     auto& docs = host.documents();
     const DocId id = docs.add(std::move(doc));
 
-    if (!args.empty() && !runOne(host, id, args, *kernel, *solver)) return 1;
+    // --part: the command changes one of an assembly's inside parts, as Edit part
+    // does in the app.
+    DocId target = id;
+    if (partName) {
+        const auto& assembly = *docs.find(id);
+        if (assembly.kind() != model::DocKind::Assembly) {
+            std::fprintf(stderr,
+                         "error: %s is a part, not an assembly, so it has no parts to change. Leave "
+                         "out --part.\n",
+                         assembly.name().c_str());
+            return 1;
+        }
+        const auto* part = assembly.findPart(std::string_view(*partName));
+        if (!part) {
+            std::fprintf(stderr, "error: %s has no part called %s. Its parts are:", assembly.name().c_str(),
+                         partName->c_str());
+            for (const auto* p : assembly.parts()) std::fprintf(stderr, " %s", p->name().c_str());
+            std::fprintf(stderr, "\n");
+            return 1;
+        }
+        if (const auto* link = assembly.partLink(part->id())) {
+            std::fprintf(stderr,
+                         "error: %s is linked to %s, so change that file instead (run --open it --save it), "
+                         "and %s uses it. Or make it an inside part first: part.make_inside part=\"%s\".\n",
+                         part->name().c_str(), std::filesystem::path(link->path).filename().string().c_str(),
+                         assembly.name().c_str(), part->name().c_str());
+            return 1;
+        }
+        const auto& components = assembly.components();
+        const auto c = std::find_if(components.begin(), components.end(),
+                                    [&](const model::Component& each) { return each.part == part->id(); });
+        if (c == components.end() || !docs.editPart(id, c->id).empty()) return 1;  // every part has one
+        target = docs.active();
+    }
+
+    if (!args.empty() && !runOne(host, target, args, *kernel, *solver)) return 1;
 
     // Report every step (or, for an assembly, every component and part), then what plugins logged.
     const auto& design = *docs.find(id);

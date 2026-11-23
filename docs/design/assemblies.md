@@ -3,8 +3,8 @@
 > **Draft, for review.** Phase 4's first item (see the [roadmap](roadmap.md)).
 > Building it, step 1 (several designs open at once) is built (Nov 19, 2026),
 > step 2 (assembly documents, from the command line) is built (Nov 20, 2026),
-> and step 3 (linked parts, from the command line) is built (Nov 20, 2026); the
-> rest isn't yet. Two choices were made on Nov 13, 2026: an
+> step 3 (linked parts, from the command line) is built (Nov 20, 2026), and
+> step 4 (assemblies in the app) is built (Nov 23, 2026); the rest isn't yet. Two choices were made on Nov 13, 2026: an
 > assembly's parts can live **inside** the assembly file or be **linked** to
 > other files, from the start; and parts move along **chains** of joints first,
 > with loops (like a four-bar linkage) later. Changes to `sb_model`, naming and
@@ -23,7 +23,7 @@ This page covers what the student gets, in the order it gets built:
 | 2. Components | Parts placed in the assembly, the same part more than once, one part fixed in place | Built, from the command line |
 | 3. Joints | Rigid, hinge (revolute) and slider joints that place parts and say how they move | Planned |
 | 4. Placing parts along chains | Exact, instant placement from joint to joint, smooth enough to drag | Planned |
-| 5. In the app | The assembly tree, inserting parts, joining, dragging, editing a part | Planned |
+| 5. In the app | The assembly tree, inserting parts, joining, dragging, editing a part | Built, but for joining (it comes with joints) |
 | 6. Checks | Parts that overlap, the whole assembly's mass and balance point, measuring between parts | Planned |
 | 7. Exploded views | Parts pulled apart to show how they fit, for pictures and drawings | Planned |
 | 8. Parts list | How many of each part, with material and mass, for printing and drawings | Planned |
@@ -419,9 +419,9 @@ Each line is one pull request, in this order:
    linked parts, with notes and one undo step; and `run --open a.sb --save a.sb`
    with no command saves the updates (see [the user's guide](../user-guide/assemblies.md#linked-and-inside-parts)
    and [the file format](../file-format.md#linkjson)). Saving `wheel.sb` in the
-   desktop app updating an open assembly at once comes with step 4.
+   desktop app updating an open assembly at once came with step 4 (Open Part).
 4. **Assemblies in the app:** the tree, inserting parts, moving components,
-   shared shapes in the viewer, Edit Part. Built in pieces:
+   shared shapes in the viewer, Edit Part. **Built** (Nov 23, 2026), in pieces:
    - **Showing assemblies** (built, Nov 20, 2026): the app opens them; the
      viewer draws each component's bodies placed, sharing each part's shapes
      (`SceneBody::component` and `placement`); clicking a component in the
@@ -442,7 +442,15 @@ Each line is one pull request, in this order:
      plugin API 62) and places it on dropping (`PlaceComponentCommand`, one
      step). Add another puts the copy beside the picked component, facing the
      same way.
-   - Next: Edit Part / Open Part.
+   - **Edit Part / Open Part** (built, Nov 23, 2026): Edit part makes the
+     picked component's inside part the design being worked on, in the
+     assembly: `DocumentList::editPart()` makes `active()` the part, and runs
+     its changes as steps of the assembly (`EditPartCommand`, so undo works
+     from the assembly); the viewer draws the rest of the assembly faded around
+     it, from that component's place (`SceneBody::context`); a bar under the
+     design tabs says so, with Done. Open part opens a linked part's file in a
+     tab of its own (`ActionSpec::openFile`, plugin API 63), and saving that
+     file updates the open assemblies that link to it at once.
 5. **Joints:** rigid, revolute and slider; placing along chains; loops checked;
    limits; dragging along joints; the joint tool; `joint.add`, `joint.set`.
 6. **Checks:** overlaps, the assembly's mass and center of gravity, measuring

@@ -31,6 +31,8 @@ Right-click it in the tree to rename it, ground it or delete it.
 | **Delete** | Takes the picked component out |
 | **Update** | Uses the new part from each linked file that changed |
 | **Find file** | Links the picked component's part to its file where it is now |
+| **Edit part** | Changes the picked component's part right here, in the assembly ([below](#changing-a-part)) |
+| **Open part** | Opens the picked component's part file beside the assembly, to change it there |
 | **Make part inside**, **Save part as file** | In the Parts dropdown: switch the picked component's part between inside and linked |
 
 **Moving a component:** pick a free one, and drag the arrows or the square that
@@ -41,6 +43,31 @@ of Undo. A grounded component has no arrows: it stays where it is. Press
 
 Joints, which hold parts together and say how they move (a wheel turning on its
 axle), come next.
+
+## Changing a part
+
+A part made **inside** the assembly is changed right in it. Pick one of its
+components and click **Edit part**. The part's steps fill the feature tree, the
+Model tab comes back, and the rest of the assembly fades, so you see the part
+where it goes:
+
+![Editing the Wheel in the toy car: the Wheel's steps in the feature tree, the rest of the car faded around it, and the bar that says so, with Done](images/app-edit-part.png)
+
+Add boxes, sketches, holes and fillets as in any part. A change to the part
+changes every component of it: give one wheel a hub, and all four have one.
+Each change is a step of the assembly's Undo. Click **Done** in the bar under
+the design tabs to go back to the assembly, with the component picked again.
+
+The part stays at its own origin (0, 0, 0) while you edit it, with the
+assembly around it, so its sketches and steps are where they always were.
+
+A **linked** part is changed in its own file. Pick one of its components and
+click **Open part**: its file opens in a tab beside the assembly. Change it and
+save it (**File > Save**), and the assembly uses the new part straight away,
+as one step of its Undo. Saving the assembly keeps it.
+
+Want to change a linked part only in this assembly? Click **Make part inside**
+first, then **Edit part**.
 
 ## An example: a toy car
 

@@ -7,6 +7,7 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
 #include <QShortcut>
@@ -124,6 +125,25 @@ Ribbon::Ribbon(QWidget* parent) : QWidget(parent) {
     line->setFrameShadow(QFrame::Sunken);
     layout->addWidget(line);
     layout->addWidget(designs_);
+
+    // Editing a part in an assembly: says so, with the way back.
+    editing_ = new QFrame(this);
+    editing_->setObjectName(QStringLiteral("sb.ribbon.editing"));
+    editing_->setAutoFillBackground(true);
+    editing_->setBackgroundRole(QPalette::AlternateBase);
+    auto* row = new QHBoxLayout(editing_);
+    row->setContentsMargins(8, 2, 4, 2);
+    editingText_ = new QLabel(editing_);
+    editingText_->setObjectName(QStringLiteral("sb.ribbon.editing.text"));
+    row->addWidget(editingText_, 1);
+    done_ = new QToolButton(editing_);
+    done_->setObjectName(QStringLiteral("sb.ribbon.editing.done"));
+    done_->setText(tr("Done"));
+    done_->setToolTip(tr("Go back to the assembly"));
+    done_->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    row->addWidget(done_);
+    editing_->hide();
+    layout->addWidget(editing_);
 
     if (parent) {
         auto* s = new QShortcut(QKeySequence(Qt::Key_S), parent);
@@ -469,6 +489,15 @@ void Ribbon::setPrimary(const QString& tabName, QAction* action) {
         t.panels->addWidget(t.primary, 0, Qt::AlignVCenter);
     }
     t.primary->setDefaultAction(action);
+}
+
+void Ribbon::showEditing(const QString& text) {
+    editingText_->setText(text);
+    editing_->show();
+}
+
+void Ribbon::hideEditing() {
+    editing_->hide();
 }
 
 void Ribbon::setMode(const QString& mode) {

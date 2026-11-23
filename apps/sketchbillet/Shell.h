@@ -128,10 +128,19 @@ public:
     // wall thinner than 0.8 mm), picked the same way as for export, and shows
     // what it found with showPrintCheck.
     model::PrintCheckResult checkForPrinting();
+    // The design being worked on: the part being edited in an assembly (Edit
+    // part), or else the open file's design.
     DocId activeDesign() const;
+    // The open file being worked on: the assembly even while one of its parts is
+    // edited. Save, close and the tabs go by this one.
+    DocId activeFile() const;
+    // Done: stops editing a part in the assembly, and picks the component it was
+    // edited from.
+    void finishEditingPart();
     std::filesystem::path activePath() const;
 
-    // Selects steps by name in the active design (for --select and tests).
+    // Selects steps by name in the active design, or an assembly's components
+    // (for --select and tests).
     void selectSteps(const QStringList& names);
 
     // Picks edges (or faces) of one body, by their numbers (from 1) in the order

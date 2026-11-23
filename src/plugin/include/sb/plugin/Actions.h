@@ -113,6 +113,11 @@ struct ActionSpec {
     /// Runs the plugin's own code instead of a command, for things that aren't
     /// changes to a design (a setting, a dialog). Give either `command` or `run`.
     std::function<void()> run{};
+    /// Opens a design file instead of running a command: gives the file's path
+    /// (UTF-8), and SketchBillet opens it beside the open designs, in its own tab,
+    /// or shows its tab if it's open already (Open part opens a linked part's file
+    /// this way). An empty path opens nothing.
+    std::function<std::string()> openFile{};
     /// If set, the item has a check mark, shown when this returns true. SketchBillet asks
     /// when the menu opens and after every change (SettingChanged, design changes).
     std::function<bool()> checked{};

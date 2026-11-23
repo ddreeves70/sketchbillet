@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "../model/FakeKernel.h"
+#include "sb/model/AssemblyCommands.h"
 #include "sb/model/CommandRegistry.h"
 #include "sb/plugin/DocumentList.h"
 #include "sb/plugin/Events.h"
@@ -122,4 +123,127 @@ TEST_CASE("a listener may close the design that just changed", "[plugin][documen
     auto closer = bus.subscribe<DocumentChanged>([&](const DocumentChanged& e) { docs.close(e.doc); });
     CHECK(docs.run(id, "feature.add_box", {{"size", kernel::Vec3{1, 1, 1}}}).empty());
     CHECK(docs.find(id) == nullptr);
+}
+
+namespace {
+
+// An assembly, Car, with an inside part (Wheel, one box, two components) and a
+// linked part (Axle).
+std::unique_ptr<model::Document> car() {
+    auto doc = std::make_unique<model::Document>(model::DocKind::Part, "Car");
+    REQUIRE(doc->execute(std::make_unique<model::MakeAssemblyCommand>()).empty());
+    auto wheel = std::make_unique<model::Document>(model::DocKind::Part, "Wheel");
+    auto box = model::CommandRegistry::builtin().create("feature.add_box", {{"size", kernel::Vec3{2, 3, 4}}},
+                                                        *wheel);
+    REQUIRE(wheel->execute(std::move(box.command)).empty());
+    REQUIRE(doc->execute(std::make_unique<model::InsertPartCommand>(std::move(wheel), 2)).empty());
+    model::PartLink link;
+    link.path = "/designs/Axle.sb";
+    REQUIRE(doc->execute(std::make_unique<model::InsertPartCommand>(
+                             std::make_unique<model::Document>(model::DocKind::Part, "Axle"), 1,
+                             kernel::Placement{}, kernel::Vec3{}, link))
+                .empty());
+    doc->markSaved();
+    return doc;
+}
+
+}  // namespace
+
+TEST_CASE("editing an inside part makes it the active design, and its changes steps of the assembly",
+          "[plugin][documents][edit]") {
+    EventBus bus;
+    test::FakeKernel kernel;
+    DocumentList docs(bus, model::CommandRegistry::builtin(), &kernel);
+    const DocId id = docs.add(car());
+    const auto* assembly = docs.find(id);
+    const DocId wheel = assembly->findPart("Wheel")->id();
+    const auto wheel2 = assembly->components()[1].id;
+    Recorder rec(bus);
+
+    REQUIRE(docs.editPart(id, wheel2).empty());
+    CHECK(rec.log == std::vector<std::string>{"Active"});
+    CHECK(docs.active() == wheel);
+    CHECK(docs.activeDesign() == id);
+    CHECK(docs.editedPart(id) == wheel);
+    CHECK(docs.editedComponent(id) == wheel2);
+    CHECK(docs.assemblyOf(wheel) == id);
+    CHECK(docs.find(wheel) == assembly->findPart(wheel));
+    REQUIRE(docs.lastRebuild(wheel));
+    CHECK(docs.lastRebuild(wheel) == docs.lastRebuild(id)->part(wheel));
+    CHECK(docs.ids() == std::vector<DocId>{id});
+
+    rec.log.clear();
+    REQUIRE(docs.run(wheel, "feature.add_box", {{"size", kernel::Vec3{1, 1, 1}}}).empty());
+    CHECK(rec.log == std::vector<std::string>{"Changed:Executed:Add Box2 in Wheel", "Rebuilt:ok"});
+    CHECK(docs.find(wheel)->featureCount() == 2);
+    CHECK(docs.lastRebuild(wheel)->bodies().size() == 2);
+    CHECK(docs.find(id)->isModified());
+
+    // Undo from either: it's the assembly's history.
+    REQUIRE(docs.undo(wheel));
+    CHECK(docs.find(wheel)->featureCount() == 1);
+    REQUIRE(docs.redo(id));
+    CHECK(docs.find(wheel)->featureCount() == 2);
+    CHECK(docs.markSaved(wheel));
+    CHECK_FALSE(docs.find(id)->isModified());
+
+    rec.log.clear();
+    CHECK(docs.finishEditing(id));
+    CHECK(rec.log == std::vector<std::string>{"Active"});
+    CHECK(docs.active() == id);
+    CHECK_FALSE(docs.find(wheel));
+    CHECK_FALSE(docs.finishEditing(id));
+    CHECK(docs.run(wheel, "feature.add_box", {{"size", kernel::Vec3{1, 1, 1}}}).front().code ==
+          "document.not_open");
+}
+
+TEST_CASE("a linked part isn't edited in the assembly; editing stops when the part goes",
+          "[plugin][documents][edit]") {
+    EventBus bus;
+    test::FakeKernel kernel;
+    DocumentList docs(bus, model::CommandRegistry::builtin(), &kernel);
+    const DocId id = docs.add(car());
+    const auto* assembly = docs.find(id);
+    const auto wheel1 = assembly->components()[0].id;
+    const auto wheel2 = assembly->components()[1].id;
+    const auto axle = assembly->components()[2].id;
+
+    auto linked = docs.editPart(id, axle);
+    REQUIRE(linked.size() == 1);
+    CHECK(linked.front().code == "part.linked");
+    CHECK(linked.front().message.find("Axle.sb") != std::string::npos);
+    CHECK(docs.active() == id);
+    CHECK(docs.editPart(id, model::ComponentId::generate()).front().code == "assembly.no_component");
+
+    REQUIRE(docs.editPart(id, wheel2).empty());
+    Recorder rec(bus);
+    // Deleting the component picked to edit the part stops editing it.
+    REQUIRE(docs.run(id, "component.delete", {{"component", "Wheel 2"}}).empty());
+    CHECK(docs.active() == id);
+    CHECK(rec.log.front() == "Active");
+    REQUIRE(docs.undo(id));
+    CHECK(docs.active() == id);  // it doesn't start again by itself
+
+    REQUIRE(docs.editPart(id, wheel1).empty());
+    // Closing the assembly ends it too.
+    REQUIRE(docs.close(id));
+    CHECK(docs.active().isNil());
+}
+
+TEST_CASE("switching designs keeps a part being edited for when the assembly comes back",
+          "[plugin][documents][edit]") {
+    EventBus bus;
+    DocumentList docs(bus, model::CommandRegistry::builtin());
+    const DocId id = docs.add(car());
+    const DocId other = docs.add(std::make_unique<model::Document>());
+    const DocId wheel = docs.find(id)->findPart("Wheel")->id();
+    REQUIRE(docs.editPart(id, docs.find(id)->components()[0].id).empty());
+    CHECK(docs.active() == wheel);
+    REQUIRE(docs.setActive(other));
+    CHECK(docs.active() == other);
+    CHECK(docs.editedPart(id) == wheel);
+    // Picking the part being edited picks its assembly.
+    REQUIRE(docs.setActive(wheel));
+    CHECK(docs.activeDesign() == id);
+    CHECK(docs.active() == wheel);
 }

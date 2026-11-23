@@ -264,14 +264,27 @@ ctx.addAction({.id = "sam.notes.stop",
 ```
 
 - An item with `enabled` that throws an exception is greyed out.
-- An item has a command *or* a `run` function, never both and never neither;
-  SketchBillet refuses the plugin otherwise.
+- An item has a command, a `run` function *or* an `openFile` function (below),
+  just one; SketchBillet refuses the plugin otherwise.
 - Changes to designs still go through commands. A `run` function that wants to
   change a design runs a command with `ctx.documents()`, so undo works.
 - If `run` throws an exception, SketchBillet shows "*item* stopped with an error" in the
   status bar and keeps going.
-- In `sketchbillet_cli plugins` these items show `(check mark)` or `(runs plugin code)`
-  instead of a command name.
+- In `sketchbillet_cli plugins` these items show `(check mark)`, `(runs plugin code)`
+  or `(opens a file)` instead of a command name.
+
+**Items that open a design.** Give `openFile` instead, and SketchBillet opens the
+`.sb` file it gives (its full path) beside the open designs, in a tab of its own,
+or shows that tab if it's open already. An empty path opens nothing. This is how
+**Assemble > Open part** opens a linked part's file:
+
+```cpp
+ctx.addAction({.id = "sb.modeling.open_part", .text = "Open part",
+               .menu = "Assemble/Edit",
+               .tip = "Open the picked component's part file beside the assembly.",
+               .openFile = [&] { return pickedPartLink(); },  // "" if it has no file
+               .enabled = [&] { return !pickedPartLink().empty(); }});
+```
 
 ## Remember settings
 
@@ -820,6 +833,24 @@ docs.undo(id);
 You can read a design directly, but you change it only with `run`, `execute`,
 `undo` and `redo`. Each change sends `DocumentChanged`, rebuilds the design and
 sends `RebuildFinished`.
+
+**Editing a part in an assembly.** While the student edits one of an assembly's
+inside parts (**Assemble > Edit part**), `active()` is that part, so a plugin
+that works on "the design the student is on" works on the part, with nothing
+more to do: `find`, `run`, `execute`, `undo` and `lastRebuild` all take the
+part's id. Its changes are steps of the assembly (one undo history for the
+file), and the events name the assembly. The rest is there if you need it:
+
+```cpp
+DocId file = docs.activeDesign();             // the open file: the assembly
+DocId part = docs.editedPart(file);           // the part being edited, or nil
+DocId inside = docs.assemblyOf(docs.active());  // the assembly a part is edited in
+docs.editPart(file, componentId);             // start editing a component's part
+docs.finishEditing(file);                     // Done: back to the assembly
+```
+
+Editing starts and stops with `ActiveDocumentChanged`. It also stops by itself
+when the part goes (undo, say).
 
 To ask about a body's size and mass, use the kernel the designs are built with
 and the body's material:

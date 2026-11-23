@@ -4,6 +4,9 @@
 #include <QStringList>
 #include <QWidget>
 
+class QLabel;
+class QToolButton;
+
 #include <deque>
 #include <map>
 #include <vector>
@@ -47,6 +50,13 @@ public:
     // The open designs, one tab each, in a row under the panels, just above the
     // view ("sb.ribbon.designs"). The shell fills it; each tab's data is the design's id.
     QTabBar* designTabs() const { return designs_; }
+    // The row under the design tabs that says a part is being edited in an
+    // assembly ("sb.ribbon.editing"), with its Done button
+    // ("sb.ribbon.editing.done"). Hidden unless showEditing() shows it.
+    void showEditing(const QString& text);
+    void hideEditing();
+    QWidget* editingBar() const { return editing_; }
+    QToolButton* doneButton() const { return done_; }
 
     // Search tools: the box in the top row (and S, from anywhere in the window)
     // finds any tool by its name or its tip, and runs it. Tools that can't be
@@ -161,6 +171,9 @@ private:
     int quickAt_ = 1;  // where the next quick button goes in the top row
     QTabBar* bar_ = nullptr;
     QTabBar* designs_ = nullptr;
+    QWidget* editing_ = nullptr;
+    QLabel* editingText_ = nullptr;
+    QToolButton* done_ = nullptr;
     QStackedWidget* pages_ = nullptr;
     std::deque<Tab> tabs_;  // a deque, so a Tab& stays good as more are added
     QStringList order_;

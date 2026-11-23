@@ -371,3 +371,111 @@ TEST_CASE("part.make_inside stops following the file, as one undo step", "[model
     REQUIRE(issues.size() == 1);
     CHECK(issues[0].message == "Car has no part called Tire. Its parts are: Wheel.");
 }
+
+TEST_CASE("editing an inside part is a step of the assembly: undo and redo work from it",
+          "[model][assembly][edit]") {
+    Document car(DocKind::Part, "Car");
+    makeAssembly(car);
+    REQUIRE(car.execute(std::make_unique<InsertPartCommand>(wheel(), 2)).empty());
+    const DocId id = car.findPart("Wheel")->id();
+    const auto before = car.undoLabel();
+
+    // Give the wheel a second box, from inside the assembly.
+    auto made = CommandRegistry::builtin().create("feature.add_box", {{"size", kernel::Vec3{1, 1, 1}}},
+                                                  *car.findPart(id));
+    REQUIRE(made.ok());
+    REQUIRE(car.execute(std::make_unique<EditPartCommand>(id, std::move(made.command))).empty());
+    CHECK(car.findPart(id)->featureCount() == 2);
+    CHECK(car.undoLabel() == "Add Box2 in Wheel");
+    CHECK(car.isModified());
+    CHECK(car.components().size() == 2);  // both components place the changed part
+
+    FakeKernel kernel;
+    CHECK(car.regenerate(kernel).part(id)->bodies().size() == 2);
+
+    REQUIRE(car.undo());
+    CHECK(car.findPart(id)->featureCount() == 1);
+    REQUIRE(car.redo());
+    CHECK(car.findPart(id)->featureCount() == 2);
+}
+
+TEST_CASE("editing a part keeps its rollback marker right, through undo", "[model][assembly][edit]") {
+    Document car(DocKind::Part, "Car");
+    makeAssembly(car);
+    REQUIRE(car.execute(std::make_unique<InsertPartCommand>(wheel(), 1)).empty());
+    const DocId id = car.findPart("Wheel")->id();
+    REQUIRE(car.execute(std::make_unique<EditPartCommand>(id, std::make_unique<RollbackCommand>(0))).empty());
+    CHECK(car.findPart(id)->markerIndex() == 0);
+    // A step added while rolled back goes in at the marker, and the marker follows it.
+    auto made = CommandRegistry::builtin().create("feature.add_box", {{"size", kernel::Vec3{1, 1, 1}}},
+                                                  *car.findPart(id));
+    REQUIRE(made.ok());
+    REQUIRE(car.execute(std::make_unique<EditPartCommand>(id, std::move(made.command))).empty());
+    CHECK(car.findPart(id)->featureCount() == 2);
+    CHECK(car.findPart(id)->markerIndex() == 1);
+    REQUIRE(car.undo());
+    CHECK(car.findPart(id)->markerIndex() == 0);
+    REQUIRE(car.undo());
+    CHECK(car.findPart(id)->markerIndex() == 1);
+    CHECK_FALSE(car.findPart(id)->rolledBack());
+}
+
+TEST_CASE("edits to a part that fail, or to a linked part, change nothing and say why",
+          "[model][assembly][edit]") {
+    Document car(DocKind::Part, "Car");
+    makeAssembly(car);
+    REQUIRE(car.execute(std::make_unique<InsertPartCommand>(wheel(), 1)).empty());
+    PartLink link;
+    link.path = "/designs/Axle.sb";
+    REQUIRE(car.execute(std::make_unique<InsertPartCommand>(wheel("Axle"), 1, kernel::Placement{},
+                                                            kernel::Vec3{}, link))
+                .empty());
+    const DocId wheelId = car.findPart("Wheel")->id();
+    const DocId axleId = car.findPart("Axle")->id();
+    const auto before = car.undoLabel();
+
+    // A change the part refuses: deleting a step it doesn't have.
+    auto bad = car.execute(std::make_unique<EditPartCommand>(
+        wheelId, std::make_unique<DeleteFeatureCommand>(FeatureId::generate())));
+    CHECK_FALSE(bad.empty());
+    CHECK(car.undoLabel() == before);
+    CHECK(car.findPart(wheelId)->featureCount() == 1);
+
+    auto made = CommandRegistry::builtin().create("feature.add_box", {{"size", kernel::Vec3{1, 1, 1}}},
+                                                  *car.findPart(axleId));
+    REQUIRE(made.ok());
+    auto linked = car.execute(std::make_unique<EditPartCommand>(axleId, std::move(made.command)));
+    REQUIRE(linked.size() == 1);
+    CHECK(linked.front().code == "part.linked");
+    CHECK(linked.front().message.find("Axle.sb") != std::string::npos);
+    CHECK(car.findPart(axleId)->featureCount() == 1);
+
+    auto gone = car.execute(
+        std::make_unique<EditPartCommand>(DocId::generate(), std::make_unique<RollbackCommand>(0)));
+    REQUIRE(gone.size() == 1);
+    CHECK(gone.front().code == "part.not_found");
+
+    Document plain(DocKind::Part, "Plain");
+    CHECK_FALSE(
+        plain.execute(std::make_unique<EditPartCommand>(wheelId, std::make_unique<RollbackCommand>(0)))
+            .empty());
+}
+
+TEST_CASE("dragging a body in a part is one undo step of the assembly", "[model][assembly][edit]") {
+    Document car(DocKind::Part, "Car");
+    makeAssembly(car);
+    REQUIRE(car.execute(std::make_unique<InsertPartCommand>(wheel(), 1)).empty());
+    const DocId id = car.findPart("Wheel")->id();
+    const FeatureId box = car.findPart(id)->featureAt(0).id();
+    const auto before = car.undoLabel();
+    REQUIRE(car.execute(std::make_unique<EditPartCommand>(
+                            id, std::make_unique<SlideBodyCommand>(box, kernel::Vec3{1, 0, 0})))
+                .empty());
+    REQUIRE(car.execute(std::make_unique<EditPartCommand>(
+                            id, std::make_unique<SlideBodyCommand>(box, kernel::Vec3{1, 0, 0}, true)))
+                .empty());
+    CHECK(car.undoLabel() == "Move Box1 in Wheel");
+    REQUIRE(car.undo());
+    CHECK(car.undoLabel() == before);  // both slides went back as one step
+    CHECK(car.findPart(id)->featureCount() == 1);
+}

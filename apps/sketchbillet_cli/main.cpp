@@ -15,7 +15,8 @@
 //   sketchbillet_cli plugins [--plugins <folder>]... [--slow-start-ms <n>] [--strict]  list plugins, their
 //                                       commands, services, problems and warnings
 //   sketchbillet_cli help [--plugins <folder>]... [<command>]  list commands, or describe one
-//   sketchbillet_cli run [--plugins <folder>]... [--open in.sb] [--save out.sb] <command> [name=value]...
+//   sketchbillet_cli run [--plugins <folder>]... [--open in.sb] [--save out.sb] [--part name] <command>
+//   [name=value]...
 
 #include <algorithm>
 #include <cctype>
@@ -61,7 +62,8 @@ int usage() {
         "       sketchbillet_cli regress [--update] <case.json|folder>...\n"
         "       sketchbillet_cli plugins [--plugins <folder>]... [--slow-start-ms <n>] [--strict]\n"
         "       sketchbillet_cli help [--plugins <folder>]... [<command>]\n"
-        "       sketchbillet_cli run [--plugins <folder>]... [--open <in.sb>] [--save <out.sb>] <command> "
+        "       sketchbillet_cli run [--plugins <folder>]... [--open <in.sb>] [--save <out.sb>] [--part "
+        "<name>] <command> "
         "[name=value]...");
     return 2;
 }

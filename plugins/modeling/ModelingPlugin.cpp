@@ -254,6 +254,39 @@ void addAssembleTools(plugin::PluginContext& ctx) {
                              .buttonText = "Delete",
                              .icon = std::string(icons::modeling::delete_component_svg),
                              .tip = "Take the picked component out of the assembly."});
+    ctx.addAction(ActionSpec{
+        .id = "sb.modeling.edit_part",
+        .text = "Edit part",
+        .menu = "Assemble/Edit",
+        .toolbar = true,
+        .icon = std::string(icons::modeling::edit_part_svg),
+        .tip = "Change the picked component's part here, with the rest of the assembly faded around it. Done "
+               "goes back.",
+        .run =
+            [&ctx, assembly, picked] {
+                const auto* c = picked();
+                if (!c) return;
+                const DocId id = assembly()->id();
+                const auto component = c->id;
+                ctx.selection().clear();  // the part's steps are picked from here on
+                ctx.documents().editPart(id, component);
+            },
+        .enabled = pickedLinked(false)});
+    ctx.addAction(ActionSpec{
+        .id = "sb.modeling.open_part",
+        .text = "Open part",
+        .menu = "Assemble/Edit",
+        .toolbar = true,
+        .icon = std::string(icons::modeling::open_part_svg),
+        .tip = "Open the picked component's part file beside the assembly, to change it there. Save it, and "
+               "the assembly uses it.",
+        .openFile =
+            [assembly, picked] {
+                const auto* c = picked();
+                const auto* link = c ? assembly()->partLink(c->part) : nullptr;
+                return link ? link->path : std::string();
+            },
+        .enabled = pickedLinked(true)});
     ctx.addAction(ActionSpec{.id = "sb.modeling.update_links",
                              .text = "Update linked parts",
                              .menu = "Assemble/Parts",

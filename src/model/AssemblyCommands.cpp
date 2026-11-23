@@ -1,6 +1,7 @@
 #include "sb/model/AssemblyCommands.h"
 
 #include <algorithm>
+#include <filesystem>
 
 namespace sb::model {
 
@@ -425,6 +426,49 @@ void DeleteComponentCommand::revert(DocumentEditor& editor) {
     auto& components = editor.components();
     components.insert(components.begin() + static_cast<std::ptrdiff_t>(std::min(index_, components.size())),
                       *removed_);
+}
+
+// ---------------------------------------------------------------------------
+// EditPartCommand
+// ---------------------------------------------------------------------------
+
+EditPartCommand::EditPartCommand(DocId part, std::unique_ptr<Command> change)
+    : part_(part), change_(std::move(change)) {}
+
+EditPartCommand::~EditPartCommand() = default;
+
+std::string EditPartCommand::label() const {
+    const std::string what = change_ ? change_->label() : std::string("Change");
+    return partName_.empty() ? what : what + " in " + partName_;
+}
+
+Diagnostics EditPartCommand::apply(DocumentEditor& editor) {
+    if (auto d = needAssembly(editor.document())) return {*d};
+    if (!change_) return {error("command.missing", "There was nothing to do.")};
+    const Document* part = editor.document().findPart(part_);
+    if (!part) {
+        return {error("part.not_found", "That part isn't in " + editor.document().name() +
+                                            " any more. Pick a component and try again.")};
+    }
+    if (const auto* link = editor.document().partLink(part_)) {
+        return {error("part.linked",
+                      part->name() + " is linked to " +
+                          std::filesystem::path(link->path).filename().string() +
+                          ", so change it there: open that file (Open part), change it and save it. Or "
+                          "make it an inside part first (Make part inside).")};
+    }
+    partName_ = part->name();
+    return editor.applyToPart(part_, *change_, markerBefore_);
+}
+
+void EditPartCommand::revert(DocumentEditor& editor) {
+    if (change_) editor.revertOnPart(part_, *change_, markerBefore_);
+}
+
+bool EditPartCommand::mergeWith(const Command& next) {
+    const auto* other = dynamic_cast<const EditPartCommand*>(&next);
+    if (!other || other->part_ != part_ || !change_ || !other->change_) return false;
+    return change_->mergeWith(*other->change_);
 }
 
 }  // namespace sb::model

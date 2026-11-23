@@ -38,6 +38,9 @@ struct SceneBody {
     InstanceId component{};
     /// Where it's drawn: the component's placement. As it is (no move) in a part.
     kernel::Placement placement{};
+    /// Drawn faded, and clicking it picks nothing: the rest of an assembly, shown
+    /// around a part being edited in it (Edit Part).
+    bool context = false;
 };
 
 /// One edge, face or point drawn picked in a view: which body it's on, and its

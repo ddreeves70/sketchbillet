@@ -125,6 +125,41 @@ std::unique_ptr<Document> DocumentEditor::replacePart(std::unique_ptr<Document> 
     return nullptr;
 }
 
+Diagnostics DocumentEditor::applyToPart(const DocId& part, Command& command,
+                                        std::optional<FeatureId>& markerBefore) {
+    Document* p = nullptr;
+    for (auto& each : doc_.parts_)
+        if (each->id() == part) p = each.get();
+    if (!p) {
+        return {{"part.not_found",
+                 Severity::Error,
+                 "That part isn't in " + doc_.name() + " any more. Pick a component and try again.",
+                 {}}};
+    }
+    DocumentEditor editor(*p);
+    markerBefore = p->marker_;
+    auto issues = command.apply(editor);
+    p->updateFolders();
+    if (!issues.empty()) {
+        p->marker_ = markerBefore;
+        return issues;  // contract: the part is unchanged
+    }
+    p->tidyMarker();
+    return {};
+}
+
+void DocumentEditor::revertOnPart(const DocId& part, Command& command,
+                                  const std::optional<FeatureId>& markerBefore) {
+    for (auto& each : doc_.parts_) {
+        if (each->id() != part) continue;
+        DocumentEditor editor(*each);
+        command.revert(editor);
+        each->marker_ = markerBefore;
+        each->updateFolders();
+        return;
+    }
+}
+
 std::optional<PartLink> DocumentEditor::setPartLink(const DocId& part, std::optional<PartLink> link) {
     std::optional<PartLink> old;
     if (auto it = doc_.links_.find(part); it != doc_.links_.end()) {
