@@ -347,9 +347,9 @@ void DemoPlayer::runStep(const QJsonObject& step) {
 
 bool DemoPlayer::locate(const QString& target, QPoint& global, QWidget** widget) {
     // What it's looking for may not be there yet (a panel that's still filling
-    // in): look again for up to 3 seconds before giving up.
+    // in, on a busy computer): look again for up to 10 seconds before giving up.
     auto fail = [this](const QString& why) {
-        if (tries_ < 60) {
+        if (tries_ < 200) {
             ++tries_;
             QTimer::singleShot(50, this, [this] { runStep(steps_.at(at_ - 1).toObject()); });
         } else {

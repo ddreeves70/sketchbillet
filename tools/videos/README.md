@@ -8,7 +8,8 @@ When the app changes, make the videos again with one command.
 
 ## Make the videos
 
-On Linux, with Xvfb, ffmpeg (with libx264 and libass) and Pillow:
+**On Linux**, with Xvfb, ffmpeg (with libx264 and libass) and Pillow. The videos
+play on a virtual screen, so you can keep working while they're made:
 
 ```bash
 sudo apt install xvfb ffmpeg python3-pil
@@ -17,7 +18,33 @@ python3 tools/videos/make_videos.py --sketchbillet-app build/dev/apps/sketchbill
 ```
 
 The second line makes only the videos whose script name contains `tutorial-01`.
-Each one takes about as long as the video. In `build/videos/<name>/` you get:
+
+**On Windows**, in a Command Prompt. Install ffmpeg and Pillow once, then open a
+new Command Prompt so it finds ffmpeg:
+
+```bat
+winget install Gyan.FFmpeg
+py -m pip install pillow
+```
+
+Then, in the SketchBillet folder, after building with the `win` preset:
+
+```bat
+py tools\videos\make_videos.py --sketchbillet-app build\win\apps\sketchbillet\sketchbillet.exe tutorial-01
+```
+
+On Windows the video plays on your **main screen**: SketchBillet fills it, and
+the mouse pointer moves by itself. Leave the mouse and keyboard alone until it
+says `wrote ...`, or the video shows what you did. The video is made 1920 × 1080
+whatever your screen's size.
+
+- **Words too small or too big?** The app is drawn at your display's scaling
+  (Settings > Display > Scale). At 100 %, add `--scale 1.5` so the words read
+  well on a phone; at 150 % leave it out.
+- **The app doesn't start** ("Qt6Core.dll was not found")? Put your Qt's `bin`
+  folder on the path first, like `set PATH=C:\Qt\6.8.3\msvc2022_64\bin;%PATH%`.
+
+Each video takes about as long as it lasts. In `build/videos/<name>/` you get:
 
 | File | What it is |
 | --- | --- |
@@ -74,7 +101,8 @@ Tools in a panel's dropdown have no button: click the dropdown, then the item
 (`{"click": "#sb.ribbon.model.create"}`, then `{"click": "menu:Cylinder"}`). Turn
 the view by dragging on an empty part of it, away from the part's move arrows.
 
-Try a script fast while you write it, with no recording:
+Try a script fast while you write it, with no recording (on Windows it plays on
+your screen for a few seconds):
 
 ```bash
 python3 tools/videos/make_videos.py --check --sketchbillet-app build/dev/apps/sketchbillet/sketchbillet tutorial-01

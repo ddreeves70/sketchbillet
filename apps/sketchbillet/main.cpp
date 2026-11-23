@@ -350,9 +350,9 @@ int main(int argc, char** argv) {
         }
         const auto speedText = option(args, QStringLiteral("--demo-speed"));
         const double speed = speedText.isEmpty() ? 1.0 : speedText.toDouble();
-        // The whole screen, with no window frame: what the video shows.
+        // The whole main screen, with no window frame or taskbar: what the video shows.
         shell.setGeometry(QGuiApplication::primaryScreen()->geometry());
-        shell.show();
+        shell.showFullScreen();
         auto* player =
             new sb::app::DemoPlayer(shell, script.object().value(QStringLiteral("steps")).toArray(), speed,
                                     option(args, QStringLiteral("--demo-log")));
