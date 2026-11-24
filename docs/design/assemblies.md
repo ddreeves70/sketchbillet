@@ -25,7 +25,7 @@ This page covers what the student gets, in the order it gets built:
 | 3. Joints | Rigid, hinge (revolute) and slider joints that place parts and say how they move | Built, from the command line |
 | 4. Placing parts along chains | Exact, instant placement from joint to joint, smooth enough to drag | Built |
 | 5. In the app | The assembly tree, inserting parts, joining, dragging, editing a part | Built |
-| 6. Checks | Parts that overlap, the whole assembly's mass and balance point, measuring between parts | Planned |
+| 6. Checks | Parts that overlap, the whole assembly's mass and balance point, measuring between parts | Overlaps built, from the command line |
 | 7. Exploded views | Parts pulled apart to show how they fit, for pictures and drawings | Planned |
 | 8. Parts list | How many of each part, with material and mass, for printing and drawings | Planned |
 | 9. Parts from bodies | A part with several bodies turned into an assembly (copy-and-group's "groups that move together") | Planned |
@@ -499,7 +499,16 @@ Each line is one pull request, in this order:
      (`SetJointCommand`, one step). Properties says how a picked component
      moves, and why one doesn't.
 6. **Checks:** overlaps, the assembly's mass and center of gravity, measuring
-   between components.
+   between components. In pieces:
+   - **Overlaps from the command line** (built, Nov 24, 2026): `check` on an
+     assembly (`checkOverlaps()`, in sb_model) tests each pair of components
+     whose boxes meet with the kernel's Boolean common, where each is placed,
+     body by body, and lists each pair sharing 0.001 mm³ or more, with the
+     volume and the middle of the shared space. Faces that only touch don't
+     count.
+   - Next: the assembly's mass and balance point; then the app (Check for
+     Overlaps shown in red, pairs marked as meant to overlap, the balance
+     point, measuring between components).
 7. **Exploded views.**
 8. **Parts list,** and exporting each part once with its count; STEP export
    with the assembly's structure (parts, components and placements), and 3MF

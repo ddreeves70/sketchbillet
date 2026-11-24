@@ -8,6 +8,7 @@
 //   sketchbillet_cli open <file.sb> --edges|--faces|--points <name>  ... and list a body's edges, faces
 //                                       or points, numbered
 //   sketchbillet_cli check <file.sb> [--step <name>] [--min-wall <mm>]  check a part is ready to 3D print
+//   sketchbillet_cli check <assembly.sb> [--overlaps]                  check no components overlap
 //   sketchbillet_cli measure <file.sb> <name> face|edge|point <n> [<name> face|edge|point <n>]
 //                                       measure one face, edge or point, or between two
 //   sketchbillet_cli materials [<file.sb>]      list materials (SketchBillet's own, and a design's)
@@ -40,6 +41,7 @@
 #include "sb/model/Commands.h"
 #include "sb/model/Document.h"
 #include "sb/model/Measure.h"
+#include "sb/model/Overlaps.h"
 #include "sb/model/PrintCheck.h"
 #include "sb/sketch/Profiles.h"
 #include "sb/sketch_planegcs/PlaneGcsSolver.h"
@@ -57,6 +59,7 @@ int usage() {
         "       sketchbillet_cli open <file.sb> --points <name>\n"
         "       sketchbillet_cli open <file.sb> --components\n"
         "       sketchbillet_cli check <file.sb> [--step <name>] [--min-wall <mm>]\n"
+        "       sketchbillet_cli check <assembly.sb> [--overlaps]\n"
         "       sketchbillet_cli measure <file.sb> <name> face|edge|point <n> [<name> face|edge|point <n>]\n"
         "       sketchbillet_cli materials [<file.sb>]\n"
         "       sketchbillet_cli regress [--update] <case.json|folder>...\n"
@@ -498,12 +501,20 @@ int checkDesign(int argc, char** argv) {
     if (argc < 3) return usage();
     std::string stepName;
     sb::model::PrintCheckOptions options;
+    bool overlaps = false;
+    bool minWallGiven = false;
     for (int i = 3; i < argc; i += 2) {
         const std::string_view flag = argv[i];
+        if (flag == "--overlaps") {
+            overlaps = true;
+            --i;  // it takes no value
+            continue;
+        }
         if (i + 1 >= argc) return usage();
         if (flag == "--step") {
             stepName = argv[i + 1];
         } else if (flag == "--min-wall") {
+            minWallGiven = true;
             char* end = nullptr;
             options.minWall = std::strtod(argv[i + 1], &end);
             if (end == argv[i + 1] || *end != '\0' || !(options.minWall > 0)) {
@@ -523,6 +534,33 @@ int checkDesign(int argc, char** argv) {
     auto kernel = sb::kernel::makeOcctKernel();
     auto solver = sb::sketch::makePlaneGcsSolver();
     const auto report = doc.regenerate(*kernel, solver.get());
+
+    // An assembly: whether its components overlap.
+    const bool assembly = doc.kind() == sb::model::DocKind::Assembly;
+    if (overlaps && !assembly) {
+        std::fprintf(stderr,
+                     "error: --overlaps checks an assembly, and %s is a part. Check it for printing "
+                     "without --overlaps.\n",
+                     doc.name().c_str());
+        return 1;
+    }
+    if (assembly) {
+        if (!stepName.empty() || minWallGiven) {
+            std::fprintf(stderr,
+                         "error: --step and --min-wall check a part for printing, and %s is an assembly. "
+                         "Check a part's own .sb file, or leave them out to look for overlaps.\n",
+                         doc.name().c_str());
+            return 1;
+        }
+        const auto result = sb::model::checkOverlaps(doc, report, *kernel);
+        for (const auto& issue : result.issues)
+            if (issue.severity == sb::Severity::Info) std::printf("%s\n", issue.message.c_str());
+        sb::Diagnostics problems;
+        for (const auto& issue : result.issues)
+            if (issue.severity != sb::Severity::Info) problems.push_back(issue);
+        printIssues(problems);
+        return result.clear() ? 0 : 1;
+    }
 
     sb::FeatureId which{};
     if (!stepName.empty()) {
