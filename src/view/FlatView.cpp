@@ -285,6 +285,14 @@ void FlatView::paintEvent(QPaintEvent*) {
                 painter.drawText(at, word);
             }
             painter.setFont(before);
+        } else if (o.shape == OverlayShape::Triangles) {
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(qcolor(o));
+            for (std::size_t i = 0; i + 2 < o.points.size(); i += 3) {
+                const QPointF corners[3] = {toScreen(o.points[i]), toScreen(o.points[i + 1]),
+                                            toScreen(o.points[i + 2])};
+                painter.drawPolygon(corners, 3);
+            }
         } else if (o.shape == OverlayShape::Lines) {
             painter.setPen(QPen(qcolor(o), std::max(1.0, o.size)));
             for (std::size_t i = 0; i + 1 < o.points.size(); i += 2)

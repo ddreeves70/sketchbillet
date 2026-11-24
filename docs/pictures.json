@@ -772,6 +772,32 @@
       "crop": [0, 0, 1280, 685]
     },
     {
+  "out": "docs/user-guide/images/app-overlaps.png",
+  "size": "1280x800",
+  "commands": [
+   "run --save Body.sb feature.add_box size=80,40,10",
+   "run --save Wheel.sb feature.add_cylinder radius=12 height=6",
+   "run --save Car.sb assembly.new",
+   "run --open Car.sb --save Car.sb component.insert file=Body.sb",
+   "run --open Car.sb --save Car.sb component.insert file=Wheel.sb count=2 at=10,-6,0 step=60,0,0",
+   "run --open Car.sb --save Car.sb component.place \"component=Wheel 1\" origin=10,3,12 z=0,-1,0",
+   "run --open Car.sb --save Car.sb component.place \"component=Wheel 2\" origin=70,-6,12 z=0,-1,0"
+  ],
+  "app": {
+   "open": "Car.sb",
+   "trigger": [
+    "sb.measure.overlaps",
+    "sb.measure.balance"
+   ]
+  },
+  "crop": [
+   0,
+   0,
+   1280,
+   685
+  ]
+ },
+    {
       "out": "docs/user-guide/images/app-edit-part.png",
       "size": "1280x800",
       "commands": [

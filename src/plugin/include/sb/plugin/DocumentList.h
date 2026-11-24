@@ -164,6 +164,11 @@ public:
     /// such as their volume (see model::bodyMass()).
     /// @return The kernel, or nullptr if there is none (designs aren't rebuilt).
     const kernel::IKernel* kernel() const { return kernel_; }
+    /// Gives the kernel designs are rebuilt with, to make new shapes from theirs,
+    /// such as where two parts overlap (see model::checkOverlaps()). Shapes it
+    /// makes change no design.
+    /// @return The kernel, or nullptr if there is none (designs aren't rebuilt).
+    kernel::IKernel* kernel() { return kernel_; }
 
     /// Gives the solver Sketch steps are solved with, for live work on a sketch
     /// such as dragging part of it (sketch::ISketchSolver::drag()). Change the

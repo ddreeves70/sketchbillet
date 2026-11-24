@@ -23,6 +23,8 @@
 #include <Font_NameOfFont.hxx>
 #include <Graphic3d_ArrayOfPoints.hxx>
 #include <Graphic3d_ArrayOfSegments.hxx>
+#include <Graphic3d_ArrayOfTriangles.hxx>
+#include <Graphic3d_AspectFillArea3d.hxx>
 #include <Graphic3d_AspectLine3d.hxx>
 #include <Graphic3d_AspectMarker3d.hxx>
 #include <Graphic3d_AspectText3d.hxx>
@@ -117,6 +119,24 @@ public:
                 text->SetVerticalAlignment(Graphic3d_VTA_CENTER);
                 group->AddText(text);
             }
+        } else if (o.shape == OverlayShape::Triangles) {
+            // Filled, unlit, seen from both sides: a flat color, see-through by its alpha.
+            if (o.points.size() < 3) return;
+            const int count = static_cast<int>(o.points.size() / 3 * 3);
+            Handle(Graphic3d_ArrayOfTriangles) array = new Graphic3d_ArrayOfTriangles(count);
+            for (int i = 0; i < count; ++i) {
+                const auto& p = o.points[static_cast<std::size_t>(i)];
+                array->AddVertex(p.x, p.y, p.z);
+            }
+            Handle(Graphic3d_AspectFillArea3d) aspect = new Graphic3d_AspectFillArea3d();
+            aspect->SetInteriorStyle(Aspect_IS_SOLID);
+            aspect->SetInteriorColor(color);
+            aspect->SetShadingModel(Graphic3d_TypeOfShadingModel_Unlit);
+            aspect->SetDistinguishOff();
+            aspect->SetFaceCulling(Graphic3d_TypeOfBackfacingModel_DoubleSided);
+            if (o.alpha < 255) aspect->SetAlphaMode(Graphic3d_AlphaMode_Blend);
+            group->SetGroupPrimitivesAspect(aspect);
+            group->AddPrimitiveArray(array);
         } else if (dots) {
             const auto points = o.shape == OverlayShape::Points ? o.points : latticePoints(o);
             if (points.empty()) return;

@@ -1053,3 +1053,42 @@ TEST_CASE("a ring handle drags round by the angle turned, carrying on past half 
     CHECK(drops[0].y == 0);
     CHECK(drops[0].z == 0);
 }
+
+TEST_CASE("a triangles overlay is filled, seen from both sides, and shows over bodies when asked",
+          "[view][gl]") {
+    Fixture f;
+    f.view.setContent({{{f.boxId, f.box, false}}, {}});
+    f.view.setStandardView(StandardView::Top);
+    f.view.fitAll();
+    settle(f.view);
+    // A see-through red square inside the box (from z 0 up, under its top), as
+    // two triangles, one each way round: both are drawn.
+    ViewOverlay red;
+    red.shape = OverlayShape::Triangles;
+    red.points = {{-3, -3, 1}, {3, -3, 1}, {3, 3, 1}, {-3, -3, 1}, {-3, 3, 1}, {3, 3, 1}};
+    red.color = {220, 30, 30};
+    red.alpha = 170;
+    red.overBodies = true;
+    f.view.setOverlays({red});
+    settle(f.view);
+    auto reddish = [](const QColor& c) {
+        return c.red() > 150 && c.red() > c.green() + 60 && c.red() > c.blue() + 40;
+    };
+    const auto middle = f.view.toScreen({0, 0, 1});
+    REQUIRE(middle);
+    const QImage img = f.view.grabFramebuffer();
+    const qreal r = f.view.devicePixelRatioF();
+    auto at = [&](QPointF p) {
+        return img.pixelColor(static_cast<int>(p.x() * r), static_cast<int>(p.y() * r));
+    };
+    // Both halves of the square are red, though the box's top is above them.
+    CHECK(reddish(at(*middle + QPointF(5, 5))));
+    CHECK(reddish(at(*middle + QPointF(-5, -5))));
+    // Hidden behind the box without overBodies.
+    red.overBodies = false;
+    f.view.setOverlays({red});
+    settle(f.view);
+    const QImage hidden = f.view.grabFramebuffer();
+    CHECK_FALSE(reddish(
+        hidden.pixelColor(static_cast<int>((middle->x() + 5) * r), static_cast<int>((middle->y() + 5) * r))));
+}
