@@ -393,6 +393,20 @@ for (const auto& e : sel.elements()) {     // each: e.body, e.ref
 Picking edges with `setElements()` un-picks steps, and the other way round.
 Changing the pick mode forgets the picked edges or faces.
 
+In an assembly, `PickMode::Joint` (**Assemble > Joint**) picks a face, edge or
+point on a component, two at a time, like Measure. A pick on a component has its
+`component` set, and its `body` is one of that component's part's bodies, so its
+names are in the part's own build:
+
+```cpp
+for (const auto& e : sel.elements()) {
+    if (e.component.isNil()) continue;  // not on a component
+    const auto* design = ctx.documents().find(sel.doc());
+    const auto* part = design->findPart(design->findComponent(e.component)->part);
+    const auto* names = ctx.documents().lastRebuild(sel.doc())->part(part->id())->result(e.body)->names.get();
+}
+```
+
 To pick on one body only, as it was before the steps that used it (to pick a
 Fillet's edges again, say), call `setPickOnly(body)` after `setPickMode()`: the
 viewer then shows just that body. Going back to `PickMode::Bodies` shows every

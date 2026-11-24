@@ -284,10 +284,10 @@ TEST_CASE("every toolbar button has a picture", "[app][icons]") {
             CHECK(b->toolButtonStyle() == Qt::ToolButtonTextUnderIcon);
     }
     // The top row (5), Import, Export and Check print (3), sb.modeling (15 on Model,
-    // 11 on Assemble), sb.sketcher (2 on Model, 1 main, 5 drawing, 3 editing, 5
+    // 12 on Assemble), sb.sketcher (2 on Model, 1 main, 5 drawing, 3 editing, 5
     // constraints), View options (1), the grid (2), the axes (2), the feature tree and
     // Properties panels (2), and Save and Reset layout (2).
-    CHECK(buttons == 5 + 3 + 15 + 11 + 16 + 1 + 2 + 2 + 2 + 2);
+    CHECK(buttons == 5 + 3 + 15 + 12 + 16 + 1 + 2 + 2 + 2 + 2);
     // The dropdown item shows the same picture as its button.
     CHECK_FALSE(app.shell->action("sb.modeling.box")->icon().isNull());
 }
@@ -3302,6 +3302,92 @@ TEST_CASE("joints in the app: the tree lists them, Properties changes them, Rese
     tree->topLevelItem(1)->child(0)->setText(0, QStringLiteral("Hinge"));
     settle();
     CHECK(doc.findJoint(joint)->name == "Hinge");
+}
+
+TEST_CASE("the joint tool: a side on one component, then on another, makes a joint and picks it",
+          "[app][assembly][joints]") {
+    App app;
+    model::Document car(model::DocKind::Part, "Case");
+    REQUIRE(car.execute(std::make_unique<model::MakeAssemblyCommand>()).empty());
+    auto part = [](const char* name, double height) {
+        auto p = std::make_unique<model::Document>(model::DocKind::Part, name);
+        REQUIRE(p->execute(std::make_unique<model::AddFeatureCommand>(std::make_unique<model::BoxFeature>(
+                               "Box1", kernel::Vec3{}, kernel::Vec3{40, 40, height})))
+                    .empty());
+        return p;
+    };
+    REQUIRE(car.execute(std::make_unique<model::InsertPartCommand>(part("Tray", 10), 1)).empty());
+    REQUIRE(car.execute(std::make_unique<model::InsertPartCommand>(part("Cover", 4), 1,
+                                                                   kernel::Placement{{60, 0, 0}}))
+                .empty());
+    const auto path = app.dir.filePath(QStringLiteral("case.sb")).toStdWString();
+    REQUIRE(io::writeFile(car, path).empty());
+    REQUIRE(app.shell->openDesign(path).empty());
+    settle();
+    const auto& doc = app.doc();
+    const DocId id = app.shell->activeDesign();
+    const auto tray = doc.components()[0], cover = doc.components()[1];
+
+    // A face of a component, as the viewer picks it: on its part's body.
+    auto faceOf = [&](const model::Component& c, double nz, double z) {
+        const auto* report = app.host.documents().lastRebuild(id);
+        const auto* p = doc.findPart(c.part);
+        const FeatureId body = p->featureAt(0).id();
+        const auto& names = *report->part(c.part)->result(body)->names;
+        for (std::size_t i = 0; i < names.elements.faces.size(); ++i) {
+            const auto& e = names.elements.faces[i];
+            if (std::abs(e.direction.z - nz) < 1e-9 && std::abs(e.center.z - z) < 1e-9)
+                return plugin::PickedElement{
+                    body, model::referTo(names, kernel::TopoKind::Face, static_cast<int>(i)), c.id};
+        }
+        FAIL("no such face");
+        return plugin::PickedElement{};
+    };
+
+    REQUIRE(app.shell->action("sb.modeling.joint")->isEnabled());
+    app.click("sb.modeling.joint");
+    CHECK(app.host.selection().pickMode() == plugin::PickMode::Joint);
+    CHECK(app.shell->action("sb.modeling.joint")->isChecked());
+    auto* step = app.field<QLabel>("jointstep");
+    REQUIRE(step);
+    CHECK(step->text().startsWith(QStringLiteral("Click a face")));
+    CHECK(plugins::viewerScene(app.host.documents(), app.host.selection()).pickMeasure);
+
+    // The tray's top, then a second pick on the tray: it starts again from that one.
+    const auto trayTop = faceOf(tray, 1, 10);
+    app.host.selection().setElements(id, {trayTop});
+    settle();
+    CHECK(app.field<QLabel>("jointstep")->text().startsWith(QStringLiteral("Now click")));
+    CHECK(app.field<QLabel>("jointstep")->text().contains(QStringLiteral("Tray 1 stays")));
+    const auto scene = plugins::viewerScene(app.host.documents(), app.host.selection());
+    REQUIRE(scene.picked.size() == 1);
+    CHECK(scene.picked.front().component == tray.id);
+    app.host.selection().setElements(id, {trayTop, faceOf(tray, -1, 0)});
+    settle();
+    REQUIRE(app.host.selection().elements().size() == 1);
+    CHECK(app.host.selection().elements().front().ref.signature.center.z == 0);
+
+    // Then the cover's bottom: the joint is made, rigid, and picked.
+    app.host.selection().setElements(id, {trayTop, faceOf(cover, -1, 0)});
+    settle();
+    REQUIRE(doc.joints().size() == 1);
+    CHECK(doc.joints().front().kind == model::JointKind::Rigid);
+    CHECK(doc.joints().front().a.component == tray.id);
+    CHECK(doc.joints().front().b.component == cover.id);
+    CHECK(app.host.selection().pickMode() == plugin::PickMode::Bodies);
+    CHECK(app.host.selection().joints() == std::vector{doc.joints().front().id});
+    CHECK(app.field<QLabel>("joins")->text() == QStringLiteral("Cover 1 on Tray 1"));
+    // The cover sits on the tray's top.
+    const auto* placed = app.host.documents().lastRebuild(id)->placementOf(cover.id);
+    REQUIRE(placed);
+    CHECK(kernel::samePlacement(*placed, kernel::Placement{{0, 0, 10}}, 1e-9));
+    CHECK(doc.undoLabel() == "Add Joint1");
+
+    // Cancel leaves the tool.
+    app.click("sb.modeling.joint");
+    app.field<QPushButton>("jointcancel")->click();
+    settle();
+    CHECK(app.host.selection().pickMode() == plugin::PickMode::Bodies);
 }
 
 TEST_CASE("opening a file that isn't a design explains why", "[app]") {

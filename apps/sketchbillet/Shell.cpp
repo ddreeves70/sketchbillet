@@ -1563,6 +1563,32 @@ bool Shell::selectElements(const QString& body, kernel::TopoKind kind, const QLi
     const auto* doc = docs.find(activeDesign());
     const auto* report = docs.lastRebuild(activeDesign());
     if (!doc || !report) return false;
+    if (doc->kind() == model::DocKind::Assembly) {
+        // A component's part's body: "Tray 1", or "Tray 1:Box1" for one of several.
+        const auto colon = body.indexOf(QLatin1Char(':'));
+        const auto* c = doc->findComponent(std::string_view(body.left(colon).toStdString()));
+        const auto* part = c ? doc->findPart(c->part) : nullptr;
+        const auto* built = c ? report->part(c->part) : nullptr;
+        if (!part || !built || built->bodies().empty()) return false;
+        FeatureId step = built->bodies().front();
+        if (colon >= 0) {
+            step = {};
+            for (std::size_t i = 0; i < part->featureCount(); ++i) {
+                if (qs(part->featureAt(i).name()) == body.mid(colon + 1)) step = part->featureAt(i).id();
+            }
+        }
+        const auto* r = built->result(step);
+        if (!r || !r->names) return false;
+        const auto order = model::listingOrder(r->names->elements, kind);
+        std::vector<plugin::PickedElement> picked;
+        for (const int n : numbers) {
+            if (n < 1 || n > static_cast<int>(order.size())) return false;
+            picked.push_back(
+                {step, model::referTo(*r->names, kind, order[static_cast<std::size_t>(n - 1)]), c->id});
+        }
+        host_.selection().setElements(activeDesign(), std::move(picked));
+        return true;
+    }
     for (std::size_t i = 0; i < doc->featureCount(); ++i) {
         const auto& f = doc->featureAt(i);
         if (qs(f.name()) != body) continue;

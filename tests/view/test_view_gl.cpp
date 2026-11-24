@@ -966,3 +966,44 @@ TEST_CASE("a component's preview draws all its bodies moved, and no other compon
     CHECK_FALSE(isBackground(colorAt(*rightAt)));
     CHECK_FALSE(isBackground(colorAt(*lidAt)));
 }
+
+TEST_CASE("picking on components: a face of a placed component says which component it's on",
+          "[view][gl][measure][assembly]") {
+    Fixture f;
+    // One box drawn twice, as two components: the second 40 mm along x.
+    const InstanceId left = InstanceId::generate(), right = InstanceId::generate();
+    SceneContent c;
+    c.bodies = {{f.boxId, f.box, false, {}, left, kernel::Placement{}},
+                {f.boxId, f.box, false, {}, right, kernel::Placement{{40, 0, 0}}}};
+    c.pickMeasure = true;
+    f.view.setContent(c);
+    f.view.fitAll();
+    settle(f.view);
+    const auto parts = f.kernel->elements(f.box);
+    int top = -1;
+    for (std::size_t i = 0; i < parts.faces.size(); ++i) {
+        if (std::abs(parts.faces[i].center.z - 20) < 1e-9) top = static_cast<int>(i);
+    }
+    REQUIRE(top >= 0);
+
+    std::vector<ScenePick> last;
+    int picks = 0;
+    QObject::connect(&f.view, &ViewWidget::measurePicked, [&](const std::vector<ScenePick>& p) {
+        ++picks;
+        last = p;
+        auto now = f.view.content();
+        now.picked = p;
+        f.view.setContent(now);
+    });
+    const auto leftTop = f.view.toScreen({0, 0, 20});
+    const auto rightTop = f.view.toScreen({40, 0, 20});
+    REQUIRE(leftTop);
+    REQUIRE(rightTop);
+    f.view.clickAt(*rightTop);
+    REQUIRE(waitFor([&] { return picks == 1; }));
+    CHECK(last == std::vector<ScenePick>{{f.boxId, top, kernel::TopoKind::Face, right}});
+    f.view.clickAt(*leftTop);
+    REQUIRE(waitFor([&] { return picks == 2; }));
+    CHECK(last == std::vector<ScenePick>{{f.boxId, top, kernel::TopoKind::Face, right},
+                                         {f.boxId, top, kernel::TopoKind::Face, left}});
+}

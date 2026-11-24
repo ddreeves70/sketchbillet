@@ -608,7 +608,7 @@ void ViewController::OnSelectionChanged(const Handle(AIS_InteractiveContext) & c
                                   : kind == kernel::TopoKind::Edge ? s.edges
                                                                    : s.vertices;
                 const int at = map.FindIndex(owner->Shape());
-                if (at > 0) clicked.push_back({id.feature, at - 1, kind});
+                if (at > 0) clicked.push_back({id.feature, at - 1, kind, id.component});
             }
         }
         if (clicked.size() > 1) clicked.resize(1);
@@ -643,7 +643,7 @@ void ViewController::OnSelectionChanged(const Handle(AIS_InteractiveContext) & c
             for (const auto& [id, s] : d.shown) {
                 if (s.object != ctx->SelectedInteractive()) continue;
                 const int at = (faces ? s.faces : s.edges).FindIndex(owner->Shape());
-                if (at > 0) clicked.push_back({id.feature, at - 1, kind});
+                if (at > 0) clicked.push_back({id.feature, at - 1, kind, id.component});
             }
         }
         if (faces) {
@@ -929,7 +929,7 @@ void ViewWidget::setContent(const SceneContent& content) {
         builder.MakeCompound(pickedPoints);
         bool anyPicked = false, anyFace = false, anyPoint = false;
         for (const auto& p : content.picked) {
-            auto it = d.shown.find(Impl::BodyKey{p.body, {}});
+            auto it = d.shown.find(Impl::BodyKey{p.body, p.component});
             if (it == d.shown.end() || p.index < 0) continue;
             const bool face = p.kind == kernel::TopoKind::Face;
             const bool point = p.kind == kernel::TopoKind::Vertex;

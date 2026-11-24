@@ -483,8 +483,12 @@ Each line is one pull request, in this order:
      in green, Properties changes every setting (`SetJointCommand`, quick
      changes to one number merging), and Assemble > Reset Joints
      (`ResetJointsCommand`, `joint.reset`).
-   - Next: the joint tool (picking a face or edge on a component in the
-     viewer), then dragging along joints.
+   - **The joint tool** (built, Nov 23, 2026): Assemble > Joint picks a face,
+     edge or point on a component in the viewer (`PickMode::Joint`, picks that
+     know their component: `PickedElement::component`, plugin API 65), then
+     one on another component, and adds a rigid joint between them, picked so
+     Properties can change it. Properties says what to click next.
+   - Next: dragging along joints.
 6. **Checks:** overlaps, the assembly's mass and center of gravity, measuring
    between components.
 7. **Exploded views.**

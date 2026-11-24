@@ -417,6 +417,7 @@ TEST_CASE("sb.modeling adds menu items that run its commands", "[plugin][host]")
                                           "sb.modeling.delete_component",
                                           "sb.modeling.edit_part",
                                           "sb.modeling.open_part",
+                                          "sb.modeling.joint",
                                           "sb.modeling.reset_joints",
                                           "sb.modeling.update_links",
                                           "sb.modeling.find_file",
