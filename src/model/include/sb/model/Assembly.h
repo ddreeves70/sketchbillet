@@ -114,4 +114,13 @@ struct Joint {
 /// @return "rigid", "revolute" or "slider".
 const char* jointKindName(JointKind kind);
 
+/// A press fit: two components meant to overlap a little, like a pin pushed
+/// into a hole a bit smaller than it, so it holds tight. Check for overlaps
+/// leaves them out (see checkOverlaps()).
+struct PressFit {
+    PressFitId id{};  ///< Stays the same for as long as it's there.
+    ComponentId a{};  ///< One of the two.
+    ComponentId b{};  ///< The other.
+};
+
 }  // namespace sb::model

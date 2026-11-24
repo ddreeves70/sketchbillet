@@ -171,3 +171,73 @@ TEST_CASE("an empty assembly weighs nothing and balances at its origin", "[model
     CHECK(mass.center.x == 0);
     CHECK(mass.missing == 0);
 }
+
+TEST_CASE("a press fit is meant to overlap: the check leaves it out, and says when one doesn't overlap",
+          "[model][assembly][overlaps][occt]") {
+    Assembly box;
+    const auto base = box.insert(boxPart("Base", {20, 20, 10}));
+    const auto lid = box.insert(boxPart("Lid", {10, 10, 10}), at(15, 15, 5));      // 125 mm^3 into Base
+    const auto side = box.insert(boxPart("Side", {10, 10, 10}), at(20, 0, 0));     // touches Base
+    const auto spare = box.insert(boxPart("Spare", {10, 10, 10}), at(100, 0, 0));  // far away
+
+    REQUIRE(box.doc.execute(std::make_unique<AddPressFitCommand>(PressFit{{}, lid, base})).empty());
+    CHECK(box.doc.pressFits().size() == 1);
+    CHECK_FALSE(box.doc.pressFits()[0].id.isNil());
+    CHECK(box.doc.findPressFit(base, lid) == &box.doc.pressFits()[0]);  // either way round
+    CHECK(box.doc.findPressFit(base, side) == nullptr);
+    CHECK(box.doc.undoLabel() == "Mark press fit");
+    auto check = box.check();
+    CHECK(check.clear());
+    CHECK(check.overlaps.empty());
+    REQUIRE(check.pressFits.size() == 1);
+    CHECK(check.pressFits[0].volume == Approx(125));
+    REQUIRE(check.issues.size() == 2);
+    CHECK(check.issues[0].message ==
+          "Box: no components overlap, but for 1 press fit (4 components, 2 pairs close enough to check).");
+    CHECK(check.issues[1].code == "assembly.press_fit");
+    CHECK(check.issues[1].severity == Severity::Info);
+    CHECK(check.issues[1].message ==
+          "Base 1 and Lid 1 overlap by 125.00 mm^3, around x 17.5, y 17.5, z 7.5 mm: they're a press fit, so "
+          "that's meant.");
+
+    // Marked twice, or with itself: refused.
+    auto again = box.doc.execute(std::make_unique<AddPressFitCommand>(PressFit{{}, base, lid}));
+    REQUIRE(again.size() == 1);
+    CHECK(again[0].code == "press_fit.exists");
+    CHECK(box.doc.execute(std::make_unique<AddPressFitCommand>(PressFit{{}, base, base}))[0].code ==
+          "press_fit.same");
+
+    // Press fits that don't overlap, touching or far apart, will be loose.
+    REQUIRE(box.doc.execute(std::make_unique<AddPressFitCommand>(PressFit{{}, base, side})).empty());
+    REQUIRE(box.doc.execute(std::make_unique<AddPressFitCommand>(PressFit{{}, base, spare})).empty());
+    check = box.check();
+    CHECK_FALSE(check.clear());
+    int loose = 0;
+    for (const auto& i : check.issues) {
+        if (i.code != "assembly.press_fit_loose") continue;
+        ++loose;
+        CHECK(i.severity == Severity::Warning);
+    }
+    CHECK(loose == 2);
+    CHECK(check.issues.back().message ==
+          "Base 1 and Spare 1 are marked as a press fit, but they don't overlap, so they'll be loose. Make "
+          "one a "
+          "little bigger so they overlap, or unmark the press fit if loose is what you want.");
+
+    // Unmarked, it overlaps again; undo marks it again.
+    REQUIRE(box.doc.execute(std::make_unique<DeletePressFitCommand>(base, lid)).empty());
+    CHECK(box.doc.undoLabel() == "Unmark press fit");
+    CHECK(box.check().overlaps.size() == 1);
+    CHECK(box.doc.execute(std::make_unique<DeletePressFitCommand>(base, lid))[0].code == "press_fit.missing");
+    REQUIRE(box.doc.undo());
+    CHECK(box.doc.findPressFit(lid, base));
+    CHECK(box.doc.pressFits()[0].a == lid);  // back where it was
+
+    // Deleting a component takes its press fits with it; undo puts them back.
+    REQUIRE(box.doc.execute(std::make_unique<DeleteComponentCommand>(base)).empty());
+    CHECK(box.doc.pressFits().empty());
+    REQUIRE(box.doc.undo());
+    REQUIRE(box.doc.pressFits().size() == 3);
+    CHECK(box.doc.pressFits()[0].b == base);
+    CHECK(box.doc.pressFits()[2].b == spare);
+}

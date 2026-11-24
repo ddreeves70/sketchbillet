@@ -421,6 +421,17 @@ Diagnostics DeleteComponentCommand::apply(DocumentEditor& editor) {
             ++i;
         }
     }
+    // And its press fits.
+    fits_.clear();
+    auto& fits = editor.pressFits();
+    for (std::size_t i = 0; i < fits.size();) {
+        if (fits[i].a == id_ || fits[i].b == id_) {
+            fits_.emplace_back(i + fits_.size(), fits[i]);
+            fits.erase(fits.begin() + static_cast<std::ptrdiff_t>(i));
+        } else {
+            ++i;
+        }
+    }
     if (!used) {
         link_ = editor.setPartLink(removed_->part, std::nullopt);
         auto [part, at] = editor.removePart(removed_->part);
@@ -445,6 +456,62 @@ void DeleteComponentCommand::revert(DocumentEditor& editor) {
         joints.insert(joints.begin() + static_cast<std::ptrdiff_t>(std::min(at, joints.size())), joint);
     }
     joints_.clear();
+    auto& fits = editor.pressFits();
+    for (const auto& [at, fit] : fits_) {
+        fits.insert(fits.begin() + static_cast<std::ptrdiff_t>(std::min(at, fits.size())), fit);
+    }
+    fits_.clear();
+}
+
+// ---------------------------------------------------------------------------
+// Press fits
+// ---------------------------------------------------------------------------
+
+AddPressFitCommand::AddPressFitCommand(PressFit fit) : fit_(fit) {}
+
+Diagnostics AddPressFitCommand::apply(DocumentEditor& editor) {
+    const auto& doc = editor.document();
+    if (auto d = needAssembly(doc)) return {*d};
+    const auto* a = doc.findComponent(fit_.a);
+    const auto* b = doc.findComponent(fit_.b);
+    if (!a || !b) return {error("assembly.no_component", "That component isn't in the assembly anymore.")};
+    if (fit_.a == fit_.b) {
+        return {error("press_fit.same", "A press fit is between two components: pick two different ones.")};
+    }
+    if (doc.findPressFit(fit_.a, fit_.b)) {
+        return {error("press_fit.exists", a->name + " and " + b->name + " are a press fit already.")};
+    }
+    if (fit_.id.isNil()) fit_.id = PressFitId::generate();
+    editor.pressFits().push_back(fit_);
+    return {};
+}
+
+void AddPressFitCommand::revert(DocumentEditor& editor) {
+    auto& fits = editor.pressFits();
+    fits.erase(std::remove_if(fits.begin(), fits.end(), [&](const PressFit& f) { return f.id == fit_.id; }),
+               fits.end());
+}
+
+DeletePressFitCommand::DeletePressFitCommand(ComponentId a, ComponentId b) : a_(a), b_(b) {}
+
+Diagnostics DeletePressFitCommand::apply(DocumentEditor& editor) {
+    if (auto d = needAssembly(editor.document())) return {*d};
+    const auto* fit = editor.document().findPressFit(a_, b_);
+    if (!fit) {
+        return {error("press_fit.missing",
+                      "Those two aren't a press fit, so there's nothing to unmark. Pick two that are.")};
+    }
+    auto& fits = editor.pressFits();
+    index_ = static_cast<std::size_t>(fit - fits.data());
+    removed_ = *fit;
+    fits.erase(fits.begin() + static_cast<std::ptrdiff_t>(index_));
+    return {};
+}
+
+void DeletePressFitCommand::revert(DocumentEditor& editor) {
+    if (!removed_) return;
+    auto& fits = editor.pressFits();
+    fits.insert(fits.begin() + static_cast<std::ptrdiff_t>(std::min(index_, fits.size())), *removed_);
 }
 
 // ---------------------------------------------------------------------------

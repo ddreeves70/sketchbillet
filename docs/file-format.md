@@ -379,6 +379,7 @@ car.sb
 ├── manifest.json                    kind "assembly", schema 2
 ├── components.json                  each component: its part, where it is, grounded or free
 ├── joints.json                      the joints between components (only if it has any)
+├── pressfits.json                   pairs of components meant to overlap (only if it has any)
 ├── parameters.json                  the assembly's own named values (only if it has any)
 └── parts/
     ├── 017e13e9-....                an inside part: one folder per part, named after its id
@@ -391,8 +392,8 @@ car.sb
 ```
 
 The assembly's `manifest.json` is the same as a part's, with `"kind": "assembly"`
-and `"schema": 2`. Its `files` lists `components.json`, `joints.json` and
-`parameters.json` if there are any, and each part's `parts/<id>/manifest.json`. The parts are listed
+and `"schema": 2`. Its `files` lists `components.json`, `joints.json`,
+`pressfits.json` and `parameters.json` if there are any, and each part's `parts/<id>/manifest.json`. The parts are listed
 in the assembly's order (the order they were put in), and that is the order they
 open in.
 
@@ -511,12 +512,31 @@ the joint out, and the component goes back there.
 Joints are listed in the order they were added: when two could place the same
 component, the earlier one does.
 
+### pressfits.json
+
+The pairs of components meant to overlap, like an axle pushed into a hole a bit
+smaller than it. Checking for overlaps leaves them out.
+
+```json
+{
+  "press_fits": [
+    {"id": "4f0c2d0e-...", "a": "9b1e44a2-...", "b": "c3d97f10-..."}
+  ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `id` | The press fit's id. |
+| `a`, `b` | The two components' ids, either way round. |
+
 ### Opening an assembly
 
 SketchBillet reads the manifest, then `parameters.json`, then each part in the
 order the manifest lists them (each one opened the same way as a part file), then
-`components.json`, then `joints.json`. Each part, component and joint is added
-through a command, so the same checks run as when a student builds the assembly.
+`components.json`, then `joints.json`, then `pressfits.json`. Each part,
+component, joint and press fit is added through a command, so the same checks
+run as when a student builds the assembly.
 
 Then it looks for each linked part's file: at its `path`; then by its file name
 in the assembly's folder; then by its `documentId` among the `.sb` files in the

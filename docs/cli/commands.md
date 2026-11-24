@@ -65,6 +65,8 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`joint.set`](#jointset) | Turns or slides a joint, or changes its kind, sides or limits |
 | [`joint.reset`](#jointreset) | Puts joints back to their rest values |
 | [`joint.delete`](#jointdelete) | Takes a joint out |
+| [`press_fit.add`](#press_fitadd) | Marks two components as meant to overlap (a press fit) |
+| [`press_fit.delete`](#press_fitdelete) | Unmarks a press fit |
 | [`part.update`](#partupdate) | Updates linked parts from their files |
 | [`part.relink`](#partrelink) | Links a part to its file where it is now |
 | [`part.make_inside`](#partmake_inside) | Makes a linked part an inside part |
@@ -3264,6 +3266,88 @@ Parts:
 Mass in all: 27.78 g (weighs 0.272 N)
 Balance point: 37.14, 20, 4.14 mm
 wrote Case.sb
+```
+
+## press_fit.add
+
+Marks two components as a **press fit**: meant to overlap a little, like an
+axle pushed into a hole a bit smaller than it, so it holds tight.
+[`check`](check.md) leaves them out of the overlaps, and says if they don't
+overlap at all (they'd be loose). It's the same either way round.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `a` | text | yes | One component, like `Axle 1` |
+| `b` | text | yes | The other, like `Wheel 1` |
+
+A wheel (`Disc.sb`) with a 4.8 mm hole, on an axle 5 mm across: they overlap
+by a ring 0.1 mm thick, π × (2.5² − 2.4²) mm² × 6 mm = 9.24 mm³.
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save Disc.sb feature.add_cylinder radius=12 height=6 name=Disc
+...
+$ sketchbillet_cli run --open Disc.sb --save Disc.sb feature.add_cylinder radius=2.4 height=10 base=0,0,-2 name=Hole
+...
+$ sketchbillet_cli run --open Disc.sb --save Disc.sb feature.add_boolean name=Wheel operation=cut a=Disc b=Hole
+...
+$ sketchbillet_cli run --save Axle.sb feature.add_cylinder radius=2.5 height=30 base=0,0,-12
+...
+$ sketchbillet_cli run --save Toy.sb assembly.new
+...
+$ sketchbillet_cli run --open Toy.sb --save Toy.sb component.insert file=Axle.sb
+...
+$ sketchbillet_cli run --open Toy.sb --save Toy.sb component.insert file=Disc.sb
+...
+$ sketchbillet_cli run --open Toy.sb --save Toy.sb press_fit.add a="Axle 1" b="Disc 1"
+Toy: assembly, 2 components, 2 parts
+  Axle 1       Axle       grounded at 0, 0, 0 mm
+  Disc 1       Disc       free     at 0, 0, 0 mm
+Press fits:
+  Axle 1 and Disc 1
+Parts:
+  Axle         1 step   ok        mass 0.73 g (PLA), 1 in the assembly
+    linked to Axle.sb
+  Disc         3 steps  ok        mass 3.23 g (PLA), 1 in the assembly
+    linked to Disc.sb
+Mass in all: 3.96 g (weighs 0.039 N)
+Balance point: 0, 0, 3 mm
+wrote Toy.sb
+$ sketchbillet_cli check Toy.sb
+Toy: no components overlap, but for 1 press fit (2 components, 1 pair close enough to check).
+Axle 1 and Disc 1 overlap by 9.24 mm^3, around x 0, y 0, z 3 mm: they're a press fit, so that's meant.
+```
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open Toy.sb press_fit.add a="Disc 1" b="Axle 1"
+error [press_fit.exists]: Disc 1 and Axle 1 are a press fit already.
+```
+
+## press_fit.delete
+
+Unmarks a press fit: the two components shouldn't overlap after all, and
+[`check`](check.md) looks at them again.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `a` | text | yes | One component, like `Axle 1` |
+| `b` | text | yes | The other, like `Wheel 1` |
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open Toy.sb --save Toy.sb press_fit.delete a="Axle 1" b="Disc 1"
+Toy: assembly, 2 components, 2 parts
+  Axle 1       Axle       grounded at 0, 0, 0 mm
+  Disc 1       Disc       free     at 0, 0, 0 mm
+Parts:
+  Axle         1 step   ok        mass 0.73 g (PLA), 1 in the assembly
+    linked to Axle.sb
+  Disc         3 steps  ok        mass 3.23 g (PLA), 1 in the assembly
+    linked to Disc.sb
+Mass in all: 3.96 g (weighs 0.039 N)
+Balance point: 0, 0, 3 mm
+wrote Toy.sb
 ```
 
 ## part.update

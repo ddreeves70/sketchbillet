@@ -131,6 +131,8 @@ struct FolderTag {};
 struct ConstraintTag {};
 /// Tag for sb::JointId.
 struct JointTag {};
+/// Tag for sb::PressFitId.
+struct PressFitTag {};
 
 /// Identifies a document (a part or an assembly).
 using DocId = Id<DocTag>;
@@ -152,6 +154,8 @@ using ConstraintId = Id<ConstraintTag>;
 using MaterialId = Id<MaterialTag>;
 /// Identifies a joint between two components of an assembly.
 using JointId = Id<JointTag>;
+/// Identifies a press fit: two components of an assembly meant to overlap.
+using PressFitId = Id<PressFitTag>;
 
 }  // namespace sb
 

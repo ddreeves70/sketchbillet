@@ -70,6 +70,8 @@ Commands for sketchbillet_cli run:
   part.relink              Find linked file
   part.save_as             Save part as file
   part.update              Update linked parts
+  press_fit.add            Mark press fit
+  press_fit.delete         Unmark press fit
   sketch.add_arc           Add arc
   sketch.add_circle        Add circle
   sketch.add_line          Add line

@@ -1459,7 +1459,8 @@ std::optional<model::Joint> jointFromJson(const json& j) {
 }
 
 // An assembly's files (schema 2): its components, its joints (joints.json, if
-// it has any), and each inside part's files
+// it has any), its press fits (pressfits.json, if it has any), and each inside
+// part's files
 // under parts/<the part's design id>/, as a part's .sb file has them.
 void assemblyEntries(const Document& doc, Entries& entries, const std::filesystem::path& folder) {
     json files = json::array({"components.json"});
@@ -1477,6 +1478,13 @@ void assemblyEntries(const Document& doc, Entries& entries, const std::filesyste
         for (const auto& j : doc.joints()) joints.push_back(jointJson(j));
         entries.emplace_back("joints.json", dump(json{{"joints", joints}}));
         files.push_back("joints.json");
+    }
+    if (!doc.pressFits().empty()) {
+        json fits = json::array();
+        for (const auto& f : doc.pressFits())
+            fits.push_back({{"id", f.id.toString()}, {"a", f.a.toString()}, {"b", f.b.toString()}});
+        entries.emplace_back("pressfits.json", dump(json{{"press_fits", fits}}));
+        files.push_back("pressfits.json");
     }
     if (!doc.parameters().empty()) {
         entries.emplace_back("parameters.json", dump(parametersJson(doc)));
@@ -1722,6 +1730,27 @@ OpenResult readDesign(zip_t* za, const std::string& prefix, std::string_view dis
                 if (auto issues = doc->execute(std::make_unique<model::AddJointCommand>(std::move(*joint)));
                     !issues.empty()) {
                     return fail(damaged(displayName, "joint " + name + ": " + issues.front().code));
+                }
+            }
+        } else if (why.rfind("missing", 0) != 0) {
+            return fail(damaged(displayName, why));
+        }
+        // Its press fits, after the components. (An assembly without any has no
+        // pressfits.json.)
+        if (const auto fits = readJson("pressfits.json"); fits) {
+            const json flist = fits->value("press_fits", json());
+            if (!flist.is_array()) return fail(damaged(displayName, "pressfits.json has no press fit list"));
+            for (const auto& fj : flist) {
+                const auto id = fj.is_object() ? PressFitId::parse(fj.value("id", "")) : std::nullopt;
+                const auto a = fj.is_object() ? model::ComponentId::parse(fj.value("a", "")) : std::nullopt;
+                const auto b = fj.is_object() ? model::ComponentId::parse(fj.value("b", "")) : std::nullopt;
+                if (!id || !a || !b)
+                    return fail(damaged(displayName,
+                                        "a press fit in pressfits.json is missing its id or components"));
+                if (auto issues = doc->execute(
+                        std::make_unique<model::AddPressFitCommand>(model::PressFit{*id, *a, *b}));
+                    !issues.empty()) {
+                    return fail(damaged(displayName, "press fit: " + issues.front().code));
                 }
             }
         } else if (why.rfind("missing", 0) != 0) {
