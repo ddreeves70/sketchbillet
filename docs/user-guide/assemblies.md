@@ -270,6 +270,67 @@ If a change to a part takes away what a joint sits on, the joint says so and
 moves nothing, until its sides are picked again with `joint.set`. It never
 guesses.
 
+## Checking for overlaps
+
+Two parts can't be in the same place. If they overlap in the assembly, a
+printed car won't go together: a wheel pushed into the body, an axle too thick
+for its hole. `check` looks at every pair of components that are close enough
+to touch, and lists each pair that overlaps, with how much space they share and
+where.
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli check Car.sb
+Car: no components overlap (3 components, 0 pairs close enough to check).
+```
+
+Here Wheel 1 is pushed 3 mm into the body's side:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.place component="Wheel 1" origin=10,3,12
+Car: assembly, 3 components, 2 parts
+  Body 1       Body       grounded at 0, 0, 0 mm
+  Wheel 1      Wheel      free     at 10, 3, 12 mm
+  Wheel 2      Wheel      free     at 70, -6, 12 mm
+Parts:
+  Body         1 step   ok        mass 39.68 g (PLA), 1 in the assembly
+    linked to Body.sb
+  Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+    linked to Wheel.sb
+Mass in all: 46.41 g
+wrote Car.sb
+$ sketchbillet_cli check Car.sb
+warning [assembly.overlap]: Body 1 and Wheel 1 overlap by 519.91 mm^3, around x 10.32, y 1.5, z 5.74 mm. Parts can't be in the same place, so they won't go together. Move one of them, or change one of their parts so they fit.
+```
+
+Put it back where it was, and it's fine again:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.place component="Wheel 1" origin=10,-6,12
+Car: assembly, 3 components, 2 parts
+  Body 1       Body       grounded at 0, 0, 0 mm
+  Wheel 1      Wheel      free     at 10, -6, 12 mm
+  Wheel 2      Wheel      free     at 70, -6, 12 mm
+Parts:
+  Body         1 step   ok        mass 39.68 g (PLA), 1 in the assembly
+    linked to Body.sb
+  Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+    linked to Wheel.sb
+Mass in all: 46.41 g
+wrote Car.sb
+$ sketchbillet_cli check Car.sb
+Car: no components overlap (3 components, 0 pairs close enough to check).
+```
+
+- **Touching is fine.** Parts that only touch, like a lid sitting on a box,
+  don't overlap.
+- **The place to look** is given as x, y and z in the assembly: it's the middle
+  of the space the two parts share.
+- **Fix it** by moving one of them, or by changing one part so they fit: a
+  bigger hole, a thinner axle.
+
 ## Linked and inside parts
 
 A part in an assembly is either **linked** to its own `.sb` file, or **inside**
@@ -335,6 +396,7 @@ it): you can move or copy the whole folder, and everything still links up.
 | Stop following the file: make a part inside | [`part.make_inside`](../cli/commands.md#partmake_inside) |
 | Save an inside part to its own file, and link it | [`part.save_as`](../cli/commands.md#partsave_as) |
 | List the components and parts | [`open --components`](../cli/open.md#an-assembly) |
+| Check that no components overlap | [`check`](../cli/check.md#overlaps-in-an-assembly) |
 
 Undo works for all of them in a script, like any other command.
 
