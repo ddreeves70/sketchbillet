@@ -1064,6 +1064,20 @@ view::SceneContent viewerScene(const plugin::DocumentList& docs, const plugin::S
         // Each component draws its part's bodies, placed. Components of the same
         // part share the part's shapes, so the view meshes each shape once.
         if (selection.doc() == id) out.selectedComponents = selection.components();
+        // Picking faces, edges and points on components: for a joint's sides, or
+        // to measure.
+        out.pickMeasure = selection.pickMode() == plugin::PickMode::Measure ||
+                          selection.pickMode() == plugin::PickMode::Joint;
+        if (selection.doc() == id) {
+            for (const auto& e : selection.elements()) {
+                const auto* c = design->findComponent(e.component);
+                const auto* built = c ? report->part(c->part) : nullptr;
+                const auto* r = built ? built->result(e.body) : nullptr;
+                if (!r || !r->names) continue;
+                const auto found = model::resolve(e.ref, *r->names);
+                if (found.found()) out.picked.push_back({e.body, found.index, e.ref.kind, e.component});
+            }
+        }
         for (const auto& c : design->components()) {
             const auto* part = design->findPart(c.part);
             const auto* built = report->part(c.part);
@@ -1111,7 +1125,8 @@ view::SceneContent viewerScene(const plugin::DocumentList& docs, const plugin::S
     // Picking edges: the picked ones, found by name in this rebuild.
     out.pickEdges = selection.pickMode() == plugin::PickMode::Edges;
     out.pickFaces = selection.pickMode() == plugin::PickMode::Faces;
-    out.pickMeasure = selection.pickMode() == plugin::PickMode::Measure;
+    out.pickMeasure =
+        selection.pickMode() == plugin::PickMode::Measure || selection.pickMode() == plugin::PickMode::Joint;
     if (selection.doc() == id) {
         for (const auto& e : selection.elements()) {
             const auto* r = report->result(e.body);
@@ -1127,11 +1142,15 @@ std::vector<plugin::PickedElement> pickedEdges(const plugin::DocumentList& docs,
                                                const std::vector<view::ScenePick>& picks) {
     std::vector<plugin::PickedElement> out;
     const auto* report = docs.lastRebuild(docs.active());
-    if (!report) return out;
+    const auto* design = docs.find(docs.active());
+    if (!report || !design) return out;
     for (const auto& p : picks) {
-        const auto* r = report->result(p.body);
+        // On a component: one of its part's bodies, in the part's own build.
+        const auto* c = p.component.isNil() ? nullptr : design->findComponent(p.component);
+        const auto* built = c ? report->part(c->part) : report;
+        const auto* r = built ? built->result(p.body) : nullptr;
         if (!r || !r->names) continue;
-        out.push_back({p.body, model::referTo(*r->names, p.kind, p.index)});
+        out.push_back({p.body, model::referTo(*r->names, p.kind, p.index), p.component});
     }
     return out;
 }

@@ -33,6 +33,7 @@ Right-click it in the tree to rename it, ground it or delete it.
 | **Find file** | Links the picked component's part to its file where it is now |
 | **Edit part** | Changes the picked component's part right here, in the assembly ([below](#changing-a-part)) |
 | **Open part** | Opens the picked component's part file beside the assembly, to change it there |
+| **Joint** | Joins two components: click a face or edge on the one that stays, then on the one that moves |
 | **Reset joints** | Puts every hinge and slider back to where it rests (its rest value) |
 | **Make part inside**, **Save part as file** | In the Parts dropdown: switch the picked component's part between inside and linked |
 
@@ -50,10 +51,18 @@ two sides and the line it turns about are drawn in green in the view while it's
 picked. Right-click it in the tree to rename it, turn it off or delete it.
 **Reset joints** on the Assemble tab puts every joint back to where it rests.
 
+**Making a joint:** click **Joint** on the Assemble tab. Click a face, a round
+edge (a hole's rim, an axle's end) or a straight edge on the component that stays
+put, then one on the component that moves to meet it. Properties says which to
+click next. The joint is made rigid, and picked: change its kind to Revolute or
+Slider in Properties, and tick **Flip** if the second component ends up the wrong
+way round. Click **Joint** again, or **Cancel** in Properties, to stop.
+
+![The joint tool: the tray's top picked in orange, and Properties saying to click a face or edge on the component that moves](images/app-joint-tool.png)
+
 ![The tray with its cover opened 100 degrees on its hinge: Joint1 picked in the feature tree, its hinge line drawn in green, and Properties showing its kind, value and limits](images/app-joint.png)
 
-For now, joints are made with [`sketchbillet_cli`](#joints); the Assemble tab's
-joint tool comes next.
+On the command line, they're made with [`joint.add`](#joints).
 
 ## Changing a part
 

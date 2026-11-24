@@ -729,6 +729,19 @@
       "crop": [0, 0, 1280, 685]
     },
     {
+      "out": "docs/user-guide/images/app-joint-tool.png",
+      "size": "1280x800",
+      "commands": [
+        "run --save Tray.sb feature.add_box size=40,40,10",
+        "run --save Cover.sb feature.add_box size=40,40,4",
+        "run --save Case.sb assembly.new",
+        "run --open Case.sb --save Case.sb component.insert file=Tray.sb",
+        "run --open Case.sb --save Case.sb component.insert file=Cover.sb at=60,0,0"
+      ],
+      "app": {"open": "Case.sb", "trigger": ["sb.modeling.joint"], "faces": "Tray 1:6"},
+      "crop": [0, 0, 1280, 685]
+    },
+    {
       "out": "docs/user-guide/images/app-joint.png",
       "size": "1280x800",
       "commands": [

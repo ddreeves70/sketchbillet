@@ -49,10 +49,13 @@ struct ScenePick {
     FeatureId body{};                                ///< The step whose body it's on.
     int index = -1;                                  ///< Its number in the body's elements, from 0.
     kernel::TopoKind kind = kernel::TopoKind::Edge;  ///< An edge, a face or a point (vertex).
+    /// In an assembly, the component it's on (the body is one of its part's);
+    /// nil in a part.
+    InstanceId component{};
 
     /// Checks whether two picks are the same edge.
     /// @param other The other pick.
-    /// @return True for the same body and number.
+    /// @return True for the same body (and component) and number.
     bool operator==(const ScenePick& other) const = default;
 };
 

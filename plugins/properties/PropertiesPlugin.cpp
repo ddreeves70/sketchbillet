@@ -282,6 +282,10 @@ private:
             showDesign();
             return;
         }
+        if (ctx_.selection().pickMode() == plugin::PickMode::Joint) {
+            showJointPicking();
+            return;
+        }
         if (const auto& picked = ctx_.selection().components(); !picked.empty()) {
             shownJoint_ = {};
             showComponent(picked);
@@ -373,6 +377,39 @@ private:
             }
         }
         status_->setText(problems.trimmed());
+    }
+
+    // The joint tool: what to click next, and a way out.
+    void showJointPicking() {
+        shown_ = FeatureId{};
+        shownComponent_ = {};
+        shownJoint_ = {};
+        clearForm();
+        title_->setText(tr("New joint"));
+        auto* form = new QVBoxLayout(form_);
+        auto* step = new QLabel(form_);
+        step->setObjectName(QStringLiteral("jointstep"));
+        step->setWordWrap(true);
+        form->addWidget(step);
+        auto* cancel = new QPushButton(tr("Cancel"), form_);
+        cancel->setObjectName(QStringLiteral("jointcancel"));
+        connect(cancel, &QPushButton::clicked, this,
+                [this] { ctx_.selection().setPickMode(plugin::PickMode::Bodies); });
+        form->addWidget(cancel, 0, Qt::AlignLeft);
+        const auto& picked = ctx_.selection().elements();
+        const auto* design = ctx_.documents().find(ctx_.selection().doc());
+        const auto* first =
+            design && !picked.empty() ? design->findComponent(picked.front().component) : nullptr;
+        step->setText(
+            first ? tr("Now click a face, round edge or straight edge on the component that moves to "
+                       "meet it. %1 stays where it is.")
+                        .arg(QString::fromStdString(first->name))
+                  : tr("Click a face, a round edge (a hole's rim, an axle's end) or a straight edge on "
+                       "the component that stays where it is."));
+        status_->setStyleSheet(QStringLiteral("color: #57606a"));
+        status_->setText(
+            tr("Round edges join at their centers, faces at theirs, and the two point at each "
+               "other. Change the joint's kind, or flip it, after."));
     }
 
     // An assembly's joint: what it joins, its kind, how far it's turned or slid,

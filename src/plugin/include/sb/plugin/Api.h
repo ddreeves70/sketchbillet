@@ -186,7 +186,9 @@ class PluginContext;
 /// actions that open a design file (ActionSpec::openFile).
 /// Version 64 added picking an assembly's joints (Selection::joints(),
 /// Selection::setJoints() and SelectionChanged::joints).
-inline constexpr int kPluginApiVersion = 64;
+/// Version 65 added picking faces, edges and points on an assembly's components
+/// (PickMode::Joint, PickedElement::component).
+inline constexpr int kPluginApiVersion = 65;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

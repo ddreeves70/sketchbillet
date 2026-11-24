@@ -16,6 +16,10 @@ enum class PickMode {
     /// The face, edge or point under the mouse, to measure: up to two at a time
     /// (a third click starts again).
     Measure,
+    /// In an assembly, the face, edge or point under the mouse on a component,
+    /// for the two sides of a new joint (Assemble > Joint): up to two at a time,
+    /// like Measure.
+    Joint,
 };
 
 /// One edge, face or point picked in a viewer: which body, and a lasting reference to it.
@@ -23,11 +27,16 @@ struct PickedElement {
     FeatureId body{};  ///< The step whose body it's on.
     model::GeometryRef
         ref{};  ///< The edge, face or point, by name (see model::ShapeNames); ref.kind says which.
+    /// In an assembly, the component it's on: the body is one of that
+    /// component's part's. Nil in a part.
+    InstanceId component{};
 
     /// Checks whether two picks are the same element.
     /// @param other The other pick.
-    /// @return True for the same body and reference.
-    bool operator==(const PickedElement& other) const { return body == other.body && ref == other.ref; }
+    /// @return True for the same body, reference and component.
+    bool operator==(const PickedElement& other) const {
+        return body == other.body && ref == other.ref && component == other.component;
+    }
 };
 
 }  // namespace sb::plugin

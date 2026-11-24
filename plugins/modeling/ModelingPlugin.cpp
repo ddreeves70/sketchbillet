@@ -174,6 +174,9 @@ void addAssembleTools(plugin::PluginContext& ctx) {
         const auto& mode = ctx.toolbarMode();
         if (assembly && mode.empty()) ctx.setToolbarMode(kAssemblyMode);
         if (!assembly && mode == kAssemblyMode) ctx.setToolbarMode("");
+        // The joint tool only works in an assembly.
+        if (!assembly && ctx.selection().pickMode() == plugin::PickMode::Joint)
+            ctx.selection().setPickMode(plugin::PickMode::Bodies);
     };
     ctx.listen<plugin::ActiveDocumentChanged>([followDesign](const auto&) { followDesign(); });
     ctx.listen<plugin::DocumentChanged>([followDesign](const auto&) { followDesign(); });
@@ -328,6 +331,61 @@ void addAssembleTools(plugin::PluginContext& ctx) {
                 return link ? link->path : std::string();
             },
         .enabled = pickedLinked(true)});
+    // The joint tool: click a face, edge or point on the component that stays,
+    // then one on the component that moves; the joint is made (rigid, to begin
+    // with) and picked, so Properties can change its kind.
+    ctx.addAction(ActionSpec{
+        .id = "sb.modeling.joint",
+        .text = "Joint",
+        .menu = "Assemble/Joints",
+        .toolbar = true,
+        .icon = std::string(icons::modeling::joint_svg),
+        .tip = "Join two components: click a face or edge on the one that stays, then one on the one that "
+               "moves.",
+        .run =
+            [&ctx] {
+                auto& sel = ctx.selection();
+                sel.setPickMode(sel.pickMode() == plugin::PickMode::Joint ? plugin::PickMode::Bodies
+                                                                          : plugin::PickMode::Joint);
+            },
+        .checked = [&ctx] { return ctx.selection().pickMode() == plugin::PickMode::Joint; },
+        .enabled =
+            [assembly] {
+                const auto* doc = assembly();
+                return doc && doc->components().size() >= 2;
+            }});
+    ctx.listen<plugin::SelectionChanged>([&ctx](const plugin::SelectionChanged& e) {
+        auto& sel = ctx.selection();
+        if (sel.pickMode() != plugin::PickMode::Joint || e.elements.size() != 2) return;
+        const auto first = e.elements[0], second = e.elements[1];
+        if (first.component.isNil() || second.component.isNil()) return;
+        if (first.component == second.component) {
+            // Both on one component: the second click starts again.
+            sel.setElements(e.doc, {second});
+            return;
+        }
+        auto side = [](const plugin::PickedElement& p) {
+            model::JointOrigin o;
+            o.component = p.component;
+            o.body = p.body;
+            o.element = p.ref;
+            return o;
+        };
+        model::Joint joint;
+        joint.a = side(first);
+        joint.b = side(second);
+        auto command = std::make_unique<model::AddJointCommand>(joint);
+        auto* made = command.get();
+        auto problems = ctx.documents().execute(e.doc, std::move(command));
+        if (!problems.empty()) {
+            ctx.log(problems.front().message);
+            sel.setElements(e.doc, {});
+            return;
+        }
+        const JointId id = made->joint().id;
+        sel.setPickMode(plugin::PickMode::Bodies);
+        sel.setJoints(e.doc, {id});
+    });
     ctx.addAction(
         ActionSpec{.id = "sb.modeling.reset_joints",
                    .text = "Reset joints",

@@ -45,9 +45,15 @@ void Selection::setElements(const DocId& doc, std::vector<PickedElement> element
     const auto* design = docs_.find(doc);
     std::vector<PickedElement> kept;
     if (design) {
+        // A pick on a component is on one of its part's bodies.
+        auto bodyThere = [design](const PickedElement& e) {
+            if (e.component.isNil()) return design->find(e.body) != nullptr;
+            const auto* c = design->findComponent(e.component);
+            const auto* part = c ? design->findPart(c->part) : nullptr;
+            return part && part->find(e.body) != nullptr;
+        };
         for (auto& e : elements) {
-            if (design->find(e.body) && !e.ref.name.empty() &&
-                std::find(kept.begin(), kept.end(), e) == kept.end()) {
+            if (bodyThere(e) && !e.ref.name.empty() && std::find(kept.begin(), kept.end(), e) == kept.end()) {
                 kept.push_back(std::move(e));
             }
         }
