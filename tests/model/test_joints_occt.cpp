@@ -7,6 +7,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <memory>
@@ -17,6 +18,7 @@
 #include "sb/model/CommandRegistry.h"
 #include "sb/model/Commands.h"
 #include "sb/model/Document.h"
+#include "sb/model/JointDrag.h"
 
 using namespace sb;
 using namespace sb::model;
@@ -141,14 +143,20 @@ auto edgeAlongX = [](double y, double z) {
     };
 };
 
-// Every joint that placed something: its two origins meet, pointing at each other.
+// Every joint that placed something: its two origins meet (or are as far apart
+// along the joint as it slides), pointing at each other.
 void checkJointsMeet(const Assembly& box, const RebuildReport& report) {
     for (const auto& j : box.doc.joints()) {
         const auto* r = report.joint(j.id);
         REQUIRE(r);
         if (!r->placed) continue;
         REQUIRE((r->aFrame && r->bFrame));
-        CHECK(distance(r->aFrame->origin, r->bFrame->origin) == Approx(0).margin(kTight));
+        // A slider's (and an offset's) gap is along a's z.
+        const double gap = j.offset + (j.kind == JointKind::Slider ? j.value : 0);
+        const auto& a = *r->aFrame;
+        const kernel::Point3 at{a.origin.x + gap * a.zAxis.x, a.origin.y + gap * a.zAxis.y,
+                                a.origin.z + gap * a.zAxis.z};
+        CHECK(distance(at, r->bFrame->origin) == Approx(0).margin(kTight));
         CHECK(dot(r->aFrame->zAxis, r->bFrame->zAxis) == Approx(j.flip ? 1.0 : -1.0).margin(1e-9));
     }
 }
@@ -417,4 +425,70 @@ TEST_CASE("a peg's end rim joined to a hole's rim stands the peg on the hole, fa
     CHECK(bottom.y == Approx(20).margin(kTight));
     CHECK(bottom.z == Approx(5).margin(kTight));
     CHECK(at.zAxis.z == Approx(1).margin(1e-9));
+}
+
+TEST_CASE("dragging a joint moves exactly what changing its value moves, the whole chain together",
+          "[model][joints][occt]") {
+    // Base (grounded), a hinged Lid on it, a Knob stuck on the Lid, and a Tray
+    // that slides on the Base. The Tray's joint names the Base second, so the
+    // joint places its first side: it moves against the value.
+    Assembly box;
+    const auto base = box.insert(boxPart("Base", {40, 40, 10}));
+    const auto lid = box.insert(boxPart("Lid", {40, 40, 4}));
+    const auto knob = box.insert(boxPart("Knob", {6, 6, 6}));
+    const auto tray = box.insert(boxPart("Tray", {20, 20, 2}));
+    const auto hinge = box.join(JointKind::Revolute, box.side(base, TopoKind::Edge, edgeAlongX(40, 10)),
+                                box.side(lid, TopoKind::Edge, edgeAlongX(40, 0)));
+    const auto stuck = box.join(JointKind::Rigid, box.side(lid, TopoKind::Face, face(0, 0, 1, 4)),
+                                box.side(knob, TopoKind::Face, face(0, 0, -1, 0)));
+    const auto slide = box.join(JointKind::Slider, box.side(tray, TopoKind::Face, face(0, 0, 1, 2)),
+                                box.side(base, TopoKind::Face, face(0, 0, -1, 0)), 3);
+    Joint limited = *box.doc.findJoint(hinge);
+    limited.lowest = 0;
+    limited.highest = 110 * kPi / 180;
+    REQUIRE(box.doc.execute(std::make_unique<SetJointCommand>(limited)).empty());
+
+    const auto before = box.build();
+    CHECK(*before.placingJoint(lid) == hinge);
+    CHECK(*before.placingJoint(knob) == stuck);
+    CHECK(*before.placingJoint(tray) == slide);
+    CHECK(before.placingJoint(base) == nullptr);
+
+    // Each drag's motion, put on where the rebuild had each component, is where
+    // a rebuild with the new value puts it; nothing else moves.
+    auto check = [&](const JointId& joint, double value, double expect, std::vector<ComponentId> moved) {
+        const auto drag = dragJoint(box.doc, before, joint, value);
+        REQUIRE(drag);
+        CHECK(drag->value == Approx(expect).margin(1e-12));
+        std::sort(moved.begin(), moved.end());
+        auto got = drag->components;
+        std::sort(got.begin(), got.end());
+        CHECK(got == moved);
+        const Joint old = *box.doc.findJoint(joint);
+        REQUIRE(box.setValue(joint, drag->value).empty());
+        const auto after = box.build();
+        checkJointsMeet(box, after);
+        const Placement m = kernel::fromMotion(drag->motion);
+        for (const auto& c : box.doc.components()) {
+            const bool moves = std::find(got.begin(), got.end(), c.id) != got.end();
+            const Placement want =
+                moves ? kernel::compose(m, *before.placementOf(c.id)) : *before.placementOf(c.id);
+            INFO(c.name);
+            CHECK(kernel::samePlacement(*after.placementOf(c.id), want, kTight));
+        }
+        REQUIRE(box.doc.execute(std::make_unique<SetJointCommand>(old)).empty());
+    };
+    check(hinge, 60 * kPi / 180, 60 * kPi / 180, {lid, knob});
+    check(hinge, 200 * kPi / 180, 110 * kPi / 180, {lid, knob});  // kept within its limits
+    check(hinge, -1, 0, {lid, knob});
+    check(slide, 10, 10, {tray});
+    check(slide, -4.5, -4.5, {tray});
+
+    // A rigid joint, or one that's off, doesn't drag.
+    CHECK_FALSE(dragJoint(box.doc, before, stuck, 1));
+    Joint off = *box.doc.findJoint(slide);
+    off.off = true;
+    REQUIRE(box.doc.execute(std::make_unique<SetJointCommand>(off)).empty());
+    CHECK_FALSE(dragJoint(box.doc, box.build(), slide, 1));
+    CHECK_FALSE(dragJoint(box.doc, before, JointId::generate(), 1));
 }

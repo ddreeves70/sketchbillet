@@ -5,6 +5,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
+#include <numbers>
 
 #include "sb/kernel_occt/OcctKernel.h"
 #include "sb/model/AssemblyCommands.h"
@@ -259,4 +260,110 @@ TEST_CASE("a free component has handles; dragging previews it and dropping place
     CHECK_FALSE(k.viewer->preview());
     CHECK(k.design().findComponent(w2)->placement.origin.z == 0);
     CHECK(k.viewer->handles()[0].at.z == Approx(2));
+}
+
+TEST_CASE(
+    "a component on a hinge gets a ring and one on a slider an arrow; dragging moves it along its "
+    "joint, with what it carries, within its limits",
+    "[movehandles][assembly][joints]") {
+    SketchBillet k;
+    auto& docs = k.host.documents();
+    REQUIRE(docs.run(k.doc, "assembly.new", {}).empty());
+    auto part = [](const char* name) {
+        auto p = std::make_unique<model::Document>(model::DocKind::Part, name);
+        REQUIRE(p->execute(std::make_unique<model::AddFeatureCommand>(std::make_unique<model::BoxFeature>(
+                               "Box1", kernel::Vec3{}, kernel::Vec3{10, 10, 4})))
+                    .empty());
+        return p;
+    };
+    for (const char* name : {"Body", "Lid", "Knob", "Tray"})
+        REQUIRE(docs.execute(k.doc, std::make_unique<model::InsertPartCommand>(part(name), 1)).empty());
+    const auto body = k.design().components()[0].id;
+    const auto lid = k.design().components()[1].id;
+    const auto knob = k.design().components()[2].id;
+    const auto tray = k.design().components()[3].id;
+    // Each joint on the parts' origins: Lid turns on Body (0 to 90 degrees), Knob
+    // is stuck on Lid, and Tray slides on Body. Tray's joint names Body second,
+    // so it moves Tray, its first side, against its value.
+    auto join = [&](model::JointKind kind, InstanceId a, InstanceId b) {
+        model::Joint j;
+        j.kind = kind;
+        j.a.component = a;
+        j.b.component = b;
+        if (kind == model::JointKind::Revolute) {
+            j.lowest = 0;
+            j.highest = std::numbers::pi / 2;
+        }
+        REQUIRE(docs.execute(k.doc, std::make_unique<model::AddJointCommand>(j)).empty());
+        return k.design().joints().back().id;
+    };
+    const auto hinge = join(model::JointKind::Revolute, body, lid);
+    join(model::JointKind::Rigid, lid, knob);
+    const auto runner = join(model::JointKind::Slider, tray, body);
+
+    // Grounded, or held by a rigid joint: no handles.
+    k.host.selection().setComponents(k.doc, {body});
+    CHECK(k.viewer->handles().empty());
+    k.host.selection().setComponents(k.doc, {knob});
+    CHECK(k.viewer->handles().empty());
+
+    // On the hinge: a ring about its line.
+    k.host.selection().setComponents(k.doc, {lid});
+    REQUIRE(k.viewer->handles().size() == 1);
+    auto h = k.viewer->handles()[0];
+    CHECK(h.id == "turn");
+    CHECK(h.kind == viewer::HandleKind::Ring);
+    CHECK(h.direction.z == Approx(1));
+    CHECK(h.length == plugins::kRingPixels);
+
+    // Turning it previews Lid and Knob turned, in whole degrees; dropping sets the
+    // hinge's value, as one step.
+    constexpr double degree = std::numbers::pi / 180;
+    const auto label = k.design().undoLabel();
+    auto* user = k.viewer->handleUser();
+    REQUIRE(user);
+    user->dragged("turn", {0.5, 0, 0});  // 28.6 degrees
+    REQUIRE(k.viewer->preview());
+    CHECK(k.viewer->preview()->components == std::vector{lid, knob});
+    CHECK(k.viewer->preview()->motion.angle == Approx(29 * degree));
+    CHECK(k.viewer->preview()->motion.axis.z == Approx(1));
+    CHECK(k.design().findJoint(hinge)->value == 0);
+    CHECK(k.design().undoLabel() == label);
+    user->dragged("turn", {9, 0, 0});  // far past its limit: it stops there
+    CHECK(k.viewer->preview()->motion.angle == Approx(90 * degree));
+    user->dropped("turn", {9, 0, 0});
+    CHECK_FALSE(k.viewer->preview());
+    CHECK(k.design().findJoint(hinge)->value == Approx(90 * degree));
+    CHECK(k.design().undoLabel() == "Change Joint1");
+    REQUIRE(k.viewer->handles().size() == 1);  // still there, for another turn
+    CHECK(k.viewer->handles()[0].id == "turn");
+
+    // Escape: nothing changes.
+    user->dragged("turn", {-0.3, 0, 0});
+    CHECK(k.viewer->preview()->motion.angle == Approx(-17 * degree));
+    user->cancelled();
+    CHECK_FALSE(k.viewer->preview());
+    CHECK(k.design().findJoint(hinge)->value == Approx(90 * degree));
+
+    // On the slider: an arrow along it. Tray faces Body, so its arrow points down;
+    // dragged 5 mm down that way, Tray goes 5 mm down, and the value goes the other way.
+    k.host.selection().setComponents(k.doc, {tray});
+    REQUIRE(k.viewer->handles().size() == 1);
+    h = k.viewer->handles()[0];
+    CHECK(h.id == "slide");
+    CHECK(h.kind == viewer::HandleKind::Arrow);
+    CHECK(h.direction.z == Approx(-1));
+    user = k.viewer->handleUser();
+    user->dragged("slide", {0, 0, -5.3});
+    REQUIRE(k.viewer->preview());
+    CHECK(k.viewer->preview()->components == std::vector{tray});
+    CHECK(k.viewer->preview()->motion.offset.z == Approx(-5));
+    CHECK(k.viewer->handles()[0].at.z == Approx(-5));  // the arrow follows
+    user->dropped("slide", {0, 0, -5.3});
+    CHECK(k.design().findJoint(runner)->value == Approx(-5));
+    const auto* report = docs.lastRebuild(k.doc);
+    REQUIRE(report);
+    CHECK(report->placementOf(tray)->origin.z == Approx(-5));
+    REQUIRE(docs.undo(k.doc));  // the whole drag
+    CHECK(k.design().findJoint(runner)->value == 0);
 }

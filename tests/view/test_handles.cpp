@@ -127,3 +127,45 @@ TEST_CASE("dragging a square slides on its plane", "[view][handles]") {
     auto side = [](double sx, double sy) { return Ray{{(sx - 200) / 2, 100, (150 - sy) / 2}, {0, -1, 0}}; };
     CHECK_FALSE(handleDrag(square(), side(200, 150), side(220, 150)));
 }
+
+TEST_CASE("a ring is drawn as a circle, picked near it, and drags round, by the angle turned",
+          "[view][handles]") {
+    ViewHandle ring;
+    ring.id = "turn";
+    ring.kind = HandleKind::Ring;
+    ring.direction = {0, 0, 1};
+    ring.length = 30;
+    const auto lines = handleLines(ring);
+    REQUIRE(lines.size() == 96);  // 48 short lines
+    for (const auto& p : lines) {
+        CHECK(std::hypot(p.x, p.y) == Approx(30));
+        CHECK(p.z == 0);
+    }
+    // On the circle it's picked; in the middle, or well outside, it isn't.
+    CHECK(handleAt({ring}, fromAbove, *fromAbove({30, 0, 0}), 8) == std::optional<std::size_t>(0));
+    CHECK(handleAt({ring}, fromAbove, *fromAbove({0, -29, 0}), 8) == std::optional<std::size_t>(0));
+    CHECK_FALSE(handleAt({ring}, fromAbove, *fromAbove({0, 0, 0}), 8));
+    CHECK_FALSE(handleAt({ring}, fromAbove, *fromAbove({50, 0, 0}), 8));
+    // Arrows come first, where they cross it.
+    ViewHandle across = arrow("x", {1, 0, 0});
+    across.length = 40;
+    CHECK(handleAt({ring, across}, fromAbove, *fromAbove({30, 0, 0}), 8) == std::optional<std::size_t>(1));
+    // Seen edge on, it can't be turned: it isn't picked.
+    ViewHandle side = ring;
+    side.direction = {1, 0, 0};
+    CHECK_FALSE(handleAt({side}, fromAbove, *fromAbove({0, 30, 0}), 8));
+
+    // From (30, 0) to (0, 30) is a quarter turn counterclockwise, looking down z;
+    // to (0, -30) a quarter turn back. It turns the same wherever it's grabbed.
+    const auto start = downAt(200 + 60, 150);
+    const auto left = handleDrag(ring, start, downAt(200, 150 - 60));
+    REQUIRE(left);
+    CHECK(left->x == Approx(std::acos(-1.0) / 2));
+    CHECK(left->y == 0);
+    CHECK(left->z == 0);
+    const auto right = handleDrag(ring, start, downAt(200, 150 + 80));
+    REQUIRE(right);
+    CHECK(right->x == Approx(-std::acos(-1.0) / 2));
+    // In its middle, there's no way round.
+    CHECK_FALSE(handleDrag(ring, start, downAt(200, 150)));
+}

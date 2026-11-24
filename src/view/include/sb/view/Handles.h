@@ -1,8 +1,8 @@
 #pragma once
 
 /// @file
-/// Handles: arrows and squares drawn on a picked body, dragged with the mouse to
-/// move it. Plain data and the maths for drawing, picking and dragging them; no
+/// Handles: arrows, squares and rings drawn on a picked body, dragged with the
+/// mouse to move or turn it. Plain data and the maths for drawing, picking and dragging them; no
 /// Qt or OCCT.
 
 #include <cstddef>
@@ -20,6 +20,7 @@ namespace sb::view {
 enum class HandleKind {
     Arrow,   ///< An arrow: drags along its direction only.
     Square,  ///< A small square: drags anywhere on its flat plane.
+    Ring,    ///< A circle: drags round, turning about the line through its middle.
 };
 
 /// Something the student drags in the 3D view, like the arrows on a picked
@@ -28,12 +29,14 @@ enum class HandleKind {
 struct ViewHandle {
     std::string id{};                     ///< Says which handle was dragged, like "x".
     HandleKind kind = HandleKind::Arrow;  ///< An arrow or a square.
-    kernel::Vec3 at{};                    ///< Arrow: where it starts. Square: its middle. In mm.
+    kernel::Vec3 at{};                    ///< Arrow: where it starts. Square, ring: its middle. In mm.
     /// Arrow: which way it points (a unit vector), the only way it drags.
     /// Square: the direction square to its plane (a unit vector); it drags on that plane.
+    /// Ring: the line it turns about (a unit vector), square to its circle.
     kernel::Vec3 direction{1, 0, 0};
-    double length =
-        20;       ///< Arrow: how long it is. Square: how long each side is. In mm, or pixels (see `pixels`).
+    /// Arrow: how long it is. Square: how long each side is. Ring: its radius. In
+    /// mm, or pixels (see `pixels`).
+    double length = 20;
     Rgb color{};  ///< Its color.
     /// True if `length` is in screen pixels: the view keeps the handle the same
     /// size on the screen however far it zooms. The maths below always takes mm.
@@ -64,14 +67,15 @@ using Projection = std::function<std::optional<ScreenPoint>(const kernel::Vec3& 
 std::pair<kernel::Vec3, kernel::Vec3> planeAxes(const kernel::Vec3& normal);
 
 /// Works out the lines that draw a handle: an arrow's shaft and a head made of
-/// four spokes, or a square's four sides.
+/// four spokes, a square's four sides, or a ring's circle (48 short lines).
 /// @param handle The handle.
 /// @return Pairs of points, in mm: each pair is one line.
 std::vector<kernel::Vec3> handleLines(const ViewHandle& handle);
 
 /// Finds which handle is under the mouse. Arrows come first (the part away
-/// from where they start), then squares; an arrow pointing almost straight at
-/// the camera can't be picked, since it can't be dragged.
+/// from where they start), then rings (near their circle), then squares; an
+/// arrow pointing almost straight at the camera, or a ring seen edge on, can't
+/// be picked, since it can't be dragged.
 /// @param handles The handles.
 /// @param project Where points are drawn on the screen.
 /// @param mouse Where the mouse is.
@@ -83,12 +87,16 @@ std::optional<std::size_t> handleAt(const std::vector<ViewHandle>& handles, cons
 /// Works out how far a handle was dragged, from the line of sight through the
 /// mouse when the drag started and now: along an arrow, the change in the point
 /// on it nearest the line of sight; on a square, the change in where the line of
-/// sight meets its plane.
+/// sight meets its plane; round a ring, how far where the line of sight meets
+/// its plane turned about its middle.
 /// @param handle The handle being dragged.
 /// @param start The line of sight when the button went down.
 /// @param now The line of sight now.
-/// @return How far, along x, y and z (mm), or nothing if it can't be worked out
-///         (an arrow pointing straight at the camera, a plane seen edge on).
+/// @return How far, along x, y and z (mm). For a ring, x is how far it turned
+///         (radians, counterclockwise looking back along its direction, from
+///         -pi to pi), and y and z are 0. Nothing if it can't be worked out
+///         (an arrow pointing straight at the camera, a plane seen edge on, the
+///         mouse on a ring's middle).
 std::optional<kernel::Vec3> handleDrag(const ViewHandle& handle, const Ray& start, const Ray& now);
 
 }  // namespace sb::view

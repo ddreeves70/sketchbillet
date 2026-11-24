@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 
 namespace sb::view {
 
@@ -82,6 +83,19 @@ std::optional<Vec3> onPlane(const Vec3& origin, const Vec3& normal, const Ray& r
     return add(ray.from, scale(ray.direction, t));
 }
 
+constexpr int kRingSides = 48;  // a ring is drawn and picked as this many short lines
+
+// The points round a ring, the first again at the end.
+std::vector<Vec3> ringPoints(const ViewHandle& h) {
+    const auto [u, v] = planeAxes(unit(h.direction));
+    std::vector<Vec3> out;
+    for (int i = 0; i <= kRingSides; ++i) {
+        const double t = 2 * std::numbers::pi * i / kRingSides;
+        out.push_back(add(h.at, add(scale(u, h.length * std::cos(t)), scale(v, h.length * std::sin(t)))));
+    }
+    return out;
+}
+
 }  // namespace
 
 std::pair<Vec3, Vec3> planeAxes(const Vec3& normal) {
@@ -99,6 +113,14 @@ std::vector<Vec3> handleLines(const ViewHandle& h) {
         for (int i = 0; i < 4; ++i) {
             out.push_back(c[i]);
             out.push_back(c[(i + 1) % 4]);
+        }
+        return out;
+    }
+    if (h.kind == HandleKind::Ring) {
+        const auto points = ringPoints(h);
+        for (std::size_t i = 0; i + 1 < points.size(); ++i) {
+            out.push_back(points[i]);
+            out.push_back(points[i + 1]);
         }
         return out;
     }
@@ -139,6 +161,31 @@ std::optional<std::size_t> handleAt(const std::vector<ViewHandle>& handles, cons
     if (best) return best;
     for (std::size_t i = 0; i < handles.size(); ++i) {
         const auto& h = handles[i];
+        if (h.kind != HandleKind::Ring) continue;
+        // Seen edge on, it's a line, and can't be turned.
+        const auto middle = project(h.at);
+        const auto side = project(add(h.at, scale(planeAxes(unit(h.direction)).first, h.length)));
+        const auto other = project(add(h.at, scale(planeAxes(unit(h.direction)).second, h.length)));
+        if (!middle || !side || !other) continue;
+        const double wide = std::hypot(side->x - middle->x, side->y - middle->y);
+        const double tall = std::hypot(other->x - middle->x, other->y - middle->y);
+        if (std::min(wide, tall) < 0.2 * std::max(wide, tall)) continue;
+        std::optional<ScreenPoint> last;
+        for (const auto& p : ringPoints(h)) {
+            const auto s = project(p);
+            if (s && last) {
+                const double distance = distanceToSegment(mouse, *last, *s);
+                if (distance <= bestDistance) {
+                    bestDistance = distance;
+                    best = i;
+                }
+            }
+            last = s;
+        }
+    }
+    if (best) return best;
+    for (std::size_t i = 0; i < handles.size(); ++i) {
+        const auto& h = handles[i];
         if (h.kind != HandleKind::Square) continue;
         Vec3 c[4];
         squareCorners(h, c);
@@ -165,6 +212,11 @@ std::optional<Vec3> handleDrag(const ViewHandle& h, const Ray& start, const Ray&
     const auto a = onPlane(h.at, d, start);
     const auto b = onPlane(h.at, d, now);
     if (!a || !b) return std::nullopt;
+    if (h.kind == HandleKind::Ring) {
+        const Vec3 from = sub(*a, h.at), to = sub(*b, h.at);
+        if (norm(from) < 1e-9 || norm(to) < 1e-9) return std::nullopt;
+        return Vec3{std::atan2(dot(cross(from, to), d), dot(from, to)), 0, 0};
+    }
     Vec3 by = sub(*b, *a);
     // Exactly on the plane, even after rounding.
     by = sub(by, scale(d, dot(by, d)));

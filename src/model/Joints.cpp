@@ -15,6 +15,7 @@
 
 #include "sb/model/Assembly.h"
 #include "sb/model/Document.h"
+#include "sb/model/JointDrag.h"
 
 namespace sb::model {
 
@@ -163,7 +164,6 @@ Placement jointMotion(const Joint& j) {
 void Document::placeComponents(RebuildReport& report) const {
     for (const auto& c : components_) {
         report.placements_[c.id] = c.placement;
-        report.byJoint_[c.id] = false;
     }
     // Each joint's origins on its parts, found first.
     struct Usable {
@@ -211,14 +211,14 @@ void Document::placeComponents(RebuildReport& report) const {
                         kernel::compose(kernel::compose(atA, motion), kernel::inverse(u.b));
                     placed.insert(j.b.component);
                     from[j.b.component] = j.a.component;
-                    report.byJoint_[j.b.component] = true;
+                    report.placedBy_[j.b.component] = j.id;
                 } else {
                     const Placement atB = kernel::compose(report.placements_[j.b.component], u.b);
                     report.placements_[j.a.component] =
                         kernel::compose(kernel::compose(atB, kernel::inverse(motion)), kernel::inverse(u.a));
                     placed.insert(j.a.component);
                     from[j.a.component] = j.b.component;
-                    report.byJoint_[j.a.component] = true;
+                    report.placedBy_[j.a.component] = j.id;
                 }
                 report.joints_[j.id].placed = true;
                 more = true;
@@ -297,6 +297,59 @@ void Document::placeComponents(RebuildReport& report) const {
                                      " off, or change a value in the loop so its sides meet.",
                                  {}});
     }
+}
+
+std::optional<JointDrag> dragJoint(const Document& assembly, const RebuildReport& report,
+                                   const JointId& joint, double value) {
+    const Joint* j = assembly.findJoint(joint);
+    if (!j || j->off || j->kind == JointKind::Rigid) return std::nullopt;
+    const JointResult* result = report.joint(joint);
+    if (!result || !result->placed || !result->aFrame) return std::nullopt;
+    // Which side it placed: b moves with the value, or a moves against it.
+    double sign = 0;
+    ComponentId moving;
+    if (const auto* by = report.placingJoint(j->b.component); by && *by == joint) {
+        sign = 1;
+        moving = j->b.component;
+    } else if (const auto* by2 = report.placingJoint(j->a.component); by2 && *by2 == joint) {
+        sign = -1;
+        moving = j->a.component;
+    } else {
+        return std::nullopt;
+    }
+
+    JointDrag out;
+    out.value = value;
+    if (j->lowest) out.value = std::max(out.value, *j->lowest);
+    if (j->highest) out.value = std::min(out.value, *j->highest);
+    // A change of the value turns (or slides) b's origin about a's z, in a's
+    // frame: the same change in the assembly, about the line through a's origin.
+    const double change = sign * (out.value - j->value);
+    const Placement& frame = *result->aFrame;
+    if (j->kind == JointKind::Revolute) {
+        out.motion.center = frame.origin;
+        out.motion.axis = frame.zAxis;
+        out.motion.angle = change;
+    } else {
+        out.motion.offset = {frame.zAxis.x * change, frame.zAxis.y * change, frame.zAxis.z * change};
+    }
+
+    // Every component whose way back to where it was placed from goes through
+    // this joint moves with it.
+    for (const auto& c : assembly.components()) {
+        ComponentId at = c.id;
+        for (std::size_t steps = 0; steps <= assembly.components().size(); ++steps) {
+            if (at == moving) {
+                out.components.push_back(c.id);
+                break;
+            }
+            const JointId* by = report.placingJoint(at);
+            const Joint* step = by ? assembly.findJoint(*by) : nullptr;
+            if (!step) break;
+            at = step->b.component == at ? step->a.component : step->b.component;
+        }
+    }
+    return out;
 }
 
 }  // namespace sb::model

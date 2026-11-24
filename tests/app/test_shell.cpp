@@ -3216,6 +3216,14 @@ TEST_CASE("a joined component is drawn, and shown in Properties, where its joint
     settle();
     CHECK(app.field<QLabel>("place")->text() == QStringLiteral("x 0 mm, y 0 mm, z 0 mm"));
     CHECK(app.field<QLabel>("facing")->text() == QStringLiteral("x along 1, 0, 0; z along 0, 0, -1"));
+    // And how it moves: it doesn't, by itself.
+    CHECK(
+        app.field<QLabel>("moves")->text() ==
+        QStringLiteral("Joint1 holds it to Body 1, so it doesn't drag by itself. To move it, move Body 1, or "
+                       "change or delete Joint1."));
+    app.host.selection().setComponents(app.shell->activeDesign(), {doc.components()[0].id});
+    settle();
+    CHECK(app.field<QLabel>("moves")->text() == QStringLiteral("It's grounded, so it stays where it is."));
 }
 
 TEST_CASE("joints in the app: the tree lists them, Properties changes them, Reset puts them back",
@@ -3302,6 +3310,14 @@ TEST_CASE("joints in the app: the tree lists them, Properties changes them, Rese
     tree->topLevelItem(1)->child(0)->setText(0, QStringLiteral("Hinge"));
     settle();
     CHECK(doc.findJoint(joint)->name == "Hinge");
+
+    // The lid, picked, says how it moves.
+    app.host.selection().setComponents(app.shell->activeDesign(), {doc.components()[1].id});
+    settle();
+    CHECK(app.field<QLabel>("moves")->text() ==
+          QStringLiteral(
+              "Hinge turns it on Body 1: drag the purple ring in the 3D view to turn it, from 0\u00B0 "
+              "to 30\u00B0."));
 }
 
 TEST_CASE("the joint tool: a side on one component, then on another, makes a joint and picks it",

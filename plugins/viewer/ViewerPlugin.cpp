@@ -84,6 +84,7 @@ public:
     viewer::IHandleUser* handleUser() const override { return handleUser_; }
     void previewMove(const FeatureId& body, const kernel::Motion& motion) override;
     void previewComponent(const InstanceId& component, const kernel::Motion& motion) override;
+    void previewComponents(const std::vector<InstanceId>& components, const kernel::Motion& motion) override;
     void clearPreview() override;
     std::optional<viewer::BodyPreview> preview() const override { return preview_; }
     void offerChoices(viewer::IChoiceUser& user, std::vector<viewer::Choice> choices) override;
@@ -286,8 +287,8 @@ public:
         for (auto* pane : panes_) showPreview(*pane);
     }
     void showPreview(view::ViewWidget& pane) {
-        if (const auto p = service_.preview(); p && !p->component.isNil())
-            pane.setComponentPreview(p->component, p->motion);
+        if (const auto p = service_.preview(); p && !p->components.empty())
+            pane.setComponentPreview(p->components, p->motion);
         else if (p)
             pane.setPreview(p->body, p->motion);
         else
@@ -919,14 +920,15 @@ void ViewerService::setHandles(viewer::IHandleUser& user, std::vector<viewer::Ha
     given_ = handles;
     handles_.clear();
     for (const auto& h : handles) {
-        handles_.push_back(
-            {h.id,
-             h.kind == viewer::HandleKind::Square ? view::HandleKind::Square : view::HandleKind::Arrow,
-             h.at,
-             h.direction,
-             h.length,
-             {h.r, h.g, h.b},
-             true});
+        handles_.push_back({h.id,
+                            h.kind == viewer::HandleKind::Square ? view::HandleKind::Square
+                            : h.kind == viewer::HandleKind::Ring ? view::HandleKind::Ring
+                                                                 : view::HandleKind::Arrow,
+                            h.at,
+                            h.direction,
+                            h.length,
+                            {h.r, h.g, h.b},
+                            true});
     }
     showHandlesAll();
 }
@@ -949,7 +951,17 @@ void ViewerService::previewMove(const FeatureId& body, const kernel::Motion& mot
 }
 
 void ViewerService::previewComponent(const InstanceId& component, const kernel::Motion& motion) {
-    preview_ = viewer::BodyPreview{FeatureId{}, motion, component};
+    preview_ = viewer::BodyPreview{FeatureId{}, motion, component, {component}};
+    showPreviewAll();
+}
+
+void ViewerService::previewComponents(const std::vector<InstanceId>& components,
+                                      const kernel::Motion& motion) {
+    if (components.empty()) {
+        clearPreview();
+        return;
+    }
+    preview_ = viewer::BodyPreview{FeatureId{}, motion, components.front(), components};
     showPreviewAll();
 }
 

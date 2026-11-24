@@ -668,6 +668,7 @@ private:
             label("file", tr("File"));
             label("place", tr("Place"));
             label("facing", tr("Facing"));
+            label("moves", tr("Moves"));
             auto* grounded = new QCheckBox(tr("Grounded: fixed where it is"), form_);
             grounded->setObjectName(QStringLiteral("grounded"));
             grounded->setToolTip(tr("A grounded component stays put. A free one can be moved."));
@@ -712,7 +713,43 @@ private:
         form_->findChild<QLabel*>(QStringLiteral("facing"))
             ->setText(tr("x along %1; z along %2").arg(direction(p.xAxis), direction(p.zAxis)));
         form_->findChild<QCheckBox*>(QStringLiteral("grounded"))->setChecked(c->grounded);
+        form_->findChild<QLabel*>(QStringLiteral("moves"))->setText(howItMoves(*design, report, *c));
         filling_ = false;
+    }
+
+    // How a component moves in the 3D view: by itself, along its joint, or not
+    // at all, and why.
+    QString howItMoves(const model::Document& design, const model::RebuildReport* report,
+                       const model::Component& c) const {
+        if (c.grounded) return tr("It's grounded, so it stays where it is.");
+        const JointId* by = report ? report->placingJoint(c.id) : nullptr;
+        const auto* j = by ? design.findJoint(*by) : nullptr;
+        if (!j) return tr("Drag its arrows in the 3D view to move it.");
+        const auto& other = j->a.component == c.id ? j->b.component : j->a.component;
+        const auto* holder = design.findComponent(other);
+        const auto jointName = QString::fromStdString(j->name);
+        const auto holderName = holder ? QString::fromStdString(holder->name) : tr("another component");
+        if (j->kind == model::JointKind::Rigid)
+            return tr("%1 holds it to %2, so it doesn't drag by itself. To move it, move %2, or change "
+                      "or delete %1.")
+                .arg(jointName, holderName);
+        const bool turns = j->kind == model::JointKind::Revolute;
+        const auto unit = design.lengthUnit();
+        auto value = [turns, unit](double v) {
+            return turns ? QStringLiteral("%1\u00B0").arg(QString::number(v * 180 / std::numbers::pi, 'g', 6))
+                         : QString::fromStdString(lengthText(v, unit));
+        };
+        QString limits;
+        if (j->lowest && j->highest)
+            limits = tr(", from %1 to %2").arg(value(*j->lowest), value(*j->highest));
+        else if (j->lowest)
+            limits = tr(", down to %1").arg(value(*j->lowest));
+        else if (j->highest)
+            limits = tr(", up to %1").arg(value(*j->highest));
+        return turns ? tr("%1 turns it on %2: drag the purple ring in the 3D view to turn it%3.")
+                           .arg(jointName, holderName, limits)
+                     : tr("%1 slides it on %2: drag the purple arrow in the 3D view to slide it%3.")
+                           .arg(jointName, holderName, limits);
     }
 
     // The design's own settings (the feature tree's Document settings row).

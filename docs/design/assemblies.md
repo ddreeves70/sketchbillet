@@ -23,8 +23,8 @@ This page covers what the student gets, in the order it gets built:
 | 1. Where parts live | Parts made inside the assembly, or linked to their own `.sb` files | Built, from the command line |
 | 2. Components | Parts placed in the assembly, the same part more than once, one part fixed in place | Built, from the command line |
 | 3. Joints | Rigid, hinge (revolute) and slider joints that place parts and say how they move | Built, from the command line |
-| 4. Placing parts along chains | Exact, instant placement from joint to joint, smooth enough to drag | Built (dragging: with the app) |
-| 5. In the app | The assembly tree, inserting parts, joining, dragging, editing a part | Built, but for joining (it comes with joints) |
+| 4. Placing parts along chains | Exact, instant placement from joint to joint, smooth enough to drag | Built |
+| 5. In the app | The assembly tree, inserting parts, joining, dragging, editing a part | Built |
 | 6. Checks | Parts that overlap, the whole assembly's mass and balance point, measuring between parts | Planned |
 | 7. Exploded views | Parts pulled apart to show how they fit, for pictures and drawings | Planned |
 | 8. Parts list | How many of each part, with material and mass, for printing and drawings | Planned |
@@ -260,7 +260,7 @@ value, limits and rest value.
 **Dragging.** A free component moves with the move handles, as bodies do today.
 A component on a revolute or slider joint turns or slides when dragged, along
 its joint only and within its limits; the joint's value follows. A component
-on a rigid joint, or grounded, doesn't drag; the status bar says why.
+on a rigid joint, or grounded, doesn't drag; Properties says why, under Moves.
 
 **The viewer** draws each component's shapes with its placement, sharing shapes
 between components of the same part. Picking a face in an assembly picks it on
@@ -488,7 +488,16 @@ Each line is one pull request, in this order:
      know their component: `PickedElement::component`, plugin API 65), then
      one on another component, and adds a rigid joint between them, picked so
      Properties can change it. Properties says what to click next.
-   - Next: dragging along joints.
+   - **Dragging along joints** (built, Nov 23, 2026): a component a revolute
+     joint places gets a purple ring about the joint's line, and one a slider
+     places a purple arrow along it (`viewer::HandleKind::Ring`, `sb.viewer/8`,
+     plugin API 66). Dragging turns it in whole degrees, or slides it in whole
+     mm, within the joint's limits; everything placed from it moves with it,
+     drawn moved without a rebuild (`dragJoint()` walks the chain again from the
+     last rebuild, `RebuildReport::placingJoint()`;
+     `IViewer::previewComponents()`). Dropping sets the joint's value
+     (`SetJointCommand`, one step). Properties says how a picked component
+     moves, and why one doesn't.
 6. **Checks:** overlaps, the assembly's mass and center of gravity, measuring
    between components.
 7. **Exploded views.**

@@ -81,6 +81,12 @@ public:
     /// @param motion How: turned about a line, then slid (mm, radians), after its placement.
     void setComponentPreview(const InstanceId& component, const kernel::Motion& motion);
 
+    /// Draws several components of an assembly moved together, the same way, like
+    /// setComponentPreview(): a hinged lid and what's on it.
+    /// @param components The components drawn moved.
+    /// @param motion How: turned about a line, then slid (mm, radians), after their placements.
+    void setComponentPreview(const std::vector<InstanceId>& components, const kernel::Motion& motion);
+
     /// Draws every body where setContent() put it again.
     void clearPreview();
 
@@ -229,11 +235,14 @@ signals:
     /// until handleDropped() or handleCancelled().
     /// @param id The handle's id.
     /// @param by How far it has been dragged since the button went down, along x, y and z (mm).
+    ///        For a ring, x is how far it has turned (radians), carrying on past
+    ///        half a turn as it goes round.
     void handleDragged(const std::string& id, const kernel::Vec3& by);
 
     /// A handle drag ended: the left button came up.
     /// @param id The handle's id.
-    /// @param by How far it was dragged, along x, y and z (mm).
+    /// @param by How far it was dragged, along x, y and z (mm); for a ring, x is
+    ///        how far it turned (radians).
     void handleDropped(const std::string& id, const kernel::Vec3& by);
 
     /// The student pressed Escape while dragging a handle: put back what the drag changed.
