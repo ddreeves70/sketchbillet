@@ -511,8 +511,14 @@ Each line is one pull request, in this order:
      materials, then adds them up for each component where it's placed: mass,
      weight, cost and the balance point. `open` on an assembly prints the
      weight and the balance point after the mass.
-   - Next: the app (Check for Overlaps shown in red, pairs marked as meant to
-     overlap, the balance point as a dot, measuring between components).
+   - **Checks in the app** (built, Nov 24, 2026): Assemble > Inspect > Overlaps
+     (Check for Overlaps) shows where components overlap in red (`OverlayShape::Triangles`, plugin
+     API 67, from the shared shapes' meshes) and lists them in the Checks
+     panel; Balance (Balance Point) shows the mass and weight there, and a dot
+     at the balance point. Both are in `sb.measure`, and are done again after
+     each rebuild while on.
+   - Next: pairs marked as meant to overlap (a press fit); then measuring
+     between components.
 7. **Exploded views.**
 8. **Parts list,** and exporting each part once with its count; STEP export
    with the assembly's structure (parts, components and placements), and 3MF

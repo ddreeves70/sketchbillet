@@ -85,6 +85,7 @@ enum class OverlayShape {
     /// and a point its line passes through; `texts[0]` is its number. See
     /// OverlayDimension and dimensionDrawing().
     Dimension,
+    Triangles,  ///< Filled triangles: each three `points` are one, seen from either side, unlit.
 };
 
 /// How a Dimension overlay is drawn, beyond its points.

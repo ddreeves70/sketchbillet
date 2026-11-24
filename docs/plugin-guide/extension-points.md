@@ -779,6 +779,7 @@ ctx.overlays().set("guides", guide);  // its id is "sam.notes.guides"
 | `OverlayShape::Lattice` | Lines every `spacing` mm on a plane, or dots where they cross | `lattice`: `origin`, `xAxis`, `yAxis`, `spacing` and `halfSize` in mm, `dots` |
 | `OverlayShape::Labels` | Words that always face the screen, like the axes' X, Y and Z | `points` (in mm) and `texts`, one word for each point; `size` is the letters' height in pixels |
 | `OverlayShape::Dimension` | A dimension, as on a drawing: extension lines, a line with arrowheads, and its number | `points`: where it measures from and to, and a point its line passes through (in mm); `texts[0]`: its number; `dimension` (below); `size`: the number's height in pixels |
+| `OverlayShape::Triangles` | Filled triangles, like a mesh, in one flat color, seen from both sides | `points` (in mm): each three are one triangle. With a see-through `color` and `overBodies`, it shows something inside a body, like Check for Overlaps' red |
 
 - Calling `set` again with the same name replaces the overlay; `remove("guides")`
   takes it away; `visible = false` hides it.
@@ -788,6 +789,17 @@ ctx.overlays().set("guides", guide);  // its id is "sam.notes.guides"
 - Bodies hide what's behind them, overlays too. Set `overBodies = true` to draw
   an overlay over the design instead, never hidden, like the Measure tool's line
   and its distance.
+
+To fill a shape the kernel made, cut it into triangles with
+`kernel::IKernel::tessellate()`:
+
+```cpp
+sb::plugin::Overlay red{.shape = sb::plugin::OverlayShape::Triangles, .color = {220, 30, 30, 170},
+                        .overBodies = true};
+for (const auto& t : mesh.triangles)       // mesh = kernel->tessellate(shape, {0.1, 0.35})
+    for (auto i : t) red.points.push_back({mesh.vertices[i][0], mesh.vertices[i][1], mesh.vertices[i][2]});
+ctx.overlays().set("inside", red);
+```
 - Set `onViewCube = true` to draw it on the view cube instead of in the design.
   Then `points` are in screen pixels from the cube's middle, along x, y and z: it
   turns with the cube but doesn't pan or zoom, and the cube hides what's behind
@@ -911,6 +923,20 @@ if (shape && docs.kernel()) {
     const auto& material = doc->materialOf(stepId);  // PLA unless one was picked
     const auto mass = model::bodyMass(*docs.kernel(), *shape, material);
     ctx.log("It weighs " + std::to_string(mass.grams) + " g");  // also volume, newtons, cost, center
+}
+```
+
+The same kernel makes new shapes from a design's, which change no design: what
+two components share, say. In an assembly, `model::checkOverlaps()` finds the
+components that overlap, and `model::assemblyMass()` its mass and balance point,
+as Check for Overlaps and Balance Point on the Assemble tab show them:
+
+```cpp
+#include "sb/model/Overlaps.h"
+
+if (auto* kernel = docs.kernel()) {
+    const auto check = model::checkOverlaps(*doc, *report, *kernel);
+    for (const auto& issue : check.issues) ctx.log(issue.message);  // each pair that overlaps
 }
 ```
 

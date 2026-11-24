@@ -1,5 +1,6 @@
 // Tests for the Measure tool (sb.measure): Tools > Measure, the Measure panel,
-// and the line it draws between the nearest points.
+// and the line it draws between the nearest points; and the assembly checks,
+// Check for Overlaps and Balance Point.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -17,6 +18,8 @@
 #include "AppUi.h"
 #include "Shell.h"
 #include "sb/kernel_occt/OcctKernel.h"
+#include "sb/model/AssemblyCommands.h"
+#include "sb/model/Commands.h"
 #include "sb/model/Document.h"
 #include "sb/model/Naming.h"
 #include "sb/plugin/PluginHost.h"
@@ -188,4 +191,104 @@ TEST_CASE("Measure's line and label", "[app][measure]") {
     REQUIRE(o.label.points.size() == 1);
     CHECK(o.label.points[0].x == 12.7);
     CHECK(o.label.texts == std::vector<std::string>{"1 in"});
+}
+
+TEST_CASE("Check for Overlaps shows where parts overlap in red, and checks again as parts move",
+          "[app][measure][assembly]") {
+    App app;
+    auto& docs = app.host.documents();
+    // An assembly instead of the plate: a 20 x 20 x 10 mm base, and a 10 mm cube
+    // with a corner 5 x 5 x 5 mm into it.
+    REQUIRE(docs.undo(app.design()));
+    REQUIRE(docs.run(app.design(), "assembly.new", {}).empty());
+    auto part = [](const char* name, kernel::Vec3 size) {
+        auto p = std::make_unique<model::Document>(model::DocKind::Part, name);
+        REQUIRE(p->execute(std::make_unique<model::AddFeatureCommand>(
+                               std::make_unique<model::BoxFeature>("Box1", kernel::Vec3{}, size)))
+                    .empty());
+        return p;
+    };
+    REQUIRE(
+        docs.execute(app.design(), std::make_unique<model::InsertPartCommand>(part("Base", {20, 20, 10}), 1))
+            .empty());
+    kernel::Placement corner;
+    corner.origin = {15, 15, 5};
+    REQUIRE(docs.execute(app.design(),
+                         std::make_unique<model::InsertPartCommand>(part("Cube", {10, 10, 10}), 1, corner))
+                .empty());
+    settle();
+
+    auto* overlaps = app.shell->action("sb.measure.overlaps");
+    auto* balance = app.shell->action("sb.measure.balance");
+    REQUIRE(overlaps);
+    REQUIRE(balance);
+    CHECK(overlaps->isEnabled());
+    overlaps->trigger();
+    settle();
+    CHECK(overlaps->isChecked());
+    auto* panel = app.shell->panelWidget(QStringLiteral("sb.measure.checks.panel"));
+    REQUIRE(panel);
+    CHECK(panel->isVisible());
+    auto text = [&] { return panel->findChild<QLabel*>(QStringLiteral("sb.measure.checks.result"))->text(); };
+    CHECK(text() ==
+          QStringLiteral(
+              "Base 1 and Cube 1 overlap by 125.00 mm\u00B3, around x 17.5, y 17.5, z 7.5 mm. Parts can't "
+              "be in the same place, so they won't go together. Move one of them, or change one of "
+              "their parts so they fit.\nWhere they overlap is red in the view."));
+    // In red, over the parts: a 5 mm cube, in triangles, inside 15 to 20 mm.
+    const auto* red = app.overlay("overlaps");
+    REQUIRE(red);
+    CHECK(red->visible);
+    CHECK(red->shape == plugin::OverlayShape::Triangles);
+    CHECK(red->overBodies);
+    REQUIRE(red->points.size() >= 36);  // 6 squares, 2 triangles each
+    CHECK(red->points.size() % 3 == 0);
+    for (const auto& p : red->points) {
+        CHECK(p.x >= 15 - 1e-4);
+        CHECK(p.x <= 20 + 1e-4);
+        CHECK(p.z >= 5 - 1e-4);
+        CHECK(p.z <= 10 + 1e-4);
+    }
+
+    // Moved up onto the base, it only touches: checked again, and fine.
+    const auto cube = docs.find(app.design())->components()[1].id;
+    kernel::Placement onTop;
+    onTop.origin = {15, 15, 10};
+    REQUIRE(docs.execute(app.design(), std::make_unique<model::PlaceComponentCommand>(cube, onTop)).empty());
+    settle();
+    CHECK(text() ==
+          QStringLiteral("Untitled: no components overlap (2 components, 1 pair close enough to check)."));
+    CHECK_FALSE(app.overlay("overlaps")->visible);
+
+    // Balance Point too: the mass, and the dot. The base is 4.96 g with its
+    // middle at 10, 10, 5 mm; the cube 1.24 g at 20, 20, 15 mm.
+    balance->trigger();
+    settle();
+    CHECK(balance->isChecked());
+    CHECK(text() ==
+          QStringLiteral("Untitled: no components overlap (2 components, 1 pair close enough to check).\n\n"
+                         "Mass: 6.20 g, so it weighs 0.061 N.\n"
+                         "Balance point (the dot): x 12, y 12, z 7 mm. It balances there, like on a pin."));
+    const auto* dot = app.overlay("balance.dot");
+    REQUIRE(dot);
+    CHECK(dot->visible);
+    CHECK(dot->overBodies);
+    REQUIRE(dot->points.size() == 1);
+    CHECK(std::abs(dot->points[0].x - 12) < 1e-6);
+    CHECK(std::abs(dot->points[0].z - 7) < 1e-6);
+    CHECK(app.overlay("balance.ring")->visible);
+
+    // Done: both off, the panel and the dot gone.
+    panel->findChild<QPushButton*>(QStringLiteral("sb.measure.checks.done"))->click();
+    settle();
+    CHECK_FALSE(overlaps->isChecked());
+    CHECK_FALSE(balance->isChecked());
+    CHECK_FALSE(panel->isVisible());
+    CHECK_FALSE(app.overlay("balance.dot")->visible);
+}
+
+TEST_CASE("the assembly checks are only for assemblies", "[app][measure][assembly]") {
+    App app;  // a part
+    CHECK_FALSE(app.shell->action("sb.measure.overlaps")->isEnabled());
+    CHECK_FALSE(app.shell->action("sb.measure.balance")->isEnabled());
 }

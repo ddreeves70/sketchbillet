@@ -1192,6 +1192,9 @@ std::vector<view::ViewOverlay> viewOverlays(const std::vector<plugin::Overlay>& 
             case plugin::OverlayShape::Dimension:
                 v.shape = view::OverlayShape::Dimension;
                 break;
+            case plugin::OverlayShape::Triangles:
+                v.shape = view::OverlayShape::Triangles;
+                break;
         }
         v.dimension = {o.dimension.along, o.dimension.normal, o.dimension.arrowAtFrom, o.dimension.arrowAtTo,
                        o.dimension.textAtEnd};

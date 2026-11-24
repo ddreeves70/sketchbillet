@@ -36,6 +36,10 @@ enum class OverlayShape {
     /// line passes through; `texts[0]` is its number; `dimension` says the rest.
     /// Its arrowheads stay the same size on the screen as the view zooms.
     Dimension,
+    /// Filled triangles: each three `points` are one, like a mesh's. With
+    /// `overBodies` and a see-through color, they show something inside a body,
+    /// like where two parts overlap. Seen from either side; never lit or shaded.
+    Triangles,
 };
 
 /// How a Dimension overlay is drawn, beyond its points.
@@ -78,7 +82,7 @@ struct OverlayLattice {
 /// Overlays are never picked with the mouse and don't count when zooming to fit.
 struct Overlay {
     OverlayShape shape = OverlayShape::Lines;  ///< What it draws.
-    std::vector<kernel::Vec3> points{};        ///< For Lines, Points and Labels, in mm.
+    std::vector<kernel::Vec3> points{};        ///< For Lines, Points, Labels and Triangles, in mm.
     std::vector<std::string> texts{};          ///< For Labels: the words, one for each point.
     OverlayLattice lattice{};                  ///< For Lattice.
     OverlayColor color{};                      ///< Its color.

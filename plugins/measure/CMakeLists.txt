@@ -10,4 +10,4 @@ sb_add_library(sb_plugin_measure
     sb::model
 )
 sb_embed_files(sb_plugin_measure HEADER MeasureIcons.h NAMESPACE sb::icons::measure
-  FILES icons/measure.svg)
+  FILES icons/measure.svg icons/overlaps.svg icons/balance.svg)

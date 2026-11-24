@@ -192,7 +192,10 @@ class PluginContext;
 /// viewer::HandleKind::Ring), and previews of several components moved together
 /// (IViewer::previewComponents(), viewer::BodyPreview::components), which the move
 /// handles use to drag a component along its joint.
-inline constexpr int kPluginApiVersion = 66;
+/// Version 67 added filled triangles to overlays (OverlayShape::Triangles), which
+/// Check for Overlaps uses to show where parts overlap, in red, and a kernel to
+/// make shapes with (DocumentList::kernel(), not const).
+inline constexpr int kPluginApiVersion = 67;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

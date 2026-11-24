@@ -147,7 +147,8 @@ a pin: x 40 mm, y 16.23 mm, z 4.71 mm. It's in the middle of the car's length,
 since the wheels are spread evenly, but less than half way across (y 16.23 mm
 of 40 mm), because both wheels are on one side. A low balance point near the
 middle keeps a car, or a robot, from tipping over. It moves when you move a
-component, or change a part's material.
+component, or change a part's material. In the app, **Balance** on the
+Assemble tab shows it as a dot.
 
 Wheels stand on their edge, so turn them: `z=0,-1,0` makes the wheel's own z
 axis (the way its cylinder points) face along -y, out to the side of the car.
@@ -336,6 +337,15 @@ wrote Car.sb
 $ sketchbillet_cli check Car.sb
 Car: no components overlap (3 components, 0 pairs close enough to check).
 ```
+
+**In the app**, click **Overlaps** on the Assemble tab (in its Inspect
+panel). Where parts overlap turns red, over the parts so you can see it
+inside them, and the Checks panel lists each pair. It checks again every time
+you move a part, so you can drag a wheel out until the red goes away. Click
+**Balance** too, to see the assembly's mass and weight, and a dark dot at its
+balance point. Click **Done** to stop.
+
+![Wheel 1 pushed into the car's body: where they overlap is red, and the Checks panel says they overlap by 519.91 mm³, then gives the car's mass and its balance point, the dot](images/app-overlaps.png)
 
 - **Touching is fine.** Parts that only touch, like a lid sitting on a box,
   don't overlap.
