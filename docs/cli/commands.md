@@ -2873,7 +2873,7 @@ Box: assembly, 1 component, 1 part
   Lid 1        Lid        grounded at 0, 0, 30 mm
 Parts:
   Lid          0 steps  ok        no bodies yet, 1 in the assembly
-Mass in all: 0.00 g
+Mass in all: 0.00 g (weighs 0.000 N)
 wrote Box.sb
 ```
 
@@ -2922,7 +2922,8 @@ Parts:
     linked to Body.sb
   Wheel        1 step   ok        mass 3.37 g (PLA), 4 in the assembly
     linked to Wheel.sb
-Mass in all: 53.14 g
+Mass in all: 53.14 g (weighs 0.521 N)
+Balance point: 39.37, 9.87, 4.49 mm
 wrote Car.sb
 ```
 
@@ -2965,7 +2966,8 @@ Car: assembly, 4 components, 1 part
 Parts:
   Wheel        1 step   ok        mass 3.37 g (PLA), 4 in the assembly
     linked to Wheel.sb
-Mass in all: 13.46 g
+Mass in all: 13.46 g (weighs 0.132 N)
+Balance point: 0, 45, 3 mm
 wrote Car.sb
 ```
 
@@ -2994,7 +2996,8 @@ Car: assembly, 2 components, 1 part
 Parts:
   Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
     linked to Wheel.sb
-Mass in all: 6.73 g
+Mass in all: 6.73 g (weighs 0.066 N)
+Balance point: 15, 0, 3 mm
 wrote Car.sb
 ```
 
@@ -3030,7 +3033,8 @@ Car: assembly, 2 components, 1 part
 Parts:
   Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
     linked to Wheel.sb
-Mass in all: 6.73 g
+Mass in all: 6.73 g (weighs 0.066 N)
+Balance point: 20, -17.5, 7.5 mm
 ```
 
 ## component.rename
@@ -3055,7 +3059,8 @@ Car: assembly, 2 components, 1 part
 Parts:
   Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
     linked to Wheel.sb
-Mass in all: 6.73 g
+Mass in all: 6.73 g (weighs 0.066 N)
+Balance point: 0, 0, 3 mm
 wrote Car.sb
 ```
 
@@ -3080,7 +3085,8 @@ Car: assembly, 1 component, 1 part
 Parts:
   Wheel        1 step   ok        mass 3.37 g (PLA), 1 in the assembly
     linked to Wheel.sb
-Mass in all: 3.37 g
+Mass in all: 3.37 g (weighs 0.033 N)
+Balance point: 0, 0, 3 mm
 wrote Car.sb
 ```
 
@@ -3159,7 +3165,8 @@ Parts:
     linked to Tray.sb
   Cover        1 step   ok        mass 7.94 g (PLA), 1 in the assembly
     linked to Cover.sb
-Mass in all: 27.78 g
+Mass in all: 27.78 g (weighs 0.272 N)
+Balance point: 20, 20, 7 mm
 wrote Case.sb
 ```
 
@@ -3195,7 +3202,8 @@ Parts:
     linked to Tray.sb
   Cover        1 step   ok        mass 7.94 g (PLA), 1 in the assembly
     linked to Cover.sb
-Mass in all: 27.78 g
+Mass in all: 27.78 g (weighs 0.272 N)
+Balance point: 20, 27.27, 11.96 mm
 wrote Case.sb
 ```
 
@@ -3229,7 +3237,8 @@ Parts:
     linked to Tray.sb
   Cover        1 step   ok        mass 7.94 g (PLA), 1 in the assembly
     linked to Cover.sb
-Mass in all: 27.78 g
+Mass in all: 27.78 g (weighs 0.272 N)
+Balance point: 20, 20, 7 mm
 ```
 
 ## joint.delete
@@ -3252,7 +3261,8 @@ Parts:
     linked to Tray.sb
   Cover        1 step   ok        mass 7.94 g (PLA), 1 in the assembly
     linked to Cover.sb
-Mass in all: 27.78 g
+Mass in all: 27.78 g (weighs 0.272 N)
+Balance point: 37.14, 20, 4.14 mm
 wrote Case.sb
 ```
 
@@ -3289,7 +3299,8 @@ Cart: assembly, 1 component, 1 part
 Parts:
   Axle         2 steps  ok        mass 2.99 g (PLA), 1 in the assembly
     linked to Axle.sb
-Mass in all: 2.99 g
+Mass in all: 2.99 g (weighs 0.029 N)
+Balance point: 2.07, 2.07, 16.71 mm
 wrote Cart.sb
 ```
 
@@ -3324,7 +3335,8 @@ Cart: assembly, 1 component, 1 part
 Parts:
   Axle         2 steps  ok        mass 2.99 g (PLA), 1 in the assembly
     linked to Axle.sb
-Mass in all: 2.99 g
+Mass in all: 2.99 g (weighs 0.029 N)
+Balance point: 2.07, 2.07, 16.71 mm
 wrote Cart.sb
 ```
 
@@ -3352,7 +3364,8 @@ Cart: assembly, 1 component, 1 part
   Axle 1       Axle       grounded at 0, 0, 0 mm
 Parts:
   Axle         2 steps  ok        mass 2.99 g (PLA), 1 in the assembly
-Mass in all: 2.99 g
+Mass in all: 2.99 g (weighs 0.029 N)
+Balance point: 2.07, 2.07, 16.71 mm
 wrote Cart.sb
 ```
 
@@ -3381,7 +3394,7 @@ Box: assembly, 1 component, 1 part
 Parts:
   Lid          0 steps  ok        no bodies yet, 1 in the assembly
     linked to Lid.sb
-Mass in all: 0.00 g
+Mass in all: 0.00 g (weighs 0.000 N)
 wrote Box.sb
 ```
 

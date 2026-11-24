@@ -17,6 +17,7 @@ sb_add_library(sb_model
     Measure.cpp
     Import.cpp
     Joints.cpp
+    AssemblyMass.cpp
     Overlaps.cpp
   DEPS
     sb::core

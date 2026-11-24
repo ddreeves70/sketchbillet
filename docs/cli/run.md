@@ -65,7 +65,8 @@ Cart: assembly, 2 components, 1 part
 Parts:
   Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
     linked to Wheel.sb
-Mass in all: 6.73 g
+Mass in all: 6.73 g (weighs 0.066 N)
+Balance point: 15, 0, 3 mm
 wrote Cart.sb
 ```
 
@@ -102,7 +103,8 @@ Cart: assembly, 2 components, 1 part
   Wheel 2      Wheel      free     at 30, 0, 0 mm
 Parts:
   Wheel        3 steps  ok        mass 4.46 g (PLA), 2 in the assembly
-Mass in all: 8.91 g
+Mass in all: 8.91 g (weighs 0.087 N)
+Balance point: 15, 0, 3.28 mm
 wrote Cart.sb
 ```
 

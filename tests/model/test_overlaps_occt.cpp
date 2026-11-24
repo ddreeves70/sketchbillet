@@ -1,4 +1,4 @@
-// Checking an assembly for components that overlap.
+// Checking an assembly: components that overlap, and its mass and balance point.
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -8,6 +8,7 @@
 
 #include "sb/kernel_occt/OcctKernel.h"
 #include "sb/model/AssemblyCommands.h"
+#include "sb/model/AssemblyMass.h"
 #include "sb/model/Commands.h"
 #include "sb/model/Document.h"
 #include "sb/model/Overlaps.h"
@@ -121,4 +122,52 @@ TEST_CASE("an assembly with nothing overlapping says so, in its own unit",
     REQUIRE(check.overlaps.size() == 1);
     CHECK(check.overlaps[0].volume == Approx(400));
     CHECK(check.issues[0].message.starts_with("Base 1 and Lid 1 overlap by 0.02 in^3, around x 0.394, "));
+}
+
+TEST_CASE("an assembly's mass is each component's, and it balances where its mass is, as placed",
+          "[model][assembly][mass][occt]") {
+    Assembly box;
+    // PLA, 1.24 g/cm^3: 4000 mm^3 is 4.96 g, and 1000 mm^3 is 1.24 g.
+    box.insert(boxPart("Base", {20, 20, 10}));
+    const auto cube = box.insert(boxPart("Cube", {10, 10, 10}), at(100, 0, 0));
+    const auto report = box.doc.regenerate(*box.kernel);
+    auto mass = assemblyMass(box.doc, report, *box.kernel);
+    CHECK(mass.volume == Approx(5000));
+    CHECK(mass.grams == Approx(6.2));
+    CHECK(mass.newtons == Approx(6.2 / 1000 * 9.81));  // g is 9.81 m/s^2
+    CHECK(mass.missing == 0);
+    // Base's middle is at 10, 10, 5 mm and Cube's at 105, 5, 5 mm: weighed by
+    // their masses, it balances at 29, 9, 5 mm.
+    CHECK(mass.center.x == Approx(29));
+    CHECK(mass.center.y == Approx(9));
+    CHECK(mass.center.z == Approx(5));
+
+    // Turned a quarter turn about z, Cube's middle moves to 95, 5, 5 mm; and a
+    // second Cube, at 0, 0, 10 mm on top of Base, adds 1.24 g at 5, 5, 15 mm.
+    Placement turned = at(100, 0, 0);
+    turned.xAxis = {0, 1, 0};
+    REQUIRE(box.doc.execute(std::make_unique<PlaceComponentCommand>(cube, turned)).empty());
+    REQUIRE(box.doc
+                .execute(std::make_unique<AddComponentsCommand>(box.doc.findComponent(cube)->part, 1,
+                                                                at(0, 0, 10), Vec3{}))
+                .empty());
+    mass = assemblyMass(box.doc, box.doc.regenerate(*box.kernel), *box.kernel);
+    CHECK(mass.grams == Approx(7.44));
+    CHECK(mass.center.x == Approx((4.96 * 10 + 1.24 * 95 + 1.24 * 5) / 7.44));
+    CHECK(mass.center.y == Approx((4.96 * 10 + 1.24 * 5 + 1.24 * 5) / 7.44));
+    CHECK(mass.center.z == Approx((4.96 * 5 + 1.24 * 5 + 1.24 * 15) / 7.44));
+
+    // An empty part counts as missing, and adds nothing.
+    box.insert(std::make_unique<Document>(DocKind::Part, "Later"));
+    const auto more = assemblyMass(box.doc, box.doc.regenerate(*box.kernel), *box.kernel);
+    CHECK(more.missing == 1);
+    CHECK(more.grams == Approx(7.44));
+}
+
+TEST_CASE("an empty assembly weighs nothing and balances at its origin", "[model][assembly][mass][occt]") {
+    Assembly box;
+    const auto mass = assemblyMass(box.doc, box.doc.regenerate(*box.kernel), *box.kernel);
+    CHECK(mass.grams == 0);
+    CHECK(mass.center.x == 0);
+    CHECK(mass.missing == 0);
 }
