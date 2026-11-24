@@ -534,7 +534,7 @@ all-panes grid changed.
 
 A **view tool** lets the student draw with the mouse on a plane, the way the
 sketcher's Line and Circle tools do. The viewer (`sb.viewer`) offers it as the
-`sb.viewer/7` service, described by its contract header `sb/viewer/Viewer.h`.
+`sb.viewer/8` service, described by its contract header `sb/viewer/Viewer.h`.
 While your tool runs, a left click in any pane tells you the point on the plane
 (in mm) instead of turning the view or picking; moving the mouse tells you too, so
 you can draw a preview with an overlay. Panning and zooming still work, and Escape
@@ -601,12 +601,13 @@ sketcher's Select tool is built on it. A solved sketch's
 
 ## Handles to drag (desktop app only)
 
-A **handle** is an arrow or a small square drawn in every viewer for the student
-to drag, like the arrows SketchBillet's own `sb.movehandles` plugin puts on a picked
-body. The viewer draws handles over the design, so they can always be grabbed,
-lights up the one under the mouse, and tells you how far it's been dragged (in
-mm): along an arrow, or across a square's flat plane. It changes nothing itself:
-you decide what a drag does. Handles use the same `sb.viewer/7` service as
+A **handle** is an arrow, a small square or a ring drawn in every viewer for the
+student to drag, like the arrows SketchBillet's own `sb.movehandles` plugin puts on
+a picked body. The viewer draws handles over the design, so they can always be
+grabbed, lights up the one under the mouse, and tells you how far it's been
+dragged: along an arrow or across a square's flat plane (in mm), or round a ring
+(in radians). It changes nothing itself:
+you decide what a drag does. Handles use the same `sb.viewer/8` service as
 tools, and aren't shown while a tool runs.
 
 ```cpp
@@ -632,8 +633,18 @@ if (auto* viewer = ctx.service<sb::viewer::IViewer>()) {
 again when the thing they move moves, and `clearHandles()` to take them away.
 While a drag goes on, the viewer works it out from the handle as it was when the
 button went down, so moving the handles with the body doesn't upset it.
-`Handle::kind` is `Arrow` (drags along `direction`) or `Square` (drags across the
-plane square to `direction`, with sides `length` mm long).
+`Handle::kind` is `Arrow` (drags along `direction`), `Square` (drags across the
+plane square to `direction`, with sides `length` pixels long) or `Ring` (a circle
+`length` pixels across from its middle, square to `direction`, that drags round).
+For a ring, `by.x` is how far it has turned, in radians, counterclockwise when
+you look back along `direction`; it carries on past half a turn, so turning it
+right round gives about 6.28. `by.y` and `by.z` are 0:
+
+```cpp
+sb::viewer::Handle dial{.id = "dial", .kind = sb::viewer::HandleKind::Ring, .at = {0, 0, 10},
+                        .direction = {0, 0, 1}, .length = 70, .r = 240, .g = 140, .b = 20};
+// In dragged(): double turned = by.x;  // radians
+```
 
 **Previews keep drags smooth.** Changing the design on every mouse move means a
 rebuild each time, which is slow for a big body (an imported mesh can have
@@ -656,6 +667,16 @@ void cancelled() override { viewer->clearPreview(); }
 
 In an assembly, `previewComponent()` draws a whole component moved, all its
 bodies, the same way; `sb.movehandles` drops it with `model::PlaceComponentCommand`.
+`previewComponents()` draws several moved together, the same way: that's how a
+hinged lid turns with the knob on it. `model::dragJoint()` works out which
+components a joint's value carries, and how they move, without a rebuild:
+
+```cpp
+// On a revolute joint: turned by the ring, from the value it had (radians).
+if (auto drag = sb::model::dragJoint(design, *report, hinge, startValue + by.x))
+    viewer->previewComponents(drag->components, drag->motion);
+// In dropped(): set the joint's value to drag->value with model::SetJointCommand.
+```
 
 A preview isn't a step: steps that use the body catch up when the design
 changes. If you do change the design during a drag, commands like
@@ -669,7 +690,7 @@ click, like the three planes SketchBillet's **New sketch** shows (XY, XZ and YZ)
 The one under the mouse lights up, and the viewer tells you which was clicked,
 by its id. Clicking anywhere else picks as usual, and a drag still turns the
 view, so the student can turn round to see a plane before clicking it. Choices
-use the same `sb.viewer/7` service.
+use the same `sb.viewer/8` service.
 
 ```cpp
 #include "sb/viewer/Viewer.h"
@@ -702,7 +723,7 @@ away.
 
 A **number box** is a small box in the viewer, at a point of the design, for the
 student to type a number in, like the box SketchBillet's sketcher opens on a
-dimension that's clicked. They use the same `sb.viewer/7` service.
+dimension that's clicked. They use the same `sb.viewer/8` service.
 
 ```cpp
 #include "sb/viewer/Viewer.h"

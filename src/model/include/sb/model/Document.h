@@ -86,6 +86,12 @@ public:
     /// @return True if a joint places it.
     bool placedByJoint(const ComponentId& id) const;
 
+    /// Gives the joint that places a component: the one it turns or slides along
+    /// when it's dragged.
+    /// @param id The component.
+    /// @return The joint, or nullptr if no joint places it.
+    const JointId* placingJoint(const ComponentId& id) const;
+
     /// Gives how one of an assembly's joints worked out.
     /// @param id The joint.
     /// @return Its result, or nullptr if the assembly has no such joint.
@@ -109,7 +115,7 @@ private:
     std::map<FeatureId, std::size_t> formulaIssues_;
     std::map<DocId, std::shared_ptr<const RebuildReport>> parts_;  // an assembly's parts, built
     std::map<ComponentId, kernel::Placement> placements_;          // where each component goes
-    std::map<ComponentId, bool> byJoint_;                          // which ones a joint placed
+    std::map<ComponentId, JointId> placedBy_;                      // the joint that placed each one
     std::map<JointId, JointResult> joints_;                        // how each joint worked out
     const kernel::IKernel* kernel_ = nullptr;
     const sketch::ISketchSolver* solver_ = nullptr;

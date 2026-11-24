@@ -220,8 +220,12 @@ const kernel::Placement* RebuildReport::placementOf(const ComponentId& id) const
 }
 
 bool RebuildReport::placedByJoint(const ComponentId& id) const {
-    const auto it = byJoint_.find(id);
-    return it != byJoint_.end() && it->second;
+    return placedBy_.count(id) > 0;
+}
+
+const JointId* RebuildReport::placingJoint(const ComponentId& id) const {
+    const auto it = placedBy_.find(id);
+    return it == placedBy_.end() ? nullptr : &it->second;
 }
 
 const JointResult* RebuildReport::joint(const JointId& id) const {

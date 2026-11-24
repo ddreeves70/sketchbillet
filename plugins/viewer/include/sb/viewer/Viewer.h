@@ -89,6 +89,7 @@ public:
 enum class HandleKind {
     Arrow,   ///< An arrow: drags along its direction only.
     Square,  ///< A small square: drags anywhere on its flat plane.
+    Ring,    ///< A circle: drags round, turning about the line through its middle.
 };
 
 /// Something drawn in every viewer for the student to drag, like the arrows on
@@ -96,13 +97,14 @@ enum class HandleKind {
 /// so they can always be grabbed, and aren't shown while a tool runs.
 struct Handle {
     std::string id{};                     ///< Says which handle was dragged, like "x".
-    HandleKind kind = HandleKind::Arrow;  ///< An arrow or a square.
-    kernel::Vec3 at{};                    ///< Arrow: where it starts. Square: its middle. In mm.
+    HandleKind kind = HandleKind::Arrow;  ///< An arrow, a square or a ring.
+    kernel::Vec3 at{};                    ///< Arrow: where it starts. Square, ring: its middle. In mm.
     /// Arrow: which way it points and drags (a unit vector). Square: the direction
-    /// square to its plane (a unit vector); it drags on that plane.
+    /// square to its plane (a unit vector); it drags on that plane. Ring: the line
+    /// it turns about (a unit vector), square to its circle.
     kernel::Vec3 direction{1, 0, 0};
-    /// Arrow: how long. Square: how long each side is. In screen pixels: a handle
-    /// stays the same size on the screen however far the view zooms.
+    /// Arrow: how long. Square: how long each side is. Ring: its radius. In screen
+    /// pixels: a handle stays the same size on the screen however far the view zooms.
     double length = 80;
     int r = 0;  ///< Its color: red, 0 to 255.
     int g = 0;  ///< Green, 0 to 255.
@@ -118,11 +120,15 @@ public:
     /// A handle is being dragged. Called on every move, until dropped() or cancelled().
     /// @param id The handle's id.
     /// @param by How far it has been dragged since the button went down, along x, y and z (mm).
+    ///        For a ring, x is how far it has turned (radians, counterclockwise
+    ///        looking back along its direction; it carries on past half a turn),
+    ///        and y and z are 0.
     virtual void dragged(const std::string& id, const kernel::Vec3& by) = 0;
 
     /// A drag ended: the button came up.
     /// @param id The handle's id.
-    /// @param by How far it was dragged, along x, y and z (mm).
+    /// @param by How far it was dragged, along x, y and z (mm); for a ring, x is
+    ///        how far it turned (radians).
     virtual void dropped(const std::string& id, const kernel::Vec3& by) = 0;
 
     /// The student pressed Escape while dragging: put back what the drag changed.
@@ -188,8 +194,12 @@ struct BodyPreview {
     FeatureId body{};         ///< The step whose body is drawn moved; nil for a component.
     kernel::Motion motion{};  ///< How it's moved: turned, then slid (mm, radians).
     /// In an assembly, the component drawn moved, all its bodies (see
-    /// IViewer::previewComponent()); nil for a body.
+    /// IViewer::previewComponent()); nil for a body. With previewComponents(),
+    /// the first of them.
     InstanceId component{};
+    /// Every component drawn moved, the same way (IViewer::previewComponents());
+    /// just `component` after previewComponent(), and empty for a body.
+    std::vector<InstanceId> components{};
 };
 
 /// The viewers, as other plugins see them.
@@ -202,7 +212,9 @@ public:
     /// (askNumbers(), clearNumbers()). Version 6 added previews of a moved body
     /// (previewMove(), clearPreview(), preview()). Version 7 added previews of a moved
     /// component of an assembly (previewComponent(), BodyPreview::component).
-    static constexpr const char* kServiceName = "sb.viewer/7";
+    /// Version 8 added ring handles (HandleKind::Ring) and previews of several
+    /// components moved together (previewComponents(), BodyPreview::components).
+    static constexpr const char* kServiceName = "sb.viewer/8";
 
     /// Destroys the service.
     virtual ~IViewer() = default;
@@ -261,6 +273,13 @@ public:
     /// @param motion How it's moved, from where it's placed: turned about a line,
     ///        then slid (mm, radians).
     virtual void previewComponent(const InstanceId& component, const kernel::Motion& motion) = 0;
+    /// Draws several components of an assembly moved together, the same way, like
+    /// previewComponent(), in its place: a lid on a hinge and the knob on the lid.
+    /// @param components The components drawn moved.
+    /// @param motion How they're moved, from where they're placed: turned about a
+    ///        line, then slid (mm, radians).
+    virtual void previewComponents(const std::vector<InstanceId>& components,
+                                   const kernel::Motion& motion) = 0;
 
     /// Draws every body where the design has it again.
     virtual void clearPreview() = 0;

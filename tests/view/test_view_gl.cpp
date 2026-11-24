@@ -1007,3 +1007,49 @@ TEST_CASE("picking on components: a face of a placed component says which compon
     CHECK(last == std::vector<ScenePick>{{f.boxId, top, kernel::TopoKind::Face, right},
                                          {f.boxId, top, kernel::TopoKind::Face, left}});
 }
+
+TEST_CASE("a ring handle drags round by the angle turned, carrying on past half a turn",
+          "[view][gl][handles]") {
+    Fixture f;
+    f.view.setContent({{{f.boxId, f.box, false}}, {}});
+    settle(f.view);
+    ViewHandle ring;
+    ring.id = "turn";
+    ring.kind = HandleKind::Ring;
+    ring.at = {0, 0, 10};
+    ring.direction = {0, 0, 1};
+    ring.length = 30;
+    ring.color = {150, 60, 220};
+    f.view.setHandles({ring});
+    settle(f.view);
+
+    std::vector<kernel::Vec3> drags;
+    std::vector<kernel::Vec3> drops;
+    QObject::connect(&f.view, &ViewWidget::handleDragged,
+                     [&](const std::string&, const kernel::Vec3& by) { drags.push_back(by); });
+    QObject::connect(&f.view, &ViewWidget::handleDropped,
+                     [&](const std::string&, const kernel::Vec3& by) { drops.push_back(by); });
+    auto send = [&](QEvent::Type type, QPoint at, Qt::MouseButton button, Qt::MouseButtons held) {
+        QMouseEvent e(type, QPointF(at), f.view.mapToGlobal(QPointF(at)), button, held, Qt::NoModifier);
+        QApplication::sendEvent(&f.view, &e);
+        settle(f.view);
+    };
+    auto onRing = [&](double degrees) {
+        const double t = degrees * std::numbers::pi / 180;
+        const auto p = f.view.toScreen({30 * std::cos(t), 30 * std::sin(t), 10});
+        REQUIRE(p);
+        return *p;
+    };
+    // Round the ring three quarters of the way, counterclockwise seen from above.
+    send(QEvent::MouseMove, onRing(0), Qt::NoButton, Qt::NoButton);
+    send(QEvent::MouseButtonPress, onRing(0), Qt::LeftButton, Qt::LeftButton);
+    for (int degrees = 30; degrees <= 270; degrees += 30)
+        send(QEvent::MouseMove, onRing(degrees), Qt::LeftButton, Qt::LeftButton);
+    send(QEvent::MouseButtonRelease, onRing(270), Qt::LeftButton, Qt::NoButton);
+    REQUIRE(drags.size() == 9);
+    REQUIRE(drops.size() == 1);
+    CHECK(drags[2].x == Approx(std::numbers::pi / 2).margin(0.03));
+    CHECK(drops[0].x == Approx(1.5 * std::numbers::pi).margin(0.03));  // not back to -90 degrees
+    CHECK(drops[0].y == 0);
+    CHECK(drops[0].z == 0);
+}

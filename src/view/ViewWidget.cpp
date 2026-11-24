@@ -57,6 +57,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <numbers>
 #include <type_traits>
 
 #include "InputBoxes.h"
@@ -337,16 +338,18 @@ struct ViewWidget::Impl {
     double dimensionScale = 0;               // mm per pixel the dimensions were last drawn at
     ScreenAxes dimensionScreen;              // which way the screen faced when they were
     bool ready = false;
-    bool clickAdds = false;                      // the last click had Ctrl or Shift held
-    std::optional<FeatureId> previewBody;        // a body drawn moved (setPreview())
-    std::optional<InstanceId> previewComponent;  // or a component (setComponentPreview())
-    gp_Trsf previewMove;                         // how
+    bool clickAdds = false;                     // the last click had Ctrl or Shift held
+    std::optional<FeatureId> previewBody;       // a body drawn moved (setPreview())
+    std::vector<InstanceId> previewComponents;  // or components (setComponentPreview())
+    gp_Trsf previewMove;                        // how
 
     // Draws the previewed body moved, and every other body where it is.
     void applyPreview() {
         for (auto& [id, s] : shown) {
-            const bool moved = (previewBody && *previewBody == id.feature && id.component.isNil()) ||
-                               (previewComponent && *previewComponent == id.component);
+            const bool moved =
+                (previewBody && *previewBody == id.feature && id.component.isNil()) ||
+                (!id.component.isNil() && std::find(previewComponents.begin(), previewComponents.end(),
+                                                    id.component) != previewComponents.end());
             if (moved || s.object->HasTransformation())
                 context->SetLocation(s.object, moved ? TopLoc_Location(previewMove) : TopLoc_Location());
         }
@@ -1060,7 +1063,7 @@ gp_Trsf motionTrsf(const kernel::Motion& motion) {
 void ViewWidget::setPreview(const FeatureId& body, const kernel::Motion& motion) {
     auto& d = *impl_;
     d.previewBody = body;
-    d.previewComponent.reset();
+    d.previewComponents.clear();
     d.previewMove = motionTrsf(motion);
     if (!d.context) return;
     try {
@@ -1072,8 +1075,13 @@ void ViewWidget::setPreview(const FeatureId& body, const kernel::Motion& motion)
 }
 
 void ViewWidget::setComponentPreview(const InstanceId& component, const kernel::Motion& motion) {
+    setComponentPreview(std::vector<InstanceId>{component}, motion);
+}
+
+void ViewWidget::setComponentPreview(const std::vector<InstanceId>& components,
+                                     const kernel::Motion& motion) {
     auto& d = *impl_;
-    d.previewComponent = component;
+    d.previewComponents = components;
     d.previewBody.reset();
     d.previewMove = motionTrsf(motion);
     if (!d.context) return;
@@ -1087,9 +1095,9 @@ void ViewWidget::setComponentPreview(const InstanceId& component, const kernel::
 
 void ViewWidget::clearPreview() {
     auto& d = *impl_;
-    if (!d.previewBody && !d.previewComponent) return;
+    if (!d.previewBody && d.previewComponents.empty()) return;
     d.previewBody.reset();
-    d.previewComponent.reset();
+    d.previewComponents.clear();
     if (!d.context) return;
     try {
         d.applyPreview();
@@ -1521,8 +1529,14 @@ void ViewWidget::mouseMoveEvent(QMouseEvent* event) {
         const auto& h = d.dragHandle;
         if (const auto by =
                 handleDrag(h, d.dragStart, d.rayAt(event->position().x() * r, event->position().y() * r))) {
-            d.dragBy = *by;
-            emit handleDragged(h.id, *by);
+            auto turned = *by;
+            if (h.kind == HandleKind::Ring) {
+                // Round and round: past half a turn it carries on, rather than jumping back.
+                constexpr double kTurn = 2 * std::numbers::pi;
+                turned.x += kTurn * std::round((d.dragBy.x - turned.x) / kTurn);
+            }
+            d.dragBy = turned;
+            emit handleDragged(h.id, turned);
         }
         return;
     }

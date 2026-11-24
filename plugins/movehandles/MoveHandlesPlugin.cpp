@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <numbers>
 #include <optional>
 #include <string>
 
@@ -10,6 +11,7 @@
 #include "sb/model/AssemblyCommands.h"
 #include "sb/model/Commands.h"
 #include "sb/model/Document.h"
+#include "sb/model/JointDrag.h"
 #include "sb/plugin/Events.h"
 
 namespace sb::plugins {
@@ -20,13 +22,15 @@ constexpr const char* kManifest = R"({
   "id": "sb.movehandles",
   "name": "Move handles",
   "version": "0.1.0",
-  "description": "Arrows on the picked body in the 3D view: drag one to slide the body along x, y or z, or the square to slide it on the ground.",
+  "description": "Arrows on the picked body in the 3D view: drag one to slide the body along x, y or z, or the square to slide it on the ground. A component on a hinge gets a ring to turn it, and one on a slider an arrow to slide it.",
   "requires": ["sb.modeling", "sb.viewer"],
   "tier": "ui"
 })";
 
-// Puts the handles on the picked body. Dragging them shows the body moved (a
-// preview: instant, however big the body is); dropping slides it, as one step.
+// Puts the handles on the picked body or component. Dragging them shows it moved
+// (a preview: instant, however big it is); dropping moves it, as one step. A
+// component a revolute or slider joint places gets one handle, on the joint: a
+// ring that turns it, or an arrow that slides it; dropping sets the joint's value.
 class Handles final : public viewer::IHandleUser {
 public:
     Handles(plugin::PluginContext& ctx, viewer::IViewer& viewer) : ctx_(ctx), viewer_(viewer) {}
@@ -34,8 +38,9 @@ public:
     // No clearHandles() when it goes: that's only when SketchBillet closes, and the
     // viewer may already be gone then.
 
-    // Shows handles on the picked body or free component (or the one being
-    // dragged, where it's drawn), or none.
+    // Shows handles on the picked body or free component, or on the joint that
+    // turns or slides the picked component (or the one being dragged, where it's
+    // drawn), or none.
     void refresh() {
         const DocId docId = ctx_.documents().active();
         const auto* doc = ctx_.documents().find(docId);
@@ -43,14 +48,24 @@ public:
         const auto* kernel = ctx_.documents().kernel();
         if (doc && kernel && report && doc->kind() == model::DocKind::Assembly) {
             // A component: a grounded one stays where it is, and a joint places a
-            // joined one, so they have none.
+            // joined one, so only a revolute or slider joint's handle moves it.
             const model::Component* c = nullptr;
             if (dragging_ && !component_.isNil()) {
                 c = doc->findComponent(component_);
             } else if (!dragging_ && ctx_.selection().doc() == docId &&
                        ctx_.selection().components().size() == 1) {
                 c = doc->findComponent(ctx_.selection().components().front());
-                if (c && (c->grounded || report->placedByJoint(c->id))) c = nullptr;
+                if (c && c->grounded) c = nullptr;
+            }
+            // On a revolute or slider joint: its one handle.
+            if (!dragging_) {
+                const JointId* by = c ? report->placingJoint(c->id) : nullptr;
+                joint_ = by && model::dragJoint(*doc, *report, *by, 0) ? *by : JointId{};
+            }
+            if (c && !dragging_ && report->placedByJoint(c->id)) c = nullptr;
+            if (const auto along = jointHandle(*doc, *report, joint_)) {
+                viewer_.setHandles(*this, {*along});
+                return;
             }
             const auto box = c ? componentBounds(*report, *kernel, *c) : std::nullopt;
             if (!box) {
@@ -60,6 +75,7 @@ public:
             viewer_.setHandles(*this, moveHandles(shifted(*box)));
             return;
         }
+        if (!dragging_) joint_ = {};
         std::optional<FeatureId> body;
         if (dragging_) {
             body = target_;
@@ -85,12 +101,21 @@ public:
             if (doc->kind() == model::DocKind::Assembly) {
                 if (sel.components().size() != 1) return;
                 component_ = sel.components().front();
+                if (!joint_.isNil()) {
+                    const auto* j = doc->findJoint(joint_);
+                    if (!j) return;
+                    startValue_ = shownValue_ = j->value;
+                }
             } else {
                 if (sel.features().size() != 1) return;
                 target_ = sel.features().front();
             }
             dragging_ = true;
             shown_ = {};
+        }
+        if (!joint_.isNil()) {
+            dragAlongJoint(*doc, by);
+            return;
         }
         const auto snapped = snapSlide(by, doc->lengthUnit());
         if (snapped.x == shown_.x && snapped.y == shown_.y && snapped.z == shown_.z) return;
@@ -110,6 +135,22 @@ public:
         shown_ = {};
         viewer_.clearPreview();  // before the design moves it, so it isn't moved twice
         const DocId docId = ctx_.documents().active();
+        if (!joint_.isNil()) {
+            // Along a joint: its value changes, as one step.
+            const auto* doc = ctx_.documents().find(docId);
+            const auto* j = doc ? doc->findJoint(joint_) : nullptr;
+            if (j && shownValue_ != startValue_) {
+                model::Joint changed = *j;
+                changed.value = shownValue_;
+                auto problems =
+                    ctx_.documents().execute(docId, std::make_unique<model::SetJointCommand>(changed));
+                if (!problems.empty()) ctx_.log(problems.front().message);
+            }
+            moved_ = {};
+            component_ = {};
+            refresh();
+            return;
+        }
         const bool moved = slide.x != 0 || slide.y != 0 || slide.z != 0;
         if (!component_.isNil()) {
             // A component: placed further along, as one step.
@@ -145,12 +186,63 @@ public:
         // Escape: the design never changed, so only the drawing goes back.
         dragging_ = false;
         shown_ = {};
+        moved_ = {};
         component_ = {};
         viewer_.clearPreview();
         refresh();
     }
 
 private:
+    // A drag of the joint's handle: the joint's value changes by how far it was
+    // turned (radians) or slid (mm), in whole degrees or steps, within its limits,
+    // and what it carries is drawn moved.
+    void dragAlongJoint(const model::Document& doc, const kernel::Vec3& by) {
+        const auto* report = ctx_.documents().lastRebuild(ctx_.documents().active());
+        const auto* j = doc.findJoint(joint_);
+        const auto* r = report ? report->joint(joint_) : nullptr;
+        if (!j || !r || !r->aFrame) return;
+        const double sign = movesB(*report) ? 1 : -1;
+        double value = startValue_;
+        if (j->kind == model::JointKind::Revolute) {
+            constexpr double degree = std::numbers::pi / 180;
+            value = std::round((startValue_ + sign * by.x) / degree) * degree;
+        } else {
+            const auto& z = r->aFrame->zAxis;
+            const double along = by.x * z.x + by.y * z.y + by.z * z.z;
+            value = snapSlide({startValue_ + sign * along, 0, 0}, doc.lengthUnit()).x;
+        }
+        const auto drag = model::dragJoint(doc, *report, joint_, value);
+        if (!drag || drag->value == shownValue_) return;
+        shownValue_ = drag->value;
+        moved_ = drag->motion;
+        viewer_.previewComponents(drag->components, drag->motion);
+        refresh();  // the handle follows
+    }
+
+    // Whether the joint placed its b side (which moves with its value), or its a side.
+    bool movesB(const model::RebuildReport& report) const {
+        const auto* doc = ctx_.documents().find(ctx_.documents().active());
+        const auto* j = doc ? doc->findJoint(joint_) : nullptr;
+        const JointId* by = j ? report.placingJoint(j->b.component) : nullptr;
+        return by && *by == joint_;
+    }
+
+    // The one handle of a component on a revolute or slider joint: on the origin
+    // of the side that moves (moved as the preview draws it), a ring about the
+    // joint's line, or an arrow along it.
+    std::optional<viewer::Handle> jointHandle(const model::Document& doc, const model::RebuildReport& report,
+                                              const JointId& id) const {
+        const auto* j = id.isNil() ? nullptr : doc.findJoint(id);
+        const auto* r = j ? report.joint(id) : nullptr;
+        if (!r || !r->aFrame || !r->bFrame) return std::nullopt;
+        const auto& origin = movesB(report) ? r->bFrame->origin : r->aFrame->origin;
+        const auto at = kernel::apply(kernel::fromMotion(moved_), origin);
+        const auto& z = r->aFrame->zAxis;
+        if (j->kind == model::JointKind::Revolute)
+            return viewer::Handle{"turn", viewer::HandleKind::Ring, at, z, kRingPixels, 150, 60, 220};
+        return viewer::Handle{"slide", viewer::HandleKind::Arrow, at, z, kArrowPixels, 150, 60, 220};
+    }
+
     // A box moved to where the preview draws it.
     kernel::Box3 shifted(kernel::Box3 box) const {
         for (auto* p : {&box.min, &box.max}) {
@@ -189,10 +281,14 @@ private:
 
     plugin::PluginContext& ctx_;
     viewer::IViewer& viewer_;
-    bool dragging_ = false;  // a drag has started
-    FeatureId target_;       // the step being slid
-    InstanceId component_;   // or, in an assembly, the component
-    kernel::Vec3 shown_{};   // how far the preview draws it, snapped (mm)
+    bool dragging_ = false;   // a drag has started
+    FeatureId target_;        // the step being slid
+    InstanceId component_;    // or, in an assembly, the component
+    kernel::Vec3 shown_{};    // how far the preview draws it, snapped (mm)
+    JointId joint_;           // the joint the picked component turns or slides on, if any
+    double startValue_ = 0;   // its value when the drag started (radians or mm)
+    double shownValue_ = 0;   // and as the preview draws it
+    kernel::Motion moved_{};  // how the preview moves what it carries
 };
 
 void registerMoveHandles(plugin::PluginContext& ctx) {

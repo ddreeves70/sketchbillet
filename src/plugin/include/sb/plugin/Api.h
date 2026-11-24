@@ -188,7 +188,11 @@ class PluginContext;
 /// Selection::setJoints() and SelectionChanged::joints).
 /// Version 65 added picking faces, edges and points on an assembly's components
 /// (PickMode::Joint, PickedElement::component).
-inline constexpr int kPluginApiVersion = 65;
+/// Version 66 added ring handles, dragged round to turn something (sb.viewer/8:
+/// viewer::HandleKind::Ring), and previews of several components moved together
+/// (IViewer::previewComponents(), viewer::BodyPreview::components), which the move
+/// handles use to drag a component along its joint.
+inline constexpr int kPluginApiVersion = 66;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

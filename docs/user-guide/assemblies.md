@@ -43,6 +43,18 @@ Its picture moves while you drag; when you let go it's placed there, as one step
 of Undo. A grounded component has no arrows: it stays where it is. Press
 **Escape** before you let go to put it back.
 
+**Turning and sliding by hand:** pick a component on a hinge (a revolute
+joint), and a purple ring appears round the hinge's line. Drag round the ring
+and the component turns about its hinge, in steps of 1°, never past the joint's
+limits; whatever is joined onto it turns with it. Let go and the joint's value
+is set there, as one step of Undo. A component on a slider gets a purple arrow
+along the slider instead: drag it to slide the component, in steps of 1 mm.
+Properties says how a picked component moves, under **Moves**. A component
+held by a rigid joint doesn't drag by itself: move the one it's joined to, or
+change its joint. Press **Escape** before you let go to put it back.
+
+![The cover picked: a purple ring round its hinge to turn it, and Properties saying that Joint1 turns it on Tray 1, from -110° to 0°](images/app-joint-drag.png)
+
 **Joints** hold parts together and say how they still move: a lid turning on its
 hinge, a wheel on its axle (see [Joints](#joints)). The feature tree lists them
 under **Joints**: click one to pick it, and Properties shows what it joins, its
