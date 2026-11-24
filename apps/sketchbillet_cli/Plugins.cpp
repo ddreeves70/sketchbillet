@@ -19,6 +19,7 @@
 #include "sb/io/LinkedParts.h"
 #include "sb/io/SketchBilletFile.h"
 #include "sb/kernel_occt/OcctKernel.h"
+#include "sb/model/AssemblyMass.h"
 #include "sb/plugin/PluginHost.h"
 #include "sb/plugins/Modeling.h"
 #include "sb/sketch_planegcs/PlaneGcsSolver.h"
@@ -901,7 +902,6 @@ bool printAssembly(const model::Document& doc, const model::RebuildReport& repor
     }
     // Each part, built once, however many components place it.
     bool ok = true;
-    double total = 0;
     if (!doc.parts().empty()) std::printf("Parts:\n");
     for (const auto* part : doc.parts()) {
         const auto* built = report.part(part->id());
@@ -917,7 +917,6 @@ bool printAssembly(const model::Document& doc, const model::RebuildReport& repor
                     materials += (materials.empty() ? "" : ", ") + material.name;
             }
         }
-        total += grams * static_cast<double>(uses);
         const bool good = built && built->ok();
         ok = ok && good;
         std::printf("  %-12s %zu %-6s %-8s", part->name().c_str(), part->featureCount(),
@@ -951,7 +950,13 @@ bool printAssembly(const model::Document& doc, const model::RebuildReport& repor
             printIssues(r->issues, "      ");
         }
     }
-    if (count > 0) std::printf("Mass in all: %.2f g\n", total);
+    if (count > 0) {
+        // The whole assembly: its mass and weight, and where it balances.
+        const auto mass = model::assemblyMass(doc, report, kernel);
+        std::printf("Mass in all: %.2f g (weighs %.3f N)\n", mass.grams, mass.newtons);
+        if (mass.grams > 0)
+            std::printf("Balance point: %s\n", pointText(mass.center, doc.lengthUnit(), true).c_str());
+    }
     printParameters(doc);
     return ok;
 }

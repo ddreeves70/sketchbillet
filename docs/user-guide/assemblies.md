@@ -133,13 +133,21 @@ Parts:
     linked to Body.sb
   Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
     linked to Wheel.sb
-Mass in all: 46.41 g
+Mass in all: 46.41 g (weighs 0.455 N)
+Balance point: 40, 16.23, 4.71 mm
 wrote Car.sb
 ```
 
 Each component is placed by its part's **origin** (the part's 0, 0, 0 point):
 Wheel 1's origin is at x 10 mm, y -6 mm, z 0 mm in the car. The list ends with
-each part's mass and the whole car's.
+each part's mass, the whole car's mass and weight, and its **balance point**.
+
+The **balance point** (or center of gravity) is where the car would balance on
+a pin: x 40 mm, y 16.23 mm, z 4.71 mm. It's in the middle of the car's length,
+since the wheels are spread evenly, but less than half way across (y 16.23 mm
+of 40 mm), because both wheels are on one side. A low balance point near the
+middle keeps a car, or a robot, from tipping over. It moves when you move a
+component, or change a part's material.
 
 Wheels stand on their edge, so turn them: `z=0,-1,0` makes the wheel's own z
 axis (the way its cylinder points) face along -y, out to the side of the car.
@@ -164,7 +172,8 @@ Parts:
     linked to Body.sb
   Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
     linked to Wheel.sb
-Mass in all: 46.41 g
+Mass in all: 46.41 g (weighs 0.455 N)
+Balance point: 40, 15.79, 6.02 mm
 ```
 
 ## Grounded and free
@@ -225,7 +234,8 @@ Parts:
     linked to Tray.sb
   Cover        1 step   ok        mass 7.94 g (PLA), 1 in the assembly
     linked to Cover.sb
-Mass in all: 27.78 g
+Mass in all: 27.78 g (weighs 0.272 N)
+Balance point: 20, 20, 7 mm
 wrote Case.sb
 ```
 
@@ -251,7 +261,8 @@ Parts:
     linked to Tray.sb
   Cover        1 step   ok        mass 7.94 g (PLA), 1 in the assembly
     linked to Cover.sb
-Mass in all: 27.78 g
+Mass in all: 27.78 g (weighs 0.272 N)
+Balance point: 20, 27.27, 11.96 mm
 wrote Case.sb
 ```
 
@@ -298,7 +309,8 @@ Parts:
     linked to Body.sb
   Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
     linked to Wheel.sb
-Mass in all: 46.41 g
+Mass in all: 46.41 g (weighs 0.455 N)
+Balance point: 40, 16.45, 6.02 mm
 wrote Car.sb
 $ sketchbillet_cli check Car.sb
 warning [assembly.overlap]: Body 1 and Wheel 1 overlap by 519.91 mm^3, around x 10.32, y 1.5, z 5.74 mm. Parts can't be in the same place, so they won't go together. Move one of them, or change one of their parts so they fit.
@@ -318,7 +330,8 @@ Parts:
     linked to Body.sb
   Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
     linked to Wheel.sb
-Mass in all: 46.41 g
+Mass in all: 46.41 g (weighs 0.455 N)
+Balance point: 40, 15.79, 6.02 mm
 wrote Car.sb
 $ sketchbillet_cli check Car.sb
 Car: no components overlap (3 components, 0 pairs close enough to check).

@@ -245,7 +245,9 @@ part's origin is. Then its joints, if it has any: what each one joins, its kind,
 how far it's turned or slid, its limits, and anything wrong with it. Then its parts, each built once
 however many components use it, with its steps, mass and material, and how many
 are in the assembly, and the file each linked part is linked to. Last, the mass
-of everything together.
+of everything together, its weight on Earth in newtons (N), and its **balance
+point** (its center of gravity): where in the assembly it would balance on a
+pin, as x, y and z. A component whose part has no bodies yet isn't counted.
 
 Opening an assembly first updates its [linked parts](../user-guide/assemblies.md#linked-and-inside-parts)
 from their files, and says what changed, before the list:
@@ -275,7 +277,8 @@ Car: assembly, 4 components, 1 part
 Parts:
   Wheel        1 step   ok        mass 3.37 g (PLA), 4 in the assembly
     linked to Wheel.sb
-Mass in all: 13.46 g
+Mass in all: 13.46 g (weighs 0.132 N)
+Balance point: 37.5, 0, 3 mm
 ```
 
 `--components` also says which way each component faces: where its part's x and
@@ -307,7 +310,8 @@ Car: assembly, 4 components, 1 part
 Parts:
   Wheel        1 step   ok        mass 3.37 g (PLA), 4 in the assembly
     linked to Wheel.sb
-Mass in all: 13.46 g
+Mass in all: 13.46 g (weighs 0.132 N)
+Balance point: 37.5, 0, 3 mm
 faces of Cylinder1: 3
    1  flat        452.39 mm^2  at 0.00,0.00,0.00  bottom of Cylinder1
    2  cylinder    452.39 mm^2  at 0.00,0.00,3.00  side of Cylinder1
