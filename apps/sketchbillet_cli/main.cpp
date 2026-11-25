@@ -13,7 +13,8 @@
 //   sketchbillet_cli measure <file.sb> <name> face|edge|point <n> [<name> face|edge|point <n>]
 //     (in an assembly, <name> is a component: "Wheel 1", or "Wheel 1:Hub" for one of its bodies)
 //                                       measure one face, edge or point, or between two
-//   sketchbillet_cli materials [<file.sb>]      list materials (SketchBillet's own, and a design's)
+//   sketchbillet_cli parts <assembly.sb> [--csv <out.csv>]  list an assembly's parts: how many, material,
+//   mass sketchbillet_cli materials [<file.sb>]      list materials (SketchBillet's own, and a design's)
 //   sketchbillet_cli regress [--update] <case|dir>... run regression cases (see tests/corpus/README.md)
 //   sketchbillet_cli plugins [--plugins <folder>]... [--slow-start-ms <n>] [--strict]  list plugins, their
 //                                       commands, services, problems and warnings
@@ -27,6 +28,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <numbers>
 #include <optional>
@@ -44,6 +46,7 @@
 #include "sb/model/Document.h"
 #include "sb/model/Measure.h"
 #include "sb/model/Overlaps.h"
+#include "sb/model/PartsList.h"
 #include "sb/model/PrintCheck.h"
 #include "sb/sketch/Profiles.h"
 #include "sb/sketch_planegcs/PlaneGcsSolver.h"
@@ -64,6 +67,7 @@ int usage() {
         "       sketchbillet_cli check <file.sb> [--step <name>] [--min-wall <mm>]\n"
         "       sketchbillet_cli check <assembly.sb> [--overlaps]\n"
         "       sketchbillet_cli measure <file.sb> <name> face|edge|point <n> [<name> face|edge|point <n>]\n"
+        "       sketchbillet_cli parts <assembly.sb> [--csv <out.csv>]\n"
         "       sketchbillet_cli materials [<file.sb>]\n"
         "       sketchbillet_cli regress [--update] <case.json|folder>...\n"
         "       sketchbillet_cli plugins [--plugins <folder>]... [--slow-start-ms <n>] [--strict]\n"
@@ -793,6 +797,88 @@ int regress(int argc, char** argv) {
     return sb::cli::runRegression(*kernel, paths, options);
 }
 
+// sketchbillet_cli parts <assembly.sb> [--csv <out.csv>]: the parts list, each part
+// once with how many components use it, and as CSV for a spreadsheet.
+int partsOf(int argc, char** argv) {
+    if (argc != 3 && !(argc == 5 && std::string_view(argv[3]) == "--csv")) return usage();
+    auto opened = sb::io::openFile(argv[2]);
+    if (!opened.ok()) {
+        printIssues(opened.issues);
+        return 1;
+    }
+    printIssues(opened.notes);
+    const auto& doc = *opened.document;
+    if (doc.kind() != sb::model::DocKind::Assembly) {
+        std::fprintf(stderr,
+                     "error: %s is a part, not an assembly, so it has no parts list. Open an assembly, or "
+                     "check this part's mass with open.\n",
+                     doc.name().c_str());
+        return 1;
+    }
+    auto kernel = sb::kernel::makeOcctKernel();
+    auto solver = sb::sketch::makePlaneGcsSolver();
+    const auto report = doc.regenerate(*kernel, solver.get());
+    const auto rows = sb::model::partsList(doc, report, *kernel);
+
+    // A table: each column as wide as its widest entry.
+    std::vector<std::vector<std::string>> table{
+        {"#", "Part", "Count", "Material", "Mass each", "Mass in all", "Kept"}};
+    auto grams = [](double g) {
+        char buf[32];
+        std::snprintf(buf, sizeof buf, "%.2f g", g);
+        return std::string(buf);
+    };
+    int count = 0;
+    double total = 0;
+    for (const auto& r : rows) {
+        table.push_back({std::to_string(r.item), r.name, std::to_string(r.count),
+                         r.bodies == 0 ? "-" : r.material, grams(r.gramsEach), grams(r.gramsAll),
+                         r.linked ? "linked to " + r.file : "inside"});
+        count += r.count;
+        total += r.gramsAll;
+    }
+    std::printf("%s: %zu %s, %d %s\n", doc.name().c_str(), rows.size(), rows.size() == 1 ? "part" : "parts",
+                count, count == 1 ? "component" : "components");
+    if (!rows.empty()) {
+        std::vector<std::size_t> widths(table.front().size(), 0);
+        for (const auto& line : table)
+            for (std::size_t i = 0; i < line.size(); ++i) widths[i] = std::max(widths[i], line[i].size());
+        for (const auto& line : table) {
+            std::string text = " ";
+            for (std::size_t i = 0; i < line.size(); ++i) {
+                // Numbers (the count and the masses) line up on the right.
+                const bool right = i == 0 || i == 2 || i == 4 || i == 5;
+                const std::string pad(widths[i] - line[i].size(), ' ');
+                text += " " + (right ? pad + line[i] : (i + 1 == line.size() ? line[i] : line[i] + pad));
+            }
+            std::printf("%s\n", text.c_str());
+        }
+        std::printf("Mass in all: %s\n", grams(total).c_str());
+    }
+    for (const auto& r : rows) {
+        if (r.built && r.bodies == 0)
+            std::printf("note: %s has no body yet, so it weighs nothing. Add a shape to it.\n",
+                        r.name.c_str());
+        else if (!r.built)
+            std::printf("note: %s has a problem, so its mass may be wrong. Open it to see.\n",
+                        r.name.c_str());
+    }
+    if (argc == 5) {
+        const auto csv = sb::model::partsListCsv(rows, doc.lengthUnit());
+        std::ofstream out(std::filesystem::path(argv[4]), std::ios::binary);
+        out << csv;
+        out.close();
+        if (!out) {
+            std::fprintf(stderr,
+                         "error: couldn't write %s. Check the folder exists and you can save there.\n",
+                         argv[4]);
+            return 1;
+        }
+        std::printf("wrote %s\n", argv[4]);
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -809,6 +895,7 @@ int main(int argc, char** argv) {
     if (cmd == "open") return openDesign(argc, argv);
     if (cmd == "check") return checkDesign(argc, argv);
     if (cmd == "measure") return measureDesign(argc, argv);
+    if (cmd == "parts") return partsOf(argc, argv);
     if (cmd == "materials") return materials(argc, argv);
     if (cmd == "regress") return regress(argc, argv);
     if (cmd == "plugins") return sb::cli::listPlugins(argc, argv);

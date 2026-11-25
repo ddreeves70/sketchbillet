@@ -27,7 +27,7 @@ This page covers what the student gets, in the order it gets built:
 | 5. In the app | The assembly tree, inserting parts, joining, dragging, editing a part | Built |
 | 6. Checks | Parts that overlap, the whole assembly's mass and balance point, measuring between parts | Built |
 | 7. Exploded views | Parts pulled apart to show how they fit, for pictures and drawings | Built (drawing views come with drawings) |
-| 8. Parts list | How many of each part, with material and mass, for printing and drawings | Planned |
+| 8. Parts list | How many of each part, with material and mass, for printing and drawings | The list and CSV built, from the command line |
 | 9. Parts from bodies | A part with several bodies turned into an assembly (copy-and-group's "groups that move together") | Planned |
 
 ## Words
@@ -554,7 +554,15 @@ Each line is one pull request, in this order:
      exploded. Phase 4's drawings will use exploded views for drawing views.
 8. **Parts list,** and exporting each part once with its count; STEP export
    with the assembly's structure (parts, components and placements), and 3MF
-   with every part.
+   with every part. In pieces:
+   - **The list and CSV, from the command line** (built, Nov 25, 2026):
+     `partsList()` (sb_model) gives each part once, in the assembly's order:
+     its count, materials (each once, in body order), bodies, volume and mass
+     each, mass in all, material cost, inside or linked (and the file's
+     name), and whether it built; `partsListCsv()` writes it for a
+     spreadsheet. `sketchbillet_cli parts <assembly.sb> [--csv <out.csv>]`.
+   - Next: exporting each part once with its count, STEP with the assembly's
+     structure and 3MF with every part; then the Parts List in the app.
 9. **Make Parts from Bodies.**
 10. **Guides:** user's guide pages for each piece as it's built, and two
     tutorials, a toy car whose wheels turn and a box with a hinged lid.

@@ -471,6 +471,28 @@ In Exploded 1:
   for a lid. A part slid sideways out of a hole would hit the hole's side.
 - **Leave room**: slide each part far enough that it doesn't overlap the next.
 
+## Parts list
+
+The **parts list** (or bill of materials) says what to print or make for the
+assembly: each part once, with how many components use it, what it's made of,
+and its mass each and in all. The car's two wheels are one part, so the list
+says to print the wheel twice.
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli parts Car.sb
+Car: 2 parts, 3 components
+  # Part  Count Material Mass each Mass in all Kept
+  1 Body      1 PLA        39.68 g     39.68 g linked to Body.sb
+  2 Wheel     2 PLA         3.37 g      6.73 g linked to Wheel.sb
+Mass in all: 46.41 g
+```
+
+Add `--csv car-parts.csv` to save it as a spreadsheet file too, to open in
+Excel, Google Sheets or LibreOffice Calc: to plan the printing, add up the
+filament, or hand in with a project. [`parts`](../cli/parts.md) explains each
+column.
+
 ## Linked and inside parts
 
 A part in an assembly is either **linked** to its own `.sb` file, or **inside**
@@ -538,6 +560,7 @@ it): you can move or copy the whole folder, and everything still links up.
 | List the components and parts | [`open --components`](../cli/open.md#an-assembly) |
 | Check that no components overlap | [`check`](../cli/check.md#overlaps-in-an-assembly) |
 | Pull components apart in an exploded view (in the app: **Explode**, **Add step**) | [`explode.add`](../cli/commands.md#explodeadd), [`explode.add_step`](../cli/commands.md#explodeadd_step), [`open --exploded`](../cli/open.md#an-exploded-view) |
+| List the parts: how many of each, material and mass | [`parts Car.sb`](../cli/parts.md) (`--csv` for a spreadsheet) |
 | Measure between two components | [`measure Car.sb "Wheel 1" face 1 "Body 1" face 2`](../cli/measure.md#in-an-assembly) |
 | Mark two components as meant to overlap, or unmark them | [`press_fit.add`](../cli/commands.md#press_fitadd), [`press_fit.delete`](../cli/commands.md#press_fitdelete) |
 
