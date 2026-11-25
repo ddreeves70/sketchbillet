@@ -116,6 +116,10 @@ std::vector<PressFit>& DocumentEditor::pressFits() {
     return doc_.pressFits_;
 }
 
+std::vector<ExplodedView>& DocumentEditor::explodedViews() {
+    return doc_.explodedViews_;
+}
+
 void DocumentEditor::addPart(std::unique_ptr<Document> part, std::size_t index) {
     if (!part) return;
     index = std::min(index, doc_.parts_.size());
@@ -377,6 +381,25 @@ std::string Document::uniqueComponentName(const std::string& part) const {
     for (int n = 1;; ++n) {
         std::string candidate = part + " " + std::to_string(n);
         if (!findComponent(std::string_view(candidate))) return candidate;
+    }
+}
+
+const ExplodedView* Document::findExplodedView(const ExplodedViewId& id) const {
+    for (const auto& v : explodedViews_)
+        if (v.id == id) return &v;
+    return nullptr;
+}
+
+const ExplodedView* Document::findExplodedView(std::string_view name) const {
+    for (const auto& v : explodedViews_)
+        if (v.name == name) return &v;
+    return nullptr;
+}
+
+std::string Document::uniqueExplodedViewName() const {
+    for (int n = 1;; ++n) {
+        std::string candidate = "Exploded " + std::to_string(n);
+        if (!findExplodedView(std::string_view(candidate))) return candidate;
     }
 }
 

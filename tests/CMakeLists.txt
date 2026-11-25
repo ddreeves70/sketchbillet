@@ -6,6 +6,7 @@ add_executable(sb_tests
   model/test_commands.cpp
   model/test_rebuild.cpp
   model/test_registry.cpp
+  model/test_exploded.cpp
   model/test_materials.cpp
   model/test_copy.cpp
   model/test_suppress.cpp

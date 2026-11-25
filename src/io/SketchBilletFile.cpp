@@ -1486,6 +1486,23 @@ void assemblyEntries(const Document& doc, Entries& entries, const std::filesyste
         entries.emplace_back("pressfits.json", dump(json{{"press_fits", fits}}));
         files.push_back("pressfits.json");
     }
+    if (!doc.explodedViews().empty()) {
+        json views = json::array();
+        for (const auto& v : doc.explodedViews()) {
+            json steps = json::array();
+            for (const auto& step : v.steps) {
+                json moved = json::array();
+                for (const auto& c : step.components) moved.push_back(c.toString());
+                steps.push_back({{"id", step.id.toString()},
+                                 {"components", moved},
+                                 {"direction", vec3(step.direction)},
+                                 {"distance", step.distance}});
+            }
+            views.push_back({{"id", v.id.toString()}, {"name", v.name}, {"steps", steps}});
+        }
+        entries.emplace_back("explodes.json", dump(json{{"exploded_views", views}}));
+        files.push_back("explodes.json");
+    }
     if (!doc.parameters().empty()) {
         entries.emplace_back("parameters.json", dump(parametersJson(doc)));
         files.push_back("parameters.json");
@@ -1751,6 +1768,55 @@ OpenResult readDesign(zip_t* za, const std::string& prefix, std::string_view dis
                         std::make_unique<model::AddPressFitCommand>(model::PressFit{*id, *a, *b}));
                     !issues.empty()) {
                     return fail(damaged(displayName, "press fit: " + issues.front().code));
+                }
+            }
+        } else if (why.rfind("missing", 0) != 0) {
+            return fail(damaged(displayName, why));
+        }
+        // Its exploded views. (An assembly without any has no explodes.json.)
+        if (const auto views = readJson("explodes.json"); views) {
+            const json vlist = views->value("exploded_views", json());
+            if (!vlist.is_array())
+                return fail(damaged(displayName, "explodes.json has no exploded view list"));
+            for (const auto& vj : vlist) {
+                model::ExplodedView view;
+                const auto id = vj.is_object() ? ExplodedViewId::parse(vj.value("id", "")) : std::nullopt;
+                const json steps = vj.is_object() ? vj.value("steps", json()) : json();
+                if (!id || !vj.value("name", json()).is_string() || !steps.is_array())
+                    return fail(damaged(
+                        displayName, "an exploded view in explodes.json is missing its id, name or steps"));
+                view.id = *id;
+                view.name = vj.value("name", "");
+                for (const auto& sj : steps) {
+                    model::ExplodeStep step;
+                    const auto stepId =
+                        sj.is_object() ? ExplodeStepId::parse(sj.value("id", "")) : std::nullopt;
+                    const auto direction =
+                        sj.is_object() ? readVec3(sj.value("direction", json())) : std::nullopt;
+                    const json moved = sj.is_object() ? sj.value("components", json()) : json();
+                    if (!stepId || !direction || !sj.value("distance", json()).is_number() ||
+                        !moved.is_array())
+                        return fail(
+                            damaged(displayName, "a step of " + view.name +
+                                                     " in explodes.json is missing its id, direction, "
+                                                     "distance or components"));
+                    step.id = *stepId;
+                    step.direction = *direction;
+                    step.distance = sj.value("distance", 0.0);
+                    for (const auto& cj : moved) {
+                        const auto c =
+                            cj.is_string() ? model::ComponentId::parse(cj.get<std::string>()) : std::nullopt;
+                        if (!c)
+                            return fail(
+                                damaged(displayName, "a step of " + view.name + " has a bad component id"));
+                        step.components.push_back(*c);
+                    }
+                    view.steps.push_back(std::move(step));
+                }
+                if (auto issues =
+                        doc->execute(std::make_unique<model::AddExplodedViewCommand>(std::move(view)));
+                    !issues.empty()) {
+                    return fail(damaged(displayName, "exploded view: " + issues.front().code));
                 }
             }
         } else if (why.rfind("missing", 0) != 0) {

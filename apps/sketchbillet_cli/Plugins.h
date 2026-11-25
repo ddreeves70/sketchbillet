@@ -37,6 +37,10 @@ void printFormulas(const model::Feature& step, LengthUnit unit, const char* inde
 // formula and, if that isn't just the value, what it works out to.
 void printParameters(const model::Document& doc);
 
+// "40, -32, 12 mm": a point (length true, with its unit), or a direction with
+// no unit.
+std::string pointText(const kernel::Vec3& v, LengthUnit unit, bool length);
+
 // Lists an assembly: its components (each with its part, grounded or free, and
 // where it sits; with `directions`, which way its x and z face too), its parts
 // (each built once: steps, mass), and the mass of everything together. Returns

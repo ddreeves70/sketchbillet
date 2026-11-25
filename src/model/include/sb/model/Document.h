@@ -210,6 +210,25 @@ public:
     /// @return The first free one of "Joint1", "Joint2", ...
     std::string uniqueJointName() const;
 
+    /// Gives an assembly's exploded views. Change them with
+    /// AddExplodedViewCommand, SetExplodedViewCommand and DeleteExplodedViewCommand.
+    /// @return The views, in the order they were added.
+    const std::vector<ExplodedView>& explodedViews() const { return explodedViews_; }
+
+    /// Finds an exploded view by its id.
+    /// @param id The view.
+    /// @return It, or nullptr if there's none.
+    const ExplodedView* findExplodedView(const ExplodedViewId& id) const;
+
+    /// Finds an exploded view by its name.
+    /// @param name Its name, like "Exploded 1".
+    /// @return It, or nullptr if there's none.
+    const ExplodedView* findExplodedView(std::string_view name) const;
+
+    /// Makes a name for a new exploded view.
+    /// @return The first free one of "Exploded 1", "Exploded 2", ...
+    std::string uniqueExplodedViewName() const;
+
     /// Gives an assembly's press fits: pairs of components meant to overlap,
     /// which checkOverlaps() leaves out. Change them with AddPressFitCommand and
     /// DeletePressFitCommand.
@@ -468,6 +487,7 @@ private:
     std::vector<Component> components_;               // an assembly's components
     std::vector<Joint> joints_;                       // and its joints
     std::vector<PressFit> pressFits_;                 // and the pairs meant to overlap
+    std::vector<ExplodedView> explodedViews_;         // and its exploded views
     std::vector<std::unique_ptr<Document>> parts_;    // an assembly's parts (inside and linked)
     std::map<DocId, PartLink> links_;                 // the linked ones' links; see partLink()
     std::map<FeatureId, std::uint64_t> revisions_;    // see revision(); set by DocumentEditor

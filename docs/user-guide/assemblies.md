@@ -383,6 +383,78 @@ On the command line, each name is a component; the numbers are the ones
 [`open --faces "Wheel 1"`](../cli/open.md#a-components-edges-faces-and-points)
 lists. [`measure`](../cli/measure.md#in-an-assembly) explains more.
 
+## Exploded views
+
+An **exploded view** pulls the components apart to show how they go together,
+like the pictures in building instructions: the wheels slid off the car, each
+along its axle. It's saved with the assembly by name ("Exploded 1"), and you can
+have more than one. It never moves the components themselves, or changes the
+joints: it's only a way to look at the assembly.
+
+An exploded view is made of **steps**. Each step slides one or more components
+in a direction, by a distance in mm, after the steps before it. A component in
+two steps moves by both: off the axle first, then out to the side.
+
+For now, make them with `sketchbillet_cli` (the desktop app's Explode button comes
+next). The wheels of the car, 20 mm to the front:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open Car.sb --save Car.sb explode.add
+Car: assembly, 3 components, 2 parts
+  Body 1       Body       grounded at 0, 0, 0 mm
+  Wheel 1      Wheel      free     at 10, -6, 12 mm
+  Wheel 2      Wheel      free     at 70, -6, 12 mm
+Exploded views:
+  Exploded 1: 0 steps
+Parts:
+  Body         1 step   ok        mass 39.68 g (PLA), 1 in the assembly
+    linked to Body.sb
+  Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+    linked to Wheel.sb
+Mass in all: 46.41 g (weighs 0.455 N)
+Balance point: 40, 15.79, 6.02 mm
+wrote Car.sb
+$ sketchbillet_cli run --open Car.sb --save Car.sb explode.add_step view="Exploded 1" components="Wheel 1, Wheel 2" direction=0,-1,0 distance=20
+Car: assembly, 3 components, 2 parts
+  Body 1       Body       grounded at 0, 0, 0 mm
+  Wheel 1      Wheel      free     at 10, -6, 12 mm
+  Wheel 2      Wheel      free     at 70, -6, 12 mm
+Exploded views:
+  Exploded 1: 1 step
+    1. Wheel 1, Wheel 2: 20 mm along 0, -1, 0
+Parts:
+  Body         1 step   ok        mass 39.68 g (PLA), 1 in the assembly
+    linked to Body.sb
+  Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+    linked to Wheel.sb
+Mass in all: 46.41 g (weighs 0.455 N)
+Balance point: 40, 15.79, 6.02 mm
+wrote Car.sb
+$ sketchbillet_cli open Car.sb --exploded "Exploded 1"
+Car: assembly, 3 components, 2 parts
+  Body 1       Body       grounded at 0, 0, 0 mm
+  Wheel 1      Wheel      free     at 10, -6, 12 mm
+  Wheel 2      Wheel      free     at 70, -6, 12 mm
+Exploded views:
+  Exploded 1: 1 step
+    1. Wheel 1, Wheel 2: 20 mm along 0, -1, 0
+Parts:
+  Body         1 step   ok        mass 39.68 g (PLA), 1 in the assembly
+    linked to Body.sb
+  Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+    linked to Wheel.sb
+Mass in all: 46.41 g (weighs 0.455 N)
+Balance point: 40, 15.79, 6.02 mm
+In Exploded 1:
+  Wheel 1      at 10, -26, 12 mm (moved 0, -20, 0 mm)
+  Wheel 2      at 70, -26, 12 mm (moved 0, -20, 0 mm)
+```
+
+- **Pick a direction that pulls straight off**: along an axle for a wheel, up
+  for a lid. A part slid sideways out of a hole would hit the hole's side.
+- **Leave room**: slide each part far enough that it doesn't overlap the next.
+
 ## Linked and inside parts
 
 A part in an assembly is either **linked** to its own `.sb` file, or **inside**
@@ -449,6 +521,7 @@ it): you can move or copy the whole folder, and everything still links up.
 | Save an inside part to its own file, and link it | [`part.save_as`](../cli/commands.md#partsave_as) |
 | List the components and parts | [`open --components`](../cli/open.md#an-assembly) |
 | Check that no components overlap | [`check`](../cli/check.md#overlaps-in-an-assembly) |
+| Pull components apart in an exploded view | [`explode.add`](../cli/commands.md#explodeadd), [`explode.add_step`](../cli/commands.md#explodeadd_step), [`open --exploded`](../cli/open.md#an-exploded-view) |
 | Measure between two components | [`measure Car.sb "Wheel 1" face 1 "Body 1" face 2`](../cli/measure.md#in-an-assembly) |
 | Mark two components as meant to overlap, or unmark them | [`press_fit.add`](../cli/commands.md#press_fitadd), [`press_fit.delete`](../cli/commands.md#press_fitdelete) |
 

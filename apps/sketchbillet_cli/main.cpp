@@ -5,6 +5,7 @@
 //   sketchbillet_cli open <file.sb> [--export out [--step name]]  open a design, rebuild it, report each step
 //   sketchbillet_cli open <file.sb> --sketch <name>               ... and list a sketch, solved
 //   sketchbillet_cli open <file.sb> --components                  ... and list an assembly's components
+//   sketchbillet_cli open <file.sb> --exploded <view>             ... and where an exploded view moves them
 //   sketchbillet_cli open <file.sb> --edges|--faces|--points <name>  ... and list a body's edges, faces
 //                                       or points, numbered
 //   sketchbillet_cli check <file.sb> [--step <name>] [--min-wall <mm>]  check a part is ready to 3D print
@@ -59,6 +60,7 @@ int usage() {
         "       sketchbillet_cli open <file.sb> --faces <name>\n"
         "       sketchbillet_cli open <file.sb> --points <name>\n"
         "       sketchbillet_cli open <file.sb> --components\n"
+        "       sketchbillet_cli open <file.sb> --exploded <view>\n"
         "       sketchbillet_cli check <file.sb> [--step <name>] [--min-wall <mm>]\n"
         "       sketchbillet_cli check <assembly.sb> [--overlaps]\n"
         "       sketchbillet_cli measure <file.sb> <name> face|edge|point <n> [<name> face|edge|point <n>]\n"
@@ -338,8 +340,9 @@ int openDesign(int argc, char** argv) {
     const bool showFaces = argc == 5 && std::string_view(argv[3]) == "--faces";
     const bool showPoints = argc == 5 && std::string_view(argv[3]) == "--points";
     const bool showComponents = argc == 4 && std::string_view(argv[3]) == "--components";
+    const bool showExploded = argc == 5 && std::string_view(argv[3]) == "--exploded";
     if (argc != 3 && !(argc == 5 && exporting) && !oneStep && !showSketch && !showEdges && !showFaces &&
-        !showPoints && !showComponents) {
+        !showPoints && !showComponents && !showExploded) {
         return usage();
     }
     auto opened = sb::io::openFile(argv[2]);
@@ -356,15 +359,41 @@ int openDesign(int argc, char** argv) {
     // An assembly: its components and parts. Its steps are in its parts.
     if (doc.kind() == sb::model::DocKind::Assembly) {
         const bool listing = showEdges || showFaces || showPoints;
-        if (argc != 3 && !showComponents && !listing) {
+        if (argc != 3 && !showComponents && !listing && !showExploded) {
             std::fprintf(stderr,
-                         "error: %s is an assembly. For now, list it with --components, or a component's "
+                         "error: %s is an assembly. For now, list it with --components or --exploded, or a "
+                         "component's "
                          "edges, faces or points with --edges \"Wheel 1\"; exporting it and listing its "
                          "sketches come in a later version.\n",
                          doc.name().c_str());
             return 1;
         }
         const bool ok = sb::cli::printAssembly(doc, report, *kernel, showComponents);
+        if (showExploded) {
+            // Where an exploded view draws each component it moves.
+            const auto* view = doc.findExplodedView(std::string_view(argv[4]));
+            if (!view) {
+                std::string names;
+                for (const auto& v : doc.explodedViews()) names += (names.empty() ? "" : ", ") + v.name;
+                std::fprintf(stderr, "error: %s has no exploded view called %s.%s\n", doc.name().c_str(),
+                             argv[4],
+                             names.empty() ? " It has none yet: add one with explode.add."
+                                           : (" Its exploded views are: " + names + ".").c_str());
+                return 1;
+            }
+            std::printf("In %s:\n", view->name.c_str());
+            for (const auto& c : doc.components()) {
+                const auto path = sb::model::explodePath(*view, c.id);
+                if (path.size() < 2) continue;
+                const auto* placed = report.placementOf(c.id);
+                auto at = (placed ? *placed : c.placement).origin;
+                const auto& by = path.back();
+                at = {at.x + by.x, at.y + by.y, at.z + by.z};
+                std::printf("  %-12s at %s (moved %s)\n", c.name.c_str(),
+                            sb::cli::pointText(at, doc.lengthUnit(), true).c_str(),
+                            sb::cli::pointText(by, doc.lengthUnit(), true).c_str());
+            }
+        }
         if (listing) {
             // A component's body: "Wheel 1", or "Wheel 1:Hub" for one of several.
             const std::string which = argv[4];

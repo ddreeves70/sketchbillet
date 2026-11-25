@@ -255,6 +255,7 @@ private:
     std::optional<PartLink> link_;                        // and that part's link, if it was linked
     std::vector<std::pair<std::size_t, Joint>> joints_;   // its joints, which went too, and where they were
     std::vector<std::pair<std::size_t, PressFit>> fits_;  // and its press fits
+    std::vector<ExplodedView> views_;                     // the exploded views, as they were
 };
 
 /// Makes a change inside one of an assembly's inside parts, as one step of the
@@ -311,6 +312,70 @@ private:
 /// @param joint The joint, new or changed.
 /// @return Why it can't go in, or nothing if it can.
 std::optional<Diagnostic> checkJoint(const Document& assembly, const Joint& joint);
+
+/// Adds an exploded view to an assembly.
+class AddExplodedViewCommand final : public Command {
+public:
+    /// Prepares the change.
+    /// @param view The view. A nil id gets a new one, and so does each step's;
+    ///        an empty name gets the next free "Exploded N".
+    explicit AddExplodedViewCommand(ExplodedView view);
+
+    std::string label() const override { return "Add " + view_.name; }
+    Diagnostics apply(DocumentEditor& editor) override;
+    void revert(DocumentEditor& editor) override;
+
+    /// Gives the view as it went in, after apply().
+    /// @return It, with its ids and name.
+    const ExplodedView& view() const { return view_; }
+
+private:
+    ExplodedView view_;
+};
+
+/// Changes an exploded view: its name, or its steps.
+class SetExplodedViewCommand final : public Command {
+public:
+    /// Prepares the change.
+    /// @param view The view as it's to be: the same id as the one it changes. A
+    ///        step with a nil id gets a new one.
+    /// @param continuesPrevious True for the next part of the same drag.
+    explicit SetExplodedViewCommand(ExplodedView view, bool continuesPrevious = false);
+
+    std::string label() const override { return "Change " + view_.name; }
+    Diagnostics apply(DocumentEditor& editor) override;
+    void revert(DocumentEditor& editor) override;
+    /// Merges the next change to the same view, when it continues this one.
+    /// @param next The command that ran next.
+    /// @return True if it merged.
+    bool mergeWith(const Command& next) override;
+
+    /// Gives the view as it went in, after apply().
+    /// @return It, with its steps' ids.
+    const ExplodedView& view() const { return view_; }
+
+private:
+    ExplodedView view_;
+    ExplodedView old_;
+    bool continues_;
+};
+
+/// Takes an exploded view out of an assembly.
+class DeleteExplodedViewCommand final : public Command {
+public:
+    /// Prepares the change.
+    /// @param id The view.
+    explicit DeleteExplodedViewCommand(ExplodedViewId id);
+
+    std::string label() const override;
+    Diagnostics apply(DocumentEditor& editor) override;
+    void revert(DocumentEditor& editor) override;
+
+private:
+    ExplodedViewId id_;
+    std::optional<ExplodedView> removed_;
+    std::size_t index_ = 0;
+};
 
 /// Marks two components as a press fit: meant to overlap, so the overlap check
 /// leaves them out.

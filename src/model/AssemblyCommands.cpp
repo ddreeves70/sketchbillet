@@ -421,6 +421,11 @@ Diagnostics DeleteComponentCommand::apply(DocumentEditor& editor) {
             ++i;
         }
     }
+    // And its steps in exploded views.
+    views_ = editor.explodedViews();
+    for (auto& v : editor.explodedViews()) {
+        for (auto& step : v.steps) std::erase(step.components, id_);
+    }
     // And its press fits.
     fits_.clear();
     auto& fits = editor.pressFits();
@@ -456,11 +461,124 @@ void DeleteComponentCommand::revert(DocumentEditor& editor) {
         joints.insert(joints.begin() + static_cast<std::ptrdiff_t>(std::min(at, joints.size())), joint);
     }
     joints_.clear();
+    editor.explodedViews() = views_;
+    views_.clear();
     auto& fits = editor.pressFits();
     for (const auto& [at, fit] : fits_) {
         fits.insert(fits.begin() + static_cast<std::ptrdiff_t>(std::min(at, fits.size())), fit);
     }
     fits_.clear();
+}
+
+// ---------------------------------------------------------------------------
+// Exploded views
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Gives each step without an id a new one.
+void giveStepIds(ExplodedView& view) {
+    for (auto& step : view.steps)
+        if (step.id.isNil()) step.id = ExplodeStepId::generate();
+}
+
+// Checks a view could be in this assembly: a name of its own, and steps that
+// slide components that are there, along a direction, by a number.
+std::optional<Diagnostic> checkExplodedView(const Document& doc, const ExplodedView& view) {
+    if (auto d = needAssembly(doc)) return d;
+    if (view.name.empty()) return error("explode.name", "An exploded view needs a name, like Exploded 1.");
+    if (const auto* other = doc.findExplodedView(std::string_view(view.name)); other && other->id != view.id)
+        return error("explode.name", "There's an exploded view called " + view.name +
+                                         " already. Give this one another name.");
+    for (std::size_t i = 0; i < view.steps.size(); ++i) {
+        const auto& step = view.steps[i];
+        const std::string which = "Step " + std::to_string(i + 1) + " of " + view.name;
+        for (const auto& c : step.components) {
+            if (!doc.findComponent(c))
+                return error("assembly.no_component",
+                             which + " moves a component that isn't in the assembly anymore.");
+        }
+        const auto& d = step.direction;
+        if (!(std::isfinite(d.x) && std::isfinite(d.y) && std::isfinite(d.z)) ||
+            std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z) < 1e-9)
+            return error("explode.direction", which + " needs a direction to slide in, like 0,0,1 for up.");
+        if (!std::isfinite(step.distance))
+            return error("explode.distance", which + " needs a distance to slide, in mm, like 20.");
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
+AddExplodedViewCommand::AddExplodedViewCommand(ExplodedView view) : view_(std::move(view)) {}
+
+Diagnostics AddExplodedViewCommand::apply(DocumentEditor& editor) {
+    const auto& doc = editor.document();
+    if (view_.name.empty() && doc.kind() == DocKind::Assembly) view_.name = doc.uniqueExplodedViewName();
+    if (view_.id.isNil()) view_.id = ExplodedViewId::generate();
+    if (doc.findExplodedView(view_.id))
+        return {error("explode.exists", "That exploded view is in the assembly already.")};
+    giveStepIds(view_);
+    if (auto d = checkExplodedView(doc, view_)) return {*d};
+    editor.explodedViews().push_back(view_);
+    return {};
+}
+
+void AddExplodedViewCommand::revert(DocumentEditor& editor) {
+    std::erase_if(editor.explodedViews(), [&](const ExplodedView& v) { return v.id == view_.id; });
+}
+
+SetExplodedViewCommand::SetExplodedViewCommand(ExplodedView view, bool continuesPrevious)
+    : view_(std::move(view)), continues_(continuesPrevious) {}
+
+Diagnostics SetExplodedViewCommand::apply(DocumentEditor& editor) {
+    auto& views = editor.explodedViews();
+    const auto it =
+        std::find_if(views.begin(), views.end(), [&](const ExplodedView& v) { return v.id == view_.id; });
+    if (it == views.end())
+        return {error("explode.missing", "That exploded view isn't in the assembly anymore.")};
+    giveStepIds(view_);
+    if (auto d = checkExplodedView(editor.document(), view_)) return {*d};
+    old_ = *it;
+    *it = view_;
+    return {};
+}
+
+void SetExplodedViewCommand::revert(DocumentEditor& editor) {
+    for (auto& v : editor.explodedViews())
+        if (v.id == old_.id) v = old_;
+}
+
+bool SetExplodedViewCommand::mergeWith(const Command& next) {
+    const auto* other = dynamic_cast<const SetExplodedViewCommand*>(&next);
+    if (!other || !other->continues_ || other->view_.id != view_.id) return false;
+    view_ = other->view_;  // old_ stays: undo goes back to before the drag
+    return true;
+}
+
+DeleteExplodedViewCommand::DeleteExplodedViewCommand(ExplodedViewId id) : id_(id) {}
+
+std::string DeleteExplodedViewCommand::label() const {
+    return "Delete " + (removed_ ? removed_->name : std::string("exploded view"));
+}
+
+Diagnostics DeleteExplodedViewCommand::apply(DocumentEditor& editor) {
+    if (auto d = needAssembly(editor.document())) return {*d};
+    auto& views = editor.explodedViews();
+    const auto it =
+        std::find_if(views.begin(), views.end(), [&](const ExplodedView& v) { return v.id == id_; });
+    if (it == views.end())
+        return {error("explode.missing", "That exploded view isn't in the assembly anymore.")};
+    removed_ = *it;
+    index_ = static_cast<std::size_t>(it - views.begin());
+    views.erase(it);
+    return {};
+}
+
+void DeleteExplodedViewCommand::revert(DocumentEditor& editor) {
+    if (!removed_) return;
+    auto& views = editor.explodedViews();
+    views.insert(views.begin() + static_cast<std::ptrdiff_t>(std::min(index_, views.size())), *removed_);
 }
 
 // ---------------------------------------------------------------------------

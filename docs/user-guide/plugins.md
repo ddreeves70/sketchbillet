@@ -20,6 +20,12 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command component.place
            command component.rename
            command document.set_units
+           command explode.add
+           command explode.add_step
+           command explode.delete
+           command explode.delete_step
+           command explode.rename
+           command explode.set_step
            command feature.add_boolean
            command feature.add_box
            command feature.add_chamfer

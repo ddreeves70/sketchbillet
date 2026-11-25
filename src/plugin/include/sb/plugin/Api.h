@@ -199,7 +199,9 @@ class PluginContext;
 /// Document::pressFits(), AddPressFitCommand, DeletePressFitCommand).
 /// Version 69 measures between an assembly's components (model::MeasurePick::component,
 /// and model::measure() takes a kernel to move their bodies, not const).
-inline constexpr int kPluginApiVersion = 69;
+/// Version 70 added exploded views to assemblies (model::ExplodedView,
+/// Document::explodedViews(), its commands, and model::explodePath()).
+inline constexpr int kPluginApiVersion = 70;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

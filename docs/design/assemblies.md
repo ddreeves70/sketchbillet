@@ -26,7 +26,7 @@ This page covers what the student gets, in the order it gets built:
 | 4. Placing parts along chains | Exact, instant placement from joint to joint, smooth enough to drag | Built |
 | 5. In the app | The assembly tree, inserting parts, joining, dragging, editing a part | Built |
 | 6. Checks | Parts that overlap, the whole assembly's mass and balance point, measuring between parts | Built |
-| 7. Exploded views | Parts pulled apart to show how they fit, for pictures and drawings | Planned |
+| 7. Exploded views | Parts pulled apart to show how they fit, for pictures and drawings | Built, from the command line |
 | 8. Parts list | How many of each part, with material and mass, for printing and drawings | Planned |
 | 9. Parts from bodies | A part with several bodies turned into an assembly (copy-and-group's "groups that move together") | Planned |
 
@@ -531,7 +531,19 @@ Each line is one pull request, in this order:
      middle and direction) to where the component is placed. Measure is on
      the Assemble tab, and `sketchbillet_cli measure` takes component names.
      Step 6 is done.
-7. **Exploded views.**
+7. **Exploded views.** In pieces:
+   - **From the command line** (built, Nov 24, 2026): `ExplodedView` (its own
+     id and name) of `ExplodeStep`s (each its own id: components, a direction
+     and a distance in mm), `Document::explodedViews()`,
+     `AddExplodedViewCommand`, `SetExplodedViewCommand` (steps are changed by
+     setting the whole view) and `DeleteExplodedViewCommand`; `explodePath()`
+     gives how far a view moves a component after each step. Saved in
+     `explodes.json`. Deleting a component takes it out of the steps. CLI:
+     `explode.add`, `explode.add_step`, `explode.set_step`,
+     `explode.delete_step`, `explode.rename`, `explode.delete`, and
+     `open --exploded`.
+   - Next: in the app (Explode on the Assemble tab: the view drawn exploded,
+     with thin lines back, and its steps edited in Properties).
 8. **Parts list,** and exporting each part once with its count; STEP export
    with the assembly's structure (parts, components and placements), and 3MF
    with every part.

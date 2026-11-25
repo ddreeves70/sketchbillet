@@ -441,3 +441,58 @@ TEST_CASE("an assembly's press fits are saved in pressfits.json and open as they
     REQUIRE_FALSE(bad.ok());
     CHECK(bad.issues.front().detail.find("press fit: assembly.no_component") != std::string::npos);
 }
+
+TEST_CASE("an assembly's exploded views are saved in explodes.json and open as they were",
+          "[io][assembly][explode]") {
+    auto doc = car();
+    const auto wheel1 = doc->findComponent("Wheel 1")->id;
+    const auto wheel2 = doc->findComponent("Wheel 2")->id;
+    model::ExplodedView apart{
+        {}, "Wheels off", {{{}, {wheel1, wheel2}, {0, -1, 0}, 20}, {{}, {wheel2}, {1, 0, 0}, 7.5}}};
+    REQUIRE(doc->execute(std::make_unique<model::AddExplodedViewCommand>(apart)).empty());
+    REQUIRE(doc->execute(std::make_unique<model::AddExplodedViewCommand>(model::ExplodedView{})).empty());
+
+    io::Bytes bytes;
+    REQUIRE(io::writeBytes(*doc, bytes).empty());
+    const auto entries = readZip(bytes);
+    REQUIRE(entries.count("explodes.json"));
+    CHECK(entries.at("manifest.json").find("\"explodes.json\"") != std::string::npos);
+
+    auto opened = io::readBytes(bytes, "car.sb");
+    REQUIRE(opened.ok());
+    const auto& back = *opened.document;
+    REQUIRE(back.explodedViews().size() == 2);
+    const auto& v = back.explodedViews()[0];
+    CHECK(v.id == doc->explodedViews()[0].id);
+    CHECK(v.name == "Wheels off");
+    REQUIRE(v.steps.size() == 2);
+    CHECK(v.steps[0].id == doc->explodedViews()[0].steps[0].id);
+    CHECK(v.steps[0].components == std::vector<model::ComponentId>{wheel1, wheel2});
+    CHECK(v.steps[0].direction.y == -1);
+    CHECK(v.steps[1].distance == 7.5);
+    CHECK(back.explodedViews()[1].name == "Exploded 1");
+    CHECK(back.explodedViews()[1].steps.empty());
+    CHECK_FALSE(back.canUndo());
+    io::Bytes again;
+    REQUIRE(io::writeBytes(back, again).empty());
+    CHECK(again == bytes);
+
+    // An assembly with none has no explodes.json.
+    io::Bytes plain;
+    REQUIRE(io::writeBytes(*car(), plain).empty());
+    CHECK_FALSE(readZip(plain).count("explodes.json"));
+
+    // A damaged view or step says so.
+    auto damaged = entries;
+    damaged["explodes.json"] = R"({"exploded_views": [{"name": "Apart"}]})";
+    auto bad = io::readBytes(makeZip(damaged), "car.sb");
+    REQUIRE_FALSE(bad.ok());
+    CHECK(bad.issues.front().detail.find(
+              "an exploded view in explodes.json is missing its id, name or steps") != std::string::npos);
+    damaged["explodes.json"] =
+        R"({"exploded_views": [{"id": "00000000-0000-4000-8000-000000000001", "name": "Apart", "steps": [{"distance": 3}]}]})";
+    bad = io::readBytes(makeZip(damaged), "car.sb");
+    REQUIRE_FALSE(bad.ok());
+    CHECK(bad.issues.front().detail.find("a step of Apart in explodes.json is missing its id") !=
+          std::string::npos);
+}

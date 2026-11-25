@@ -5,6 +5,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "sb/core/Id.h"
 #include "sb/kernel/Placement.h"
@@ -113,6 +114,32 @@ struct Joint {
 /// @param kind The kind.
 /// @return "rigid", "revolute" or "slider".
 const char* jointKindName(JointKind kind);
+
+/// One step of an exploded view: some components slid along a direction.
+struct ExplodeStep {
+    ExplodeStepId id{};                     ///< Stays the same for as long as it's there.
+    std::vector<ComponentId> components{};  ///< The components it slides.
+    kernel::Vec3 direction{0, 0, 1};        ///< Which way (it needn't be a unit vector).
+    double distance = 0;                    ///< How far (mm).
+};
+
+/// An exploded view: the components pulled apart, step by step, to show how
+/// they go together, for pictures and instructions. It never changes the
+/// joints, or where the components are: it's only a way to look at them.
+struct ExplodedView {
+    ExplodedViewId id{};               ///< Stays the same for as long as it's there.
+    std::string name;                  ///< Its name, like "Exploded 1".
+    std::vector<ExplodeStep> steps{};  ///< Its steps, in order; a component in two moves by both.
+};
+
+/// Works out how far an exploded view moves a component, step by step: where
+/// it is after each step that slides it, from where it's placed. A line through
+/// them is the thin line back to where it came from.
+/// @param view The exploded view.
+/// @param component The component.
+/// @return How far it has moved (mm, along x, y and z): {0, 0, 0} first, then
+///         after each step that slides it. Just {0, 0, 0} if none does.
+std::vector<kernel::Vec3> explodePath(const ExplodedView& view, const ComponentId& component);
 
 /// A press fit: two components meant to overlap a little, like a pin pushed
 /// into a hole a bit smaller than it, so it holds tight. Check for overlaps
