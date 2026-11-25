@@ -331,6 +331,7 @@ car.sb
 ├── manifest.json            kind "assembly", schema 2
 ├── components.json          the components, in the order they were added
 ├── joints.json              the joints, in the order they were added
+├── pressfits.json           the pairs meant to overlap (press fits)
 ├── explodes.json            exploded views (only if it has any)
 ├── parameters.json          the assembly's own parameters (only if it has any)
 └── parts/
@@ -517,8 +518,14 @@ Each line is one pull request, in this order:
      panel; Balance (Balance Point) shows the mass and weight there, and a dot
      at the balance point. Both are in `sb.measure`, and are done again after
      each rebuild while on.
-   - Next: pairs marked as meant to overlap (a press fit); then measuring
-     between components.
+   - **Press fits** (built, Nov 24, 2026): `PressFit` (its own id; a and b,
+     either way round), `Document::pressFits()`, `AddPressFitCommand` and
+     `DeletePressFitCommand` (`press_fit.add`, `press_fit.delete`; Press fit
+     on the Assemble tab with two components picked). Saved in
+     `pressfits.json`. Deleting a component takes its press fits with it.
+     `checkOverlaps()` lists press fits apart (Info), and warns when one
+     doesn't overlap, so it'd be loose.
+   - Next: measuring between components.
 7. **Exploded views.**
 8. **Parts list,** and exporting each part once with its count; STEP export
    with the assembly's structure (parts, components and placements), and 3MF

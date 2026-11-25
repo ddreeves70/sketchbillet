@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "MeasureIcons.h"
+#include "sb/model/AssemblyCommands.h"
 #include "sb/model/AssemblyMass.h"
 #include "sb/model/Document.h"
 #include "sb/model/Overlaps.h"
@@ -271,6 +272,46 @@ void registerChecks(plugin::PluginContext& ctx, ui::UiRegistry& ui) {
             },
         .checked = [checks] { return checks->balance; },
         .enabled = inAssembly});
+    // Press Fit: the two picked components are meant to overlap, or not.
+    const auto picked = [&ctx]() -> std::optional<std::pair<model::ComponentId, model::ComponentId>> {
+        if (!assemblyActive(ctx)) return std::nullopt;
+        const auto& components = ctx.selection().components();
+        if (components.size() != 2) return std::nullopt;
+        return std::pair{components[0], components[1]};
+    };
+    ctx.addAction(plugin::ActionSpec{
+        .id = "sb.measure.press_fit",
+        .text = "Press Fit",
+        .menu = "Assemble/Inspect",
+        .toolbar = true,
+        .buttonText = "Press fit",
+        .icon = std::string(icons::measure::press_fit_svg),
+        .tip =
+            "Pick two components that are meant to overlap, like a pin pushed into a hole a bit smaller than "
+            "it, and click this: Check for Overlaps leaves them out. Click it again to unmark them.",
+        .run =
+            [&ctx, picked] {
+                const auto pair = picked();
+                if (!pair) return;
+                auto& docs = ctx.documents();
+                const auto* doc = docs.find(docs.active());
+                if (!doc) return;
+                std::unique_ptr<model::Command> change;
+                if (doc->findPressFit(pair->first, pair->second))
+                    change = std::make_unique<model::DeletePressFitCommand>(pair->first, pair->second);
+                else
+                    change = std::make_unique<model::AddPressFitCommand>(
+                        model::PressFit{{}, pair->first, pair->second});
+                if (auto problems = docs.execute(docs.active(), std::move(change)); !problems.empty())
+                    ctx.log(problems.front().message);
+            },
+        .checked =
+            [&ctx, picked] {
+                const auto pair = picked();
+                const auto* doc = ctx.documents().find(ctx.documents().active());
+                return pair && doc && doc->findPressFit(pair->first, pair->second) != nullptr;
+            },
+        .enabled = [picked] { return picked().has_value(); }});
     ctx.listen<plugin::RebuildFinished>([checks, update](const auto&) {
         if (checks->overlaps || checks->balance) update();
     });
@@ -389,7 +430,12 @@ std::vector<std::string> checksText(const model::OverlapCheck& overlaps, const m
     std::vector<std::string> out;
     if (overlapsOn) {
         for (const auto& issue : overlaps.issues) out.push_back(issue.message);
-        if (!overlaps.overlaps.empty()) out.push_back("Where they overlap is red in the view.");
+        if (!overlaps.overlaps.empty()) {
+            out.push_back("Where they overlap is red in the view.");
+            out.push_back(
+                "If two are meant to overlap, like a pin pushed into a hole a bit smaller than it, "
+                "pick both and click Press fit.");
+        }
     }
     if (balanceOn) {
         if (!out.empty()) out.emplace_back();

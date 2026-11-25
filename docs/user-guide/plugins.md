@@ -63,6 +63,8 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command part.relink
            command part.save_as
            command part.update
+           command press_fit.add
+           command press_fit.delete
            command sketch.add_arc
            command sketch.add_circle
            command sketch.add_line

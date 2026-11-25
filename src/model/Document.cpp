@@ -112,6 +112,10 @@ std::vector<Joint>& DocumentEditor::joints() {
     return doc_.joints_;
 }
 
+std::vector<PressFit>& DocumentEditor::pressFits() {
+    return doc_.pressFits_;
+}
+
 void DocumentEditor::addPart(std::unique_ptr<Document> part, std::size_t index) {
     if (!part) return;
     index = std::min(index, doc_.parts_.size());
@@ -374,6 +378,13 @@ std::string Document::uniqueComponentName(const std::string& part) const {
         std::string candidate = part + " " + std::to_string(n);
         if (!findComponent(std::string_view(candidate))) return candidate;
     }
+}
+
+const PressFit* Document::findPressFit(const ComponentId& a, const ComponentId& b) const {
+    for (const auto& f : pressFits_) {
+        if ((f.a == a && f.b == b) || (f.a == b && f.b == a)) return &f;
+    }
+    return nullptr;
 }
 
 const Joint* Document::findJoint(const JointId& id) const {

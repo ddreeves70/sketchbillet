@@ -390,3 +390,54 @@ TEST_CASE("an assembly's joints are saved in joints.json and open as they were",
     CHECK(bad.issues.front().detail.find("a joint in joints.json is missing its id, name, kind or sides") !=
           std::string::npos);
 }
+
+TEST_CASE("an assembly's press fits are saved in pressfits.json and open as they were",
+          "[io][assembly][press_fit]") {
+    auto doc = car();
+    const auto body = doc->findComponent("Body 1")->id;
+    const auto wheel1 = doc->findComponent("Wheel 1")->id;
+    const auto wheel2 = doc->findComponent("Wheel 2")->id;
+    REQUIRE(
+        doc->execute(std::make_unique<model::AddPressFitCommand>(model::PressFit{{}, wheel1, body})).empty());
+    REQUIRE(
+        doc->execute(std::make_unique<model::AddPressFitCommand>(model::PressFit{{}, body, wheel2})).empty());
+
+    io::Bytes bytes;
+    REQUIRE(io::writeBytes(*doc, bytes).empty());
+    const auto entries = readZip(bytes);
+    REQUIRE(entries.count("pressfits.json"));
+    CHECK(entries.at("manifest.json").find("\"pressfits.json\"") != std::string::npos);
+
+    auto opened = io::readBytes(bytes, "car.sb");
+    REQUIRE(opened.ok());
+    const auto& back = *opened.document;
+    REQUIRE(back.pressFits().size() == 2);
+    CHECK(back.pressFits()[0].id == doc->pressFits()[0].id);
+    CHECK(back.pressFits()[0].a == wheel1);
+    CHECK(back.pressFits()[0].b == body);
+    CHECK(back.pressFits()[1].id == doc->pressFits()[1].id);
+    CHECK(back.pressFits()[1].b == wheel2);
+    CHECK_FALSE(back.canUndo());
+    io::Bytes again;
+    REQUIRE(io::writeBytes(back, again).empty());
+    CHECK(again == bytes);
+
+    // An assembly with no press fits has no pressfits.json.
+    io::Bytes plain;
+    REQUIRE(io::writeBytes(*car(), plain).empty());
+    CHECK_FALSE(readZip(plain).count("pressfits.json"));
+
+    // A damaged press fit says so; one of a component that isn't there too.
+    auto damaged = entries;
+    damaged["pressfits.json"] = R"({"press_fits": [{"a": "Body 1"}]})";
+    auto bad = io::readBytes(makeZip(damaged), "car.sb");
+    REQUIRE_FALSE(bad.ok());
+    CHECK(bad.issues.front().detail.find("a press fit in pressfits.json is missing its id or components") !=
+          std::string::npos);
+    damaged["pressfits.json"] =
+        R"({"press_fits": [{"id": "00000000-0000-4000-8000-000000000001", "a": "00000000-0000-4000-8000-000000000002", "b": ")" +
+        body.toString() + R"("}]})";
+    bad = io::readBytes(makeZip(damaged), "car.sb");
+    REQUIRE_FALSE(bad.ok());
+    CHECK(bad.issues.front().detail.find("press fit: assembly.no_component") != std::string::npos);
+}

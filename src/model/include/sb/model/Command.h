@@ -94,6 +94,10 @@ public:
     /// @return The list (see Document::joints()).
     std::vector<Joint>& joints();
 
+    /// Gives an assembly's press fits to change in place.
+    /// @return The list (see Document::pressFits()).
+    std::vector<PressFit>& pressFits();
+
     /// Adds an inside part to an assembly.
     /// @param part The part. The assembly takes ownership.
     /// @param index Where it goes in the list of parts; past the end means last.

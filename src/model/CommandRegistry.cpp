@@ -1588,6 +1588,34 @@ CommandRegistry makeBuiltin() {
               return std::make_unique<ResetJointsCommand>(std::vector<JointId>{found->id});
           });
 
+    r.add({"press_fit.add",
+           "Mark press fit",
+           "Marks two components as a press fit: meant to overlap a little, like a pin pushed into a hole a "
+           "bit smaller than it, so it holds tight. Checking for overlaps leaves them out.",
+           {{"a", ArgType::Text, "One component, like Axle 1.", true, {}},
+            {"b", ArgType::Text, "The other, like Wheel 1.", true, {}}}},
+          [componentNamed](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+              auto [one, problem] = componentNamed(doc, a, "a");
+              if (!one) return std::move(problem);
+              auto [other, problem2] = componentNamed(doc, a, "b");
+              if (!other) return std::move(problem2);
+              return std::make_unique<AddPressFitCommand>(PressFit{{}, one->id, other->id});
+          });
+
+    r.add({"press_fit.delete",
+           "Unmark press fit",
+           "Takes away a press fit: the two components shouldn't overlap after all, and checking for "
+           "overlaps looks at them again.",
+           {{"a", ArgType::Text, "One component, like Axle 1.", true, {}},
+            {"b", ArgType::Text, "The other, like Wheel 1.", true, {}}}},
+          [componentNamed](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+              auto [one, problem] = componentNamed(doc, a, "a");
+              if (!one) return std::move(problem);
+              auto [other, problem2] = componentNamed(doc, a, "b");
+              if (!other) return std::move(problem2);
+              return std::make_unique<DeletePressFitCommand>(one->id, other->id);
+          });
+
     r.add({"part.make_inside",
            "Make part inside",
            "Makes a linked part an inside part: the assembly keeps its copy of the part and stops "

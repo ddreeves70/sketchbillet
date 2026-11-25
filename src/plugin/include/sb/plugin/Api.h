@@ -195,7 +195,9 @@ class PluginContext;
 /// Version 67 added filled triangles to overlays (OverlayShape::Triangles), which
 /// Check for Overlaps uses to show where parts overlap, in red, and a kernel to
 /// make shapes with (DocumentList::kernel(), not const).
-inline constexpr int kPluginApiVersion = 67;
+/// Version 68 added press fits to assemblies (model::PressFit,
+/// Document::pressFits(), AddPressFitCommand, DeletePressFitCommand).
+inline constexpr int kPluginApiVersion = 68;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

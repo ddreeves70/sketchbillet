@@ -98,6 +98,12 @@ Half the wheel is inside: half of π × 12 mm × 12 mm × 6 mm is 1357.17 mm³.
 Faces that only touch don't count, and nor does anything smaller than
 0.001 mm³.
 
+Two components meant to overlap, like an axle pushed into a hole a bit smaller
+than it, are a **press fit**: mark them with
+[`press_fit.add`](commands.md#press_fitadd), and `check` lists them apart, as
+meant. If a press fit's components don't overlap at all, it says they'll be
+loose.
+
 ## Errors
 
 | Message | What to do |
@@ -108,6 +114,7 @@ Faces that only touch don't count, and nor does anything smaller than
 | `--overlaps checks an assembly, and ... is a part` | Leave out `--overlaps` to check a part for printing |
 | `--step and --min-wall check a part for printing, and ... is an assembly` | Check each part's own `.sb` file for printing, or leave them out to look for overlaps |
 | `warning [assembly.overlap]` | Two components overlap: move one, or change one of their parts so they fit. [Checking for overlaps](../user-guide/assemblies.md#checking-for-overlaps) explains more |
+| `warning [assembly.press_fit_loose]` | Two components marked as a press fit don't overlap, so they'll be loose: make one a little bigger, or unmark it with [`press_fit.delete`](commands.md#press_fitdelete) |
 | `warning [assembly.overlap_failed]` | The kernel couldn't compare two components' shapes: look at where they meet in the 3D view |
 | `warning [print.thin]` | Some walls are too thin: see [Thin walls](../user-guide/printing.md#thin-walls) |
 | `error [print.open]` | The surface has gaps: see [Gaps in the surface](../user-guide/printing.md#gaps-in-the-surface) |

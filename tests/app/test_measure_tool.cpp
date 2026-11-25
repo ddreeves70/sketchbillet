@@ -217,6 +217,8 @@ TEST_CASE("Check for Overlaps shows where parts overlap in red, and checks again
                          std::make_unique<model::InsertPartCommand>(part("Cube", {10, 10, 10}), 1, corner))
                 .empty());
     settle();
+    const auto base = docs.find(app.design())->components()[0].id;
+    const auto cube = docs.find(app.design())->components()[1].id;
 
     auto* overlaps = app.shell->action("sb.measure.overlaps");
     auto* balance = app.shell->action("sb.measure.balance");
@@ -230,11 +232,13 @@ TEST_CASE("Check for Overlaps shows where parts overlap in red, and checks again
     REQUIRE(panel);
     CHECK(panel->isVisible());
     auto text = [&] { return panel->findChild<QLabel*>(QStringLiteral("sb.measure.checks.result"))->text(); };
-    CHECK(text() ==
-          QStringLiteral(
-              "Base 1 and Cube 1 overlap by 125.00 mm\u00B3, around x 17.5, y 17.5, z 7.5 mm. Parts can't "
-              "be in the same place, so they won't go together. Move one of them, or change one of "
-              "their parts so they fit.\nWhere they overlap is red in the view."));
+    CHECK(
+        text() ==
+        QStringLiteral(
+            "Base 1 and Cube 1 overlap by 125.00 mm\u00B3, around x 17.5, y 17.5, z 7.5 mm. Parts can't "
+            "be in the same place, so they won't go together. Move one of them, or change one of "
+            "their parts so they fit.\nWhere they overlap is red in the view.\nIf two are meant to overlap, "
+            "like a pin pushed into a hole a bit smaller than it, pick both and click Press fit."));
     // In red, over the parts: a 5 mm cube, in triangles, inside 15 to 20 mm.
     const auto* red = app.overlay("overlaps");
     REQUIRE(red);
@@ -251,7 +255,32 @@ TEST_CASE("Check for Overlaps shows where parts overlap in red, and checks again
     }
 
     // Moved up onto the base, it only touches: checked again, and fine.
-    const auto cube = docs.find(app.design())->components()[1].id;
+    // Meant to overlap? Pick both, and mark them as a press fit: no red then.
+    auto* pressFit = app.shell->action("sb.measure.press_fit");
+    REQUIRE(pressFit);
+    CHECK_FALSE(pressFit->isEnabled());  // pick two first
+    app.host.selection().setComponents(app.design(), {base, cube});
+    settle();
+    CHECK(pressFit->isEnabled());
+    CHECK_FALSE(pressFit->isChecked());
+    pressFit->trigger();
+    settle();
+    CHECK(pressFit->isChecked());
+    CHECK(docs.find(app.design())->findPressFit(cube, base));
+    CHECK(docs.find(app.design())->undoLabel() == "Mark press fit");
+    CHECK(text() ==
+          QStringLiteral("Untitled: no components overlap, but for 1 press fit (2 components, 1 pair "
+                         "close enough to check).\nBase 1 and Cube 1 overlap by 125.00 mm\u00B3, "
+                         "around x 17.5, y 17.5, z 7.5 mm: they're a press fit, so that's meant."));
+    CHECK_FALSE(app.overlay("overlaps")->visible);
+    pressFit->trigger();  // not after all
+    settle();
+    CHECK_FALSE(pressFit->isChecked());
+    CHECK(docs.find(app.design())->pressFits().empty());
+    CHECK(app.overlay("overlaps")->visible);
+    app.host.selection().clear();
+    settle();
+
     kernel::Placement onTop;
     onTop.origin = {15, 15, 10};
     REQUIRE(docs.execute(app.design(), std::make_unique<model::PlaceComponentCommand>(cube, onTop)).empty());

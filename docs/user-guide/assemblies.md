@@ -353,6 +353,12 @@ balance point. Click **Done** to stop.
   of the space the two parts share.
 - **Fix it** by moving one of them, or by changing one part so they fit: a
   bigger hole, a thinner axle.
+- **Meant to overlap?** An axle pushed into a hole a bit smaller than it holds
+  tight: that's a **press fit**. Pick both components and click **Press fit**
+  on the Assemble tab (or use
+  [`press_fit.add`](../cli/commands.md#press_fitadd)). The check leaves them
+  out, and lists them as meant. If they stop overlapping, it says the fit will
+  be loose. Click **Press fit** again to unmark them.
 
 ## Linked and inside parts
 
@@ -420,6 +426,7 @@ it): you can move or copy the whole folder, and everything still links up.
 | Save an inside part to its own file, and link it | [`part.save_as`](../cli/commands.md#partsave_as) |
 | List the components and parts | [`open --components`](../cli/open.md#an-assembly) |
 | Check that no components overlap | [`check`](../cli/check.md#overlaps-in-an-assembly) |
+| Mark two components as meant to overlap, or unmark them | [`press_fit.add`](../cli/commands.md#press_fitadd), [`press_fit.delete`](../cli/commands.md#press_fitdelete) |
 
 Undo works for all of them in a script, like any other command.
 

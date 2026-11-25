@@ -900,6 +900,13 @@ bool printAssembly(const model::Document& doc, const model::RebuildReport& repor
         std::printf("\n");
         if (const auto* r = report.joint(j.id)) printIssues(r->issues, "    ");
     }
+    // The pairs meant to overlap.
+    if (!doc.pressFits().empty()) std::printf("Press fits:\n");
+    for (const auto& f : doc.pressFits()) {
+        const auto* a = doc.findComponent(f.a);
+        const auto* b = doc.findComponent(f.b);
+        std::printf("  %s and %s\n", a ? a->name.c_str() : "?", b ? b->name.c_str() : "?");
+    }
     // Each part, built once, however many components place it.
     bool ok = true;
     if (!doc.parts().empty()) std::printf("Parts:\n");

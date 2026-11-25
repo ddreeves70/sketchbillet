@@ -139,6 +139,8 @@ TEST_CASE("sb.modeling loads and its commands work", "[plugin][host]") {
                                                         "part.relink",
                                                         "part.save_as",
                                                         "part.update",
+                                                        "press_fit.add",
+                                                        "press_fit.delete",
                                                         "sketch.add_arc",
                                                         "sketch.add_circle",
                                                         "sketch.add_line",

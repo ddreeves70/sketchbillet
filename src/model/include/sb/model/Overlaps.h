@@ -35,12 +35,16 @@ struct Overlap {
 /// What the overlap check found.
 struct OverlapCheck {
     std::vector<Overlap> overlaps;  ///< Each pair that overlaps, in the assembly's order.
+    /// Each press fit that overlaps, as it's meant to (Document::pressFits()).
+    std::vector<Overlap> pressFits;
     /// How many pairs of components were close enough to need a check: their
     /// boxes meet.
     std::size_t pairsChecked = 0;
-    /// What to tell the student: assembly.no_overlaps (Info) when none overlap;
-    /// otherwise an assembly.overlap (Warning) for each pair, and
-    /// assembly.overlap_failed (Warning) for a pair the kernel couldn't check.
+    /// What to tell the student: assembly.no_overlaps (Info) when none overlap
+    /// (but for press fits); otherwise an assembly.overlap (Warning) for each pair,
+    /// and assembly.overlap_failed (Warning) for a pair the kernel couldn't check.
+    /// Each press fit gets assembly.press_fit (Info) when it overlaps, as meant,
+    /// or assembly.press_fit_loose (Warning) when it doesn't.
     Diagnostics issues;
 
     /// Says whether no components overlap.
@@ -51,6 +55,8 @@ struct OverlapCheck {
 /// Checks every pair of an assembly's components for overlaps, where each one
 /// is placed. Only pairs whose boxes meet are checked, with the kernel's Boolean
 /// common, so it's quick for parts far apart. Faces that only touch don't count.
+/// Press fits (Document::pressFits()) are meant to overlap: they're listed
+/// apart, and it's when one doesn't overlap that it says so.
 /// @param assembly The assembly.
 /// @param report Its last rebuild: where each component is placed, and its part's bodies.
 /// @param kernel The kernel that built it.

@@ -210,6 +210,18 @@ public:
     /// @return The first free one of "Joint1", "Joint2", ...
     std::string uniqueJointName() const;
 
+    /// Gives an assembly's press fits: pairs of components meant to overlap,
+    /// which checkOverlaps() leaves out. Change them with AddPressFitCommand and
+    /// DeletePressFitCommand.
+    /// @return The press fits, in the order they were added.
+    const std::vector<PressFit>& pressFits() const { return pressFits_; }
+
+    /// Finds the press fit between two components, either way round.
+    /// @param a One component.
+    /// @param b The other.
+    /// @return It, or nullptr if they aren't a press fit.
+    const PressFit* findPressFit(const ComponentId& a, const ComponentId& b) const;
+
     /// Gives an assembly's inside parts: designs of their own, kept in the
     /// assembly. Each is built once, however many components place it. A part
     /// has none.
@@ -455,6 +467,7 @@ private:
     std::vector<std::unique_ptr<Feature>> features_;
     std::vector<Component> components_;               // an assembly's components
     std::vector<Joint> joints_;                       // and its joints
+    std::vector<PressFit> pressFits_;                 // and the pairs meant to overlap
     std::vector<std::unique_ptr<Document>> parts_;    // an assembly's parts (inside and linked)
     std::map<DocId, PartLink> links_;                 // the linked ones' links; see partLink()
     std::map<FeatureId, std::uint64_t> revisions_;    // see revision(); set by DocumentEditor

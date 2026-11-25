@@ -81,6 +81,8 @@ TEST_CASE("The built-in registry lists its commands sorted by name", "[model][re
                                               "parameter.rename",
                                               "parameter.set",
                                               "part.make_inside",
+                                              "press_fit.add",
+                                              "press_fit.delete",
                                               "sketch.add_arc",
                                               "sketch.add_circle",
                                               "sketch.add_line",

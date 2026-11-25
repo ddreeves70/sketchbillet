@@ -49,6 +49,16 @@ kernel::Box3 around(const std::vector<PlacedBody>& bodies) {
     return out;
 }
 
+// A press fit whose two components don't overlap: it'll be loose.
+Diagnostic loose(const std::string& a, const std::string& b) {
+    return {"assembly.press_fit_loose",
+            Severity::Warning,
+            a + " and " + b +
+                " are marked as a press fit, but they don't overlap, so they'll be loose. Make one a little "
+                "bigger so they overlap, or unmark the press fit if loose is what you want.",
+            {}};
+}
+
 }  // namespace
 
 OverlapCheck checkOverlaps(const Document& assembly, const RebuildReport& report, kernel::IKernel& kernel) {
@@ -76,7 +86,14 @@ OverlapCheck checkOverlaps(const Document& assembly, const RebuildReport& report
     for (std::size_t i = 0; i < components.size(); ++i) {
         if (placed[i].empty()) continue;
         for (std::size_t k = i + 1; k < components.size(); ++k) {
-            if (placed[k].empty() || !boxesMeet(around(placed[i]), around(placed[k]))) continue;
+            if (placed[k].empty()) continue;
+            const auto& nameA = components[i].name;
+            const auto& nameB = components[k].name;
+            const bool pressFit = assembly.findPressFit(components[i].id, components[k].id) != nullptr;
+            if (!boxesMeet(around(placed[i]), around(placed[k]))) {
+                if (pressFit) out.issues.push_back(loose(nameA, nameB));
+                continue;
+            }
             ++out.pairsChecked;
             Overlap overlap{components[i].id, components[k].id, 0, {}, {}};
             kernel::Point3 weighted{};
@@ -98,23 +115,35 @@ OverlapCheck checkOverlaps(const Document& assembly, const RebuildReport& report
                     overlap.shapes.push_back(common.shape);
                 }
             }
-            const auto& a = components[i].name;
-            const auto& b = components[k].name;
             if (failed) {
                 out.issues.push_back({"assembly.overlap_failed",
                                       Severity::Warning,
-                                      "Couldn't check whether " + a + " and " + b +
+                                      "Couldn't check whether " + nameA + " and " + nameB +
                                           " overlap: their shapes were too hard to compare. Look at where "
                                           "they meet in the 3D view.",
                                       {}});
             }
-            if (overlap.volume < kOverlapVolume) continue;
+            if (overlap.volume < kOverlapVolume) {
+                if (pressFit && !failed) out.issues.push_back(loose(nameA, nameB));
+                continue;
+            }
             overlap.center = {weighted.x / overlap.volume, weighted.y / overlap.volume,
                               weighted.z / overlap.volume};
+            if (pressFit) {
+                out.issues.push_back({"assembly.press_fit",
+                                      Severity::Info,
+                                      nameA + " and " + nameB + " overlap by " +
+                                          volumeText(overlap.volume, unit) + ", around " +
+                                          pointText(overlap.center, unit) +
+                                          ": they're a press fit, so that's meant.",
+                                      {}});
+                out.pressFits.push_back(std::move(overlap));
+                continue;
+            }
             out.issues.push_back(
                 {"assembly.overlap",
                  Severity::Warning,
-                 a + " and " + b + " overlap by " + volumeText(overlap.volume, unit) + ", around " +
+                 nameA + " and " + nameB + " overlap by " + volumeText(overlap.volume, unit) + ", around " +
                      pointText(overlap.center, unit) +
                      ". Parts can't be in the same place, so they won't go together. Move one "
                      "of them, or change one of their parts so they fit.",
@@ -125,11 +154,15 @@ OverlapCheck checkOverlaps(const Document& assembly, const RebuildReport& report
 
     if (out.overlaps.empty() && out.clear()) {
         const auto count = components.size();
+        const auto fits = out.pressFits.size();
+        const std::string besides = fits == 0   ? ""
+                                    : fits == 1 ? ", but for 1 press fit"
+                                                : ", but for " + std::to_string(fits) + " press fits";
         out.issues.insert(
             out.issues.begin(),
             {"assembly.no_overlaps",
              Severity::Info,
-             assembly.name() + ": no components overlap (" + std::to_string(count) +
+             assembly.name() + ": no components overlap" + besides + " (" + std::to_string(count) +
                  (count == 1 ? " component" : " components") + ", " + std::to_string(out.pairsChecked) +
                  (out.pairsChecked == 1 ? " pair" : " pairs") + " close enough to check).",
              {}});
