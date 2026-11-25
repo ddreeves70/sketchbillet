@@ -1588,6 +1588,168 @@ CommandRegistry makeBuiltin() {
               return std::make_unique<ResetJointsCommand>(std::vector<JointId>{found->id});
           });
 
+    // Exploded views: a view by its name, a step by its number, and components
+    // as a list of names.
+    auto viewNamed = [](const Document& doc,
+                        const Args& a) -> std::pair<const ExplodedView*, std::unique_ptr<Command>> {
+        const std::string name = argText(a, "view");
+        if (const auto* v = doc.findExplodedView(std::string_view(name))) return {v, nullptr};
+        std::string names;
+        for (const auto& v : doc.explodedViews()) names += (names.empty() ? "" : ", ") + v.name;
+        return {nullptr, std::make_unique<ProblemCommand>(error(
+                             "explode.not_found",
+                             doc.name() + " has no exploded view called " + name + "." +
+                                 (names.empty() ? std::string(" It has none yet: add one with explode.add.")
+                                                : " Its exploded views are: " + names + ".")))};
+    };
+    auto stepNumbered = [](const ExplodedView& v,
+                           const Args& a) -> std::pair<std::size_t, std::unique_ptr<Command>> {
+        const auto it = a.find("step");
+        const auto* n = it == a.end() ? nullptr : std::get_if<std::int64_t>(&it->second);
+        if (n && *n >= 1 && static_cast<std::size_t>(*n) <= v.steps.size())
+            return {static_cast<std::size_t>(*n - 1), nullptr};
+        const std::string asked = n ? std::to_string(*n) : "none";
+        return {0, std::make_unique<ProblemCommand>(error(
+                       "explode.no_step",
+                       v.steps.empty()       ? v.name + " has no steps yet: add one with explode.add_step."
+                       : v.steps.size() == 1 ? v.name + " has only step 1, so there's no step " + asked + "."
+                                             : v.name + " has steps 1 to " + std::to_string(v.steps.size()) +
+                                                   ", so there's no step " + asked + "."))};
+    };
+    auto componentsNamed =
+        [componentNamed](const Document& doc,
+                         const Args& a) -> std::pair<std::vector<ComponentId>, std::unique_ptr<Command>> {
+        std::vector<ComponentId> out;
+        const std::string list = argText(a, "components");
+        std::size_t at = 0;
+        while (at <= list.size()) {
+            auto end = list.find(',', at);
+            if (end == std::string::npos) end = list.size();
+            std::string name = list.substr(at, end - at);
+            const auto first = name.find_first_not_of(' ');
+            const auto last = name.find_last_not_of(' ');
+            name = first == std::string::npos ? "" : name.substr(first, last - first + 1);
+            if (!name.empty()) {
+                Args one{{"component", name}};
+                auto [c, problem] = componentNamed(doc, one, "component");
+                if (!c) return {std::vector<ComponentId>{}, std::move(problem)};
+                if (std::find(out.begin(), out.end(), c->id) == out.end()) out.push_back(c->id);
+            }
+            at = end + 1;
+        }
+        if (out.empty()) {
+            return {std::vector<ComponentId>{},
+                    std::make_unique<ProblemCommand>(error(
+                        "explode.no_components",
+                        "Say which components the step slides, like components=\"Wheel 1, Wheel 2\"."))};
+        }
+        return {out, nullptr};
+    };
+    const std::vector<ArgSpec> stepSettings = {
+        {"components", ArgType::Text, "The components it slides, like \"Wheel 1, Wheel 2\".", true, {}},
+        {"direction", ArgType::Vec3, "Which way, like 0,0,1 for up or 0,-1,0 to the front.", true, {}},
+        {"distance", ArgType::Number, "How far, in mm.", true, {}}};
+
+    r.add({"explode.add",
+           "Add exploded view",
+           "Adds an exploded view: the components pulled apart, step by step, to show how they go together. "
+           "It never moves the components themselves. Add its steps with explode.add_step.",
+           {{"name",
+             ArgType::Text,
+             "Its name. Default the next free one of Exploded 1, Exploded 2, ...",
+             false,
+             {}}}},
+          [](const Document&, const Args& a) -> std::unique_ptr<Command> {
+              ExplodedView v;
+              v.name = argText(a, "name");
+              return std::make_unique<AddExplodedViewCommand>(std::move(v));
+          });
+
+    {
+        auto args = stepSettings;
+        args.insert(args.begin(), {"view", ArgType::Text, "The exploded view, like Exploded 1.", true, {}});
+        r.add({"explode.add_step", "Add explode step",
+               "Adds a step to an exploded view: it slides some components along a direction, by a distance, "
+               "after the steps before it.",
+               args},
+              [viewNamed, componentsNamed](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+                  auto [found, problem] = viewNamed(doc, a);
+                  if (!found) return std::move(problem);
+                  auto [components, problem2] = componentsNamed(doc, a);
+                  if (components.empty()) return std::move(problem2);
+                  ExplodedView v = *found;
+                  v.steps.push_back({{}, components, argVec3(a, "direction"), argNumber(a, "distance")});
+                  return std::make_unique<SetExplodedViewCommand>(std::move(v));
+              });
+    }
+
+    {
+        auto args = stepSettings;
+        for (auto& arg : args) {
+            arg.required = false;
+            arg.description += " Left out, it stays as it is.";
+        }
+        args.insert(args.begin(), {"step", ArgType::Integer, "Which step: 1 for the first.", true, {}});
+        args.insert(args.begin(), {"view", ArgType::Text, "The exploded view, like Exploded 1.", true, {}});
+        r.add({"explode.set_step", "Change explode step",
+               "Changes a step of an exploded view: what it slides, which way, or how far.", args},
+              [viewNamed, stepNumbered, componentsNamed](const Document& doc,
+                                                         const Args& a) -> std::unique_ptr<Command> {
+                  auto [found, problem] = viewNamed(doc, a);
+                  if (!found) return std::move(problem);
+                  auto [index, problem2] = stepNumbered(*found, a);
+                  if (problem2) return std::move(problem2);
+                  ExplodedView v = *found;
+                  auto& step = v.steps[index];
+                  if (a.count("components")) {
+                      auto [components, problem3] = componentsNamed(doc, a);
+                      if (components.empty()) return std::move(problem3);
+                      step.components = components;
+                  }
+                  if (a.count("direction")) step.direction = argVec3(a, "direction");
+                  if (a.count("distance")) step.distance = argNumber(a, "distance");
+                  return std::make_unique<SetExplodedViewCommand>(std::move(v));
+              });
+    }
+
+    r.add({"explode.delete_step",
+           "Delete explode step",
+           "Takes a step out of an exploded view. The steps after it move up one.",
+           {{"view", ArgType::Text, "The exploded view, like Exploded 1.", true, {}},
+            {"step", ArgType::Integer, "Which step: 1 for the first.", true, {}}}},
+          [viewNamed, stepNumbered](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+              auto [found, problem] = viewNamed(doc, a);
+              if (!found) return std::move(problem);
+              auto [index, problem2] = stepNumbered(*found, a);
+              if (problem2) return std::move(problem2);
+              ExplodedView v = *found;
+              v.steps.erase(v.steps.begin() + static_cast<std::ptrdiff_t>(index));
+              return std::make_unique<SetExplodedViewCommand>(std::move(v));
+          });
+
+    r.add({"explode.rename",
+           "Rename exploded view",
+           "Gives an exploded view a new name.",
+           {{"view", ArgType::Text, "The exploded view, like Exploded 1.", true, {}},
+            {"name", ArgType::Text, "Its new name, like Wheels off.", true, {}}}},
+          [viewNamed](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+              auto [found, problem] = viewNamed(doc, a);
+              if (!found) return std::move(problem);
+              ExplodedView v = *found;
+              v.name = argText(a, "name");
+              return std::make_unique<SetExplodedViewCommand>(std::move(v));
+          });
+
+    r.add({"explode.delete",
+           "Delete exploded view",
+           "Takes an exploded view out. The components don't move: they never did.",
+           {{"view", ArgType::Text, "The exploded view, like Exploded 1.", true, {}}}},
+          [viewNamed](const Document& doc, const Args& a) -> std::unique_ptr<Command> {
+              auto [found, problem] = viewNamed(doc, a);
+              if (!found) return std::move(problem);
+              return std::make_unique<DeleteExplodedViewCommand>(found->id);
+          });
+
     r.add({"press_fit.add",
            "Mark press fit",
            "Marks two components as a press fit: meant to overlap a little, like a pin pushed into a hole a "

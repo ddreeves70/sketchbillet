@@ -49,6 +49,12 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command component.place
            command component.rename
            command document.set_units
+           command explode.add
+           command explode.add_step
+           command explode.delete
+           command explode.delete_step
+           command explode.rename
+           command explode.set_step
            command feature.add_boolean
            command feature.add_box
            command feature.add_chamfer
@@ -177,6 +183,12 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command component.place
            command component.rename
            command document.set_units
+           command explode.add
+           command explode.add_step
+           command explode.delete
+           command explode.delete_step
+           command explode.rename
+           command explode.set_step
            command feature.add_boolean
            command feature.add_box
            command feature.add_chamfer
@@ -301,7 +313,7 @@ failed   test.badname 1.0.0  Test badname
 failed   test.noentry 1.0.0  Test noentry
            error [plugin.library_bad]: The Test noentry plugin's program file isn't a SketchBillet plugin (it has no SB_PLUGIN_ENTRY). Ask its author for a fixed version. (...)
 failed   test.oldapi 1.0.0  Test oldapi
-           error [plugin.api_version]: The Test oldapi plugin was built for a different version of SketchBillet (plugin API 0; this SketchBillet uses 69). Get a version of the plugin made for this SketchBillet. (...)
+           error [plugin.api_version]: The Test oldapi plugin was built for a different version of SketchBillet (plugin API 0; this SketchBillet uses 70). Get a version of the plugin made for this SketchBillet. (...)
 ```
 
 Every reason and its fix is listed in the plugin guide's

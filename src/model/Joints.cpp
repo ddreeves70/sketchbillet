@@ -352,4 +352,19 @@ std::optional<JointDrag> dragJoint(const Document& assembly, const RebuildReport
     return out;
 }
 
+std::vector<kernel::Vec3> explodePath(const ExplodedView& view, const ComponentId& component) {
+    std::vector<kernel::Vec3> out{{0, 0, 0}};
+    for (const auto& step : view.steps) {
+        if (std::find(step.components.begin(), step.components.end(), component) == step.components.end())
+            continue;
+        const auto& d = step.direction;
+        const double length = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+        if (length < 1e-9) continue;
+        const double by = step.distance / length;
+        const auto& last = out.back();
+        out.push_back({last.x + d.x * by, last.y + d.y * by, last.z + d.z * by});
+    }
+    return out;
+}
+
 }  // namespace sb::model

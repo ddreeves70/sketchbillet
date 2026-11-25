@@ -133,6 +133,10 @@ struct ConstraintTag {};
 struct JointTag {};
 /// Tag for sb::PressFitId.
 struct PressFitTag {};
+/// Tag for sb::ExplodedViewId.
+struct ExplodedViewTag {};
+/// Tag for sb::ExplodeStepId.
+struct ExplodeStepTag {};
 
 /// Identifies a document (a part or an assembly).
 using DocId = Id<DocTag>;
@@ -156,6 +160,10 @@ using MaterialId = Id<MaterialTag>;
 using JointId = Id<JointTag>;
 /// Identifies a press fit: two components of an assembly meant to overlap.
 using PressFitId = Id<PressFitTag>;
+/// Identifies an exploded view of an assembly.
+using ExplodedViewId = Id<ExplodedViewTag>;
+/// Identifies one step of an exploded view.
+using ExplodeStepId = Id<ExplodeStepTag>;
 
 }  // namespace sb
 

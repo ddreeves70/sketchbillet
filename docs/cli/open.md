@@ -288,7 +288,7 @@ in a later version:
 <!-- cli-example exit=1 -->
 ```console
 $ sketchbillet_cli open Car.sb --export car.stl
-error: Car is an assembly. For now, list it with --components, or a component's edges, faces or points with --edges "Wheel 1"; exporting it and listing its sketches come in a later version.
+error: Car is an assembly. For now, list it with --components or --exploded, or a component's edges, faces or points with --edges "Wheel 1"; exporting it and listing its sketches come in a later version.
 ```
 
 ### A component's edges, faces and points
@@ -316,6 +316,48 @@ faces of Cylinder1: 3
    1  flat        452.39 mm^2  at 0.00,0.00,0.00  bottom of Cylinder1
    2  cylinder    452.39 mm^2  at 0.00,0.00,3.00  side of Cylinder1
    3  flat        452.39 mm^2  at 0.00,0.00,6.00  top of Cylinder1
+```
+
+### An exploded view
+
+`--exploded` with an exploded view's name (see
+[`explode.add`](commands.md#explodeadd)) lists where it draws each component it
+moves, and how far it moved it. The components themselves stay where they are.
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save Body.sb feature.add_box size=80,40,10
+...
+$ sketchbillet_cli run --save Wheel.sb feature.add_cylinder radius=12 height=6
+...
+$ sketchbillet_cli run --save Car.sb assembly.new
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.insert file=Body.sb
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.insert file=Wheel.sb count=2 at=10,-6,0 step=60,0,0
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb explode.add
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb explode.add_step view="Exploded 1" components="Wheel 1, Wheel 2" direction=0,-1,0 distance=20
+...
+$ sketchbillet_cli open Car.sb --exploded "Exploded 1"
+Car: assembly, 3 components, 2 parts
+  Body 1       Body       grounded at 0, 0, 0 mm
+  Wheel 1      Wheel      free     at 10, -6, 0 mm
+  Wheel 2      Wheel      free     at 70, -6, 0 mm
+Exploded views:
+  Exploded 1: 1 step
+    1. Wheel 1, Wheel 2: 20 mm along 0, -1, 0
+Parts:
+  Body         1 step   ok        mass 39.68 g (PLA), 1 in the assembly
+    linked to Body.sb
+  Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+    linked to Wheel.sb
+Mass in all: 46.41 g (weighs 0.455 N)
+Balance point: 40, 16.23, 4.71 mm
+In Exploded 1:
+  Wheel 1      at 10, -26, 0 mm (moved 0, -20, 0 mm)
+  Wheel 2      at 70, -26, 0 mm (moved 0, -20, 0 mm)
 ```
 
 ## Files that can't be opened

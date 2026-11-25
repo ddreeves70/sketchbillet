@@ -67,6 +67,12 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`joint.delete`](#jointdelete) | Takes a joint out |
 | [`press_fit.add`](#press_fitadd) | Marks two components as meant to overlap (a press fit) |
 | [`press_fit.delete`](#press_fitdelete) | Unmarks a press fit |
+| [`explode.add`](#explodeadd) | Adds an exploded view: the components pulled apart, to show how they go together |
+| [`explode.add_step`](#explodeadd_step) | Adds a step to an exploded view: some components slid along a direction |
+| [`explode.set_step`](#explodeset_step) | Changes a step of an exploded view |
+| [`explode.delete_step`](#explodedelete_step) | Takes a step out of an exploded view |
+| [`explode.rename`](#exploderename) | Renames an exploded view |
+| [`explode.delete`](#explodedelete) | Takes an exploded view out |
 | [`part.update`](#partupdate) | Updates linked parts from their files |
 | [`part.relink`](#partrelink) | Links a part to its file where it is now |
 | [`part.make_inside`](#partmake_inside) | Makes a linked part an inside part |
@@ -3348,6 +3354,221 @@ Parts:
 Mass in all: 3.96 g (weighs 0.039 N)
 Balance point: 0, 0, 3 mm
 wrote Toy.sb
+```
+
+## explode.add
+
+Adds an **exploded view**: the components pulled apart, step by step, to show
+how they go together, for pictures and instructions. It never moves the
+components themselves, or changes the joints: it's only a way to look at the
+assembly. Add its steps with [`explode.add_step`](#explodeadd_step), and see
+where it moves each component with [`open --exploded`](open.md#an-exploded-view).
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `name` | text | no | Its name. Default the next free one of `Exploded 1`, `Exploded 2`, ... |
+
+A car: a body, and two wheels.
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save Body.sb feature.add_box size=80,40,10
+...
+$ sketchbillet_cli run --save Wheel.sb feature.add_cylinder radius=12 height=6
+...
+$ sketchbillet_cli run --save Car.sb assembly.new
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.insert file=Body.sb
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.insert file=Wheel.sb count=2 at=10,-6,0 step=60,0,0
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb explode.add
+Car: assembly, 3 components, 2 parts
+  Body 1       Body       grounded at 0, 0, 0 mm
+  Wheel 1      Wheel      free     at 10, -6, 0 mm
+  Wheel 2      Wheel      free     at 70, -6, 0 mm
+Exploded views:
+  Exploded 1: 0 steps
+Parts:
+  Body         1 step   ok        mass 39.68 g (PLA), 1 in the assembly
+    linked to Body.sb
+  Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+    linked to Wheel.sb
+Mass in all: 46.41 g (weighs 0.455 N)
+Balance point: 40, 16.23, 4.71 mm
+wrote Car.sb
+```
+
+## explode.add_step
+
+Adds a step to an exploded view: it slides some components along a direction,
+by a distance, after the steps before it. A component in two steps moves by
+both.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `view` | text | yes | The exploded view, like `Exploded 1` |
+| `components` | text | yes | The components it slides, like `"Wheel 1, Wheel 2"` |
+| `direction` | x,y,z | yes | Which way, like `0,0,1` for up or `0,-1,0` to the front |
+| `distance` | number | yes | How far, in mm |
+
+Both wheels 20 mm to the front, then Wheel 2 another 15 mm to the right:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open Car.sb --save Car.sb explode.add_step view="Exploded 1" components="Wheel 1, Wheel 2" direction=0,-1,0 distance=20
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb explode.add_step view="Exploded 1" components="Wheel 2" direction=1,0,0 distance=15
+Car: assembly, 3 components, 2 parts
+  Body 1       Body       grounded at 0, 0, 0 mm
+  Wheel 1      Wheel      free     at 10, -6, 0 mm
+  Wheel 2      Wheel      free     at 70, -6, 0 mm
+Exploded views:
+  Exploded 1: 2 steps
+    1. Wheel 1, Wheel 2: 20 mm along 0, -1, 0
+    2. Wheel 2: 15 mm along 1, 0, 0
+Parts:
+  Body         1 step   ok        mass 39.68 g (PLA), 1 in the assembly
+    linked to Body.sb
+  Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+    linked to Wheel.sb
+Mass in all: 46.41 g (weighs 0.455 N)
+Balance point: 40, 16.23, 4.71 mm
+wrote Car.sb
+```
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open Car.sb explode.add_step view="Exploded 1" components="Wheel 1" direction=0,0,0 distance=5
+error [explode.direction]: Step 3 of Exploded 1 needs a direction to slide in, like 0,0,1 for up.
+```
+
+## explode.set_step
+
+Changes a step of an exploded view: what it slides, which way, or how far.
+Settings left out stay as they are.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `view` | text | yes | The exploded view, like `Exploded 1` |
+| `step` | whole number | yes | Which step: 1 for the first |
+| `components` | text | no | The components it slides, like `"Wheel 1, Wheel 2"` |
+| `direction` | x,y,z | no | Which way |
+| `distance` | number | no | How far, in mm |
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open Car.sb --save Car.sb explode.set_step view="Exploded 1" step=1 distance=30
+Car: assembly, 3 components, 2 parts
+  Body 1       Body       grounded at 0, 0, 0 mm
+  Wheel 1      Wheel      free     at 10, -6, 0 mm
+  Wheel 2      Wheel      free     at 70, -6, 0 mm
+Exploded views:
+  Exploded 1: 2 steps
+    1. Wheel 1, Wheel 2: 30 mm along 0, -1, 0
+    2. Wheel 2: 15 mm along 1, 0, 0
+Parts:
+  Body         1 step   ok        mass 39.68 g (PLA), 1 in the assembly
+    linked to Body.sb
+  Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+    linked to Wheel.sb
+Mass in all: 46.41 g (weighs 0.455 N)
+Balance point: 40, 16.23, 4.71 mm
+wrote Car.sb
+```
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open Car.sb explode.set_step view="Exploded 1" step=3 distance=30
+error [explode.no_step]: Exploded 1 has steps 1 to 2, so there's no step 3.
+```
+
+## explode.delete_step
+
+Takes a step out of an exploded view. The steps after it move up one.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `view` | text | yes | The exploded view, like `Exploded 1` |
+| `step` | whole number | yes | Which step: 1 for the first |
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open Car.sb --save Car.sb explode.delete_step view="Exploded 1" step=2
+Car: assembly, 3 components, 2 parts
+  Body 1       Body       grounded at 0, 0, 0 mm
+  Wheel 1      Wheel      free     at 10, -6, 0 mm
+  Wheel 2      Wheel      free     at 70, -6, 0 mm
+Exploded views:
+  Exploded 1: 1 step
+    1. Wheel 1, Wheel 2: 30 mm along 0, -1, 0
+Parts:
+  Body         1 step   ok        mass 39.68 g (PLA), 1 in the assembly
+    linked to Body.sb
+  Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+    linked to Wheel.sb
+Mass in all: 46.41 g (weighs 0.455 N)
+Balance point: 40, 16.23, 4.71 mm
+wrote Car.sb
+```
+
+## explode.rename
+
+Gives an exploded view a new name.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `view` | text | yes | The exploded view, like `Exploded 1` |
+| `name` | text | yes | Its new name, like `Wheels off` |
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open Car.sb --save Car.sb explode.rename view="Exploded 1" name="Wheels off"
+Car: assembly, 3 components, 2 parts
+  Body 1       Body       grounded at 0, 0, 0 mm
+  Wheel 1      Wheel      free     at 10, -6, 0 mm
+  Wheel 2      Wheel      free     at 70, -6, 0 mm
+Exploded views:
+  Wheels off: 1 step
+    1. Wheel 1, Wheel 2: 30 mm along 0, -1, 0
+Parts:
+  Body         1 step   ok        mass 39.68 g (PLA), 1 in the assembly
+    linked to Body.sb
+  Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+    linked to Wheel.sb
+Mass in all: 46.41 g (weighs 0.455 N)
+Balance point: 40, 16.23, 4.71 mm
+wrote Car.sb
+```
+
+## explode.delete
+
+Takes an exploded view out. The components don't move: they never did.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `view` | text | yes | The exploded view, like `Exploded 1` |
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open Car.sb explode.delete view="Wheels off"
+Car: assembly, 3 components, 2 parts
+  Body 1       Body       grounded at 0, 0, 0 mm
+  Wheel 1      Wheel      free     at 10, -6, 0 mm
+  Wheel 2      Wheel      free     at 70, -6, 0 mm
+Parts:
+  Body         1 step   ok        mass 39.68 g (PLA), 1 in the assembly
+    linked to Body.sb
+  Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+    linked to Wheel.sb
+Mass in all: 46.41 g (weighs 0.455 N)
+Balance point: 40, 16.23, 4.71 mm
+```
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open Car.sb explode.delete view="Exploded 9"
+error [explode.not_found]: Car has no exploded view called Exploded 9. Its exploded views are: Wheels off.
 ```
 
 ## part.update

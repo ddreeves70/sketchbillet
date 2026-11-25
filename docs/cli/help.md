@@ -27,6 +27,12 @@ Commands for sketchbillet_cli run:
   component.place          Move component
   component.rename         Rename component
   document.set_units       Set units
+  explode.add              Add exploded view
+  explode.add_step         Add explode step
+  explode.delete           Delete exploded view
+  explode.delete_step      Delete explode step
+  explode.rename           Rename exploded view
+  explode.set_step         Change explode step
   feature.add_boolean      Combine bodies
   feature.add_box          Add box
   feature.add_chamfer      Chamfer

@@ -98,6 +98,10 @@ public:
     /// @return The list (see Document::pressFits()).
     std::vector<PressFit>& pressFits();
 
+    /// Gives an assembly's exploded views to change in place.
+    /// @return The list (see Document::explodedViews()).
+    std::vector<ExplodedView>& explodedViews();
+
     /// Adds an inside part to an assembly.
     /// @param part The part. The assembly takes ownership.
     /// @param index Where it goes in the list of parts; past the end means last.

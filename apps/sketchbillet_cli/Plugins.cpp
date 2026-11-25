@@ -831,9 +831,6 @@ std::string sketchSummary(const sketch::Sketch& sketch, int freedom) {
     return out;
 }
 
-namespace {
-
-// "40, -32, 12 mm": a point, or a direction with no unit.
 std::string pointText(const kernel::Vec3& v, LengthUnit unit, bool length) {
     auto number = [&](double x) {
         if (!length) {
@@ -848,8 +845,6 @@ std::string pointText(const kernel::Vec3& v, LengthUnit unit, bool length) {
     if (length) out += " " + std::string(unitSymbol(unit));
     return out;
 }
-
-}  // namespace
 
 // A joint's value in its units: degrees, or mm.
 std::string jointValueText(const model::Joint& j, double v) {
@@ -906,6 +901,22 @@ bool printAssembly(const model::Document& doc, const model::RebuildReport& repor
         const auto* a = doc.findComponent(f.a);
         const auto* b = doc.findComponent(f.b);
         std::printf("  %s and %s\n", a ? a->name.c_str() : "?", b ? b->name.c_str() : "?");
+    }
+    // Each exploded view, and its steps.
+    if (!doc.explodedViews().empty()) std::printf("Exploded views:\n");
+    for (const auto& v : doc.explodedViews()) {
+        std::printf("  %s: %zu %s\n", v.name.c_str(), v.steps.size(), v.steps.size() == 1 ? "step" : "steps");
+        for (std::size_t i = 0; i < v.steps.size(); ++i) {
+            const auto& step = v.steps[i];
+            std::string names;
+            for (const auto& id : step.components) {
+                const auto* c = doc.findComponent(id);
+                names += (names.empty() ? "" : ", ") + (c ? c->name : std::string("?"));
+            }
+            std::printf("    %zu. %s: %s along %s\n", i + 1, names.empty() ? "nothing" : names.c_str(),
+                        lengthText(step.distance, doc.lengthUnit()).c_str(),
+                        pointText(step.direction, doc.lengthUnit(), false).c_str());
+        }
     }
     // Each part, built once, however many components place it.
     bool ok = true;

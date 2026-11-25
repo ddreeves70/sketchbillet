@@ -380,6 +380,7 @@ car.sb
 ├── components.json                  each component: its part, where it is, grounded or free
 ├── joints.json                      the joints between components (only if it has any)
 ├── pressfits.json                   pairs of components meant to overlap (only if it has any)
+├── explodes.json                    exploded views (only if it has any)
 ├── parameters.json                  the assembly's own named values (only if it has any)
 └── parts/
     ├── 017e13e9-....                an inside part: one folder per part, named after its id
@@ -393,8 +394,9 @@ car.sb
 
 The assembly's `manifest.json` is the same as a part's, with `"kind": "assembly"`
 and `"schema": 2`. Its `files` lists `components.json`, `joints.json`,
-`pressfits.json` and `parameters.json` if there are any, and each part's `parts/<id>/manifest.json`. The parts are listed
-in the assembly's order (the order they were put in), and that is the order they
+`pressfits.json`, `explodes.json` and `parameters.json` if there are any,
+and each part's `parts/<id>/manifest.json`. The parts are listed in the
+assembly's order (the order they were put in), and that is the order they
 open in.
 
 Each part folder holds what a part's `.sb` file holds, with the same names and a
@@ -530,13 +532,42 @@ smaller than it. Checking for overlaps leaves them out.
 | `id` | The press fit's id. |
 | `a`, `b` | The two components' ids, either way round. |
 
+### explodes.json
+
+The assembly's exploded views: the components pulled apart, step by step, to
+show how they go together. They never move the components themselves.
+
+```json
+{
+  "exploded_views": [
+    {
+      "id": "7d2e9b40-...",
+      "name": "Exploded 1",
+      "steps": [
+        {"id": "b8a1c3f2-...", "components": ["9b1e44a2-...", "c3d97f10-..."],
+         "direction": [0, -1, 0], "distance": 20}
+      ]
+    }
+  ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `id` | The view's id, or a step's. |
+| `name` | The view's name. No two views in an assembly share one. |
+| `steps` | Its steps, in order. A component in two steps moves by both. |
+| `components` | The ids of the components a step slides. |
+| `direction` | Which way it slides them (it needn't be a unit vector, but it can't be 0, 0, 0). |
+| `distance` | How far, in mm. |
+
 ### Opening an assembly
 
 SketchBillet reads the manifest, then `parameters.json`, then each part in the
 order the manifest lists them (each one opened the same way as a part file), then
-`components.json`, then `joints.json`, then `pressfits.json`. Each part,
-component, joint and press fit is added through a command, so the same checks
-run as when a student builds the assembly.
+`components.json`, then `joints.json`, `pressfits.json` and `explodes.json`.
+Each part, component, joint, press fit and exploded view is added through a
+command, so the same checks run as when a student builds the assembly.
 
 Then it looks for each linked part's file: at its `path`; then by its file name
 in the assembly's folder; then by its `documentId` among the `.sb` files in the
