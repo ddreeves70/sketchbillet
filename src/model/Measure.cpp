@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <numbers>
 
+#include "sb/kernel/Placement.h"
 #include "sb/model/Document.h"
 
 namespace sb::model {
@@ -80,7 +81,7 @@ void compare(const MeasuredElement& a, const MeasuredElement& b, Measurement& ou
 
 }  // namespace
 
-Measurement measure(const Document& doc, const RebuildReport& report, const kernel::IKernel& kernel,
+Measurement measure(const Document& doc, const RebuildReport& report, kernel::IKernel& kernel,
                     const std::vector<MeasurePick>& picks) {
     Measurement out;
     if (picks.empty() || picks.size() > 2) {
@@ -91,9 +92,28 @@ Measurement measure(const Document& doc, const RebuildReport& report, const kern
     }
     std::vector<kernel::ElementOf> on;
     for (const auto& p : picks) {
-        const auto* step = doc.find(p.body);
-        const std::string name = step ? step->name() : "That step";
-        const auto* r = report.result(p.body);
+        // In an assembly: the step is in the component's part, and its body is
+        // where the component is placed.
+        const Document* part = &doc;
+        const RebuildReport* built = &report;
+        std::string prefix;
+        std::optional<kernel::Placement> placed;
+        if (doc.kind() == DocKind::Assembly) {
+            const auto* c = doc.findComponent(p.component);
+            part = c ? doc.findPart(c->part) : nullptr;
+            built = c ? report.part(c->part) : nullptr;
+            if (!part || !built) {
+                out.issues.push_back(error("measure.no_component",
+                                           "Pick a face, edge or point on a component to measure it."));
+                return out;
+            }
+            prefix = c->name + ", ";
+            const auto* where = report.placementOf(c->id);
+            placed = where ? *where : c->placement;
+        }
+        const auto* step = part->find(p.body);
+        const std::string name = prefix + (step ? step->name() : "That step");
+        const auto* r = built->result(p.body);
         if (!step || !r || r->status != FeatureStatus::Ok || !r->shape.valid() || !r->names) {
             out.issues.push_back(
                 error("measure.no_body",
@@ -108,8 +128,21 @@ Measurement measure(const Document& doc, const RebuildReport& report, const kern
             return out;
         }
         const auto& infos = r->names->elements.of(p.ref.kind);
-        out.elements.push_back({name, p.ref.kind, infos[static_cast<std::size_t>(found.index)]});
-        on.push_back({r->shape, p.ref.kind, found.index});
+        auto info = infos[static_cast<std::size_t>(found.index)];
+        auto shape = r->shape;
+        if (placed) {
+            // Moved, not copied: its faces, edges and points keep their order.
+            info.center = kernel::apply(*placed, info.center);
+            info.direction = kernel::applyDirection(*placed, info.direction);
+            auto moved = kernel.transform(shape, kernel::toMotion(*placed));
+            if (!moved.ok()) {
+                out.issues.insert(out.issues.end(), moved.issues.begin(), moved.issues.end());
+                return out;
+            }
+            shape = moved.shape;
+        }
+        out.elements.push_back({name, p.ref.kind, info});
+        on.push_back({shape, p.ref.kind, found.index});
     }
     if (on.size() < 2) return out;
 

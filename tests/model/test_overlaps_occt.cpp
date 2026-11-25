@@ -1,4 +1,5 @@
-// Checking an assembly: components that overlap, and its mass and balance point.
+// Checking an assembly: components that overlap, its mass and balance point,
+// and measuring between components.
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -11,6 +12,8 @@
 #include "sb/model/AssemblyMass.h"
 #include "sb/model/Commands.h"
 #include "sb/model/Document.h"
+#include "sb/model/Measure.h"
+#include "sb/model/Naming.h"
 #include "sb/model/Overlaps.h"
 
 using namespace sb;
@@ -240,4 +243,68 @@ TEST_CASE("a press fit is meant to overlap: the check leaves it out, and says wh
     REQUIRE(box.doc.pressFits().size() == 3);
     CHECK(box.doc.pressFits()[0].b == base);
     CHECK(box.doc.pressFits()[2].b == spare);
+}
+
+TEST_CASE("measuring in an assembly is between components, where each is placed",
+          "[model][assembly][measure][occt]") {
+    Assembly box;
+    const auto base = box.insert(boxPart("Base", {20, 20, 10}));
+    // A 10 mm cube, turned a quarter turn about z, at x 40 mm: it fills x 30 to
+    // 40, y 0 to 10. Its own left face (x 0) is now its front, at y 0.
+    Placement turned = at(40, 0, 0);
+    turned.xAxis = {0, 1, 0};
+    const auto cube = box.insert(boxPart("Cube", {10, 10, 10}), turned);
+    const auto report = box.doc.regenerate(*box.kernel);
+
+    // A face of a component, by where it is in its own part.
+    auto face = [&](ComponentId id, kernel::Point3 center) {
+        const auto& c = *box.doc.findComponent(id);
+        const auto* part = report.part(c.part);
+        REQUIRE(part);
+        const auto body = part->bodies().front();
+        const auto& names = *part->result(body)->names;
+        const auto& faces = names.elements.faces;
+        for (std::size_t i = 0; i < faces.size(); ++i) {
+            const auto& f = faces[i].center;
+            if (std::abs(f.x - center.x) < 1e-6 && std::abs(f.y - center.y) < 1e-6 &&
+                std::abs(f.z - center.z) < 1e-6)
+                return MeasurePick{body, referTo(names, kernel::TopoKind::Face, static_cast<int>(i)), id};
+        }
+        FAIL("no face at " << center.x << ", " << center.y << ", " << center.z);
+        return MeasurePick{};
+    };
+
+    // Base's front (y 0) and Cube's turned left face: side by side in one
+    // plane, 10 mm apart along x.
+    auto m = measure(box.doc, report, *box.kernel, {face(base, {10, 0, 5}), face(cube, {0, 5, 5})});
+    REQUIRE(m.ok());
+    REQUIRE(m.elements.size() == 2);
+    CHECK(m.elements[0].body == "Base 1, Box1");
+    CHECK(m.elements[1].body == "Cube 1, Box1");
+    // Where it is in the assembly: its middle at 35, 0, 5 mm, facing -y.
+    CHECK(m.elements[1].info.center.x == Approx(35));
+    CHECK(m.elements[1].info.center.y == Approx(0).margin(1e-9));
+    CHECK(m.elements[1].info.direction.y == Approx(-1));
+    CHECK(m.elements[1].info.direction.x == Approx(0).margin(1e-9));
+    REQUIRE(m.distance);
+    CHECK(*m.distance == Approx(10));
+    CHECK(m.from.x == Approx(20));
+    CHECK(m.to.x == Approx(30));
+    REQUIRE(m.angle);
+    CHECK(*m.angle == Approx(0).margin(1e-9));
+
+    // Base's right side (x 20), and Cube's own right face (x 10), which now faces
+    // +y, at y 10: square to each other.
+    m = measure(box.doc, report, *box.kernel, {face(base, {20, 10, 5}), face(cube, {10, 5, 5})});
+    REQUIRE(m.ok());
+    CHECK(m.elements[1].info.center.y == Approx(10));
+    CHECK(*m.distance == Approx(10));  // from x 20 to x 30
+    CHECK(*m.angle == Approx(std::numbers::pi / 2));
+
+    // On no component: it says so.
+    auto lost = face(base, {10, 0, 5});
+    lost.component = {};
+    m = measure(box.doc, report, *box.kernel, {lost});
+    REQUIRE_FALSE(m.ok());
+    CHECK(m.issues[0].code == "measure.no_component");
 }

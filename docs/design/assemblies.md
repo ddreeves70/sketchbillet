@@ -25,7 +25,7 @@ This page covers what the student gets, in the order it gets built:
 | 3. Joints | Rigid, hinge (revolute) and slider joints that place parts and say how they move | Built, from the command line |
 | 4. Placing parts along chains | Exact, instant placement from joint to joint, smooth enough to drag | Built |
 | 5. In the app | The assembly tree, inserting parts, joining, dragging, editing a part | Built |
-| 6. Checks | Parts that overlap, the whole assembly's mass and balance point, measuring between parts | Overlaps, mass and balance point built, from the command line |
+| 6. Checks | Parts that overlap, the whole assembly's mass and balance point, measuring between parts | Built |
 | 7. Exploded views | Parts pulled apart to show how they fit, for pictures and drawings | Planned |
 | 8. Parts list | How many of each part, with material and mass, for printing and drawings | Planned |
 | 9. Parts from bodies | A part with several bodies turned into an assembly (copy-and-group's "groups that move together") | Planned |
@@ -525,7 +525,12 @@ Each line is one pull request, in this order:
      `pressfits.json`. Deleting a component takes its press fits with it.
      `checkOverlaps()` lists press fits apart (Info), and warns when one
      doesn't overlap, so it'd be loose.
-   - Next: measuring between components.
+   - **Measuring between components** (built, Nov 24, 2026): a
+     `MeasurePick` names its component in an assembly; `measure()` finds the
+     step in the component's part and moves its body (and the element's
+     middle and direction) to where the component is placed. Measure is on
+     the Assemble tab, and `sketchbillet_cli measure` takes component names.
+     Step 6 is done.
 7. **Exploded views.**
 8. **Parts list,** and exporting each part once with its count; STEP export
    with the assembly's structure (parts, components and placements), and 3MF

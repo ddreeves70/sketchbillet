@@ -13,6 +13,7 @@
 #include "sb/core/Units.h"
 #include "sb/kernel/IKernel.h"
 #include "sb/kernel/Types.h"
+#include "sb/model/Assembly.h"
 #include "sb/model/Naming.h"
 
 namespace sb::model {
@@ -20,17 +21,24 @@ namespace sb::model {
 class Document;
 class RebuildReport;
 
-/// One thing to measure: a face, edge or point of a step's body.
+/// One thing to measure: a face, edge or point of a step's body. In an
+/// assembly, a component's: a step of its part, where the component is placed.
 struct MeasurePick {
-    FeatureId body{};   ///< The step whose body it's on.
+    FeatureId body{};   ///< The step whose body it's on (in the component's part, in an assembly).
     GeometryRef ref{};  ///< The face, edge or point, by name; ref.kind says which.
+    /// In an assembly, the component it's on; nil in a part.
+    ComponentId component{};
 };
 
 /// What was measured of one pick.
 struct MeasuredElement {
-    std::string body;                                ///< The name of the step whose body it's on.
+    /// The name of the step whose body it's on; in an assembly, the component's
+    /// name and then the step's, like "Wheel 1, Cylinder1".
+    std::string body;
     kernel::TopoKind kind = kernel::TopoKind::Face;  ///< Face, edge or point.
-    kernel::ElementInfo info;                        ///< What it is, its size and where it is.
+    /// What it is, its size and where it is: in an assembly, where its component
+    /// is placed.
+    kernel::ElementInfo info;
 };
 
 /// What measure() found.
@@ -57,19 +65,23 @@ struct Measurement {
 };
 
 /// Measures one face, edge or point (its size), or two (the distance between
-/// them, and the angle when they're flat or straight).
+/// them, and the angle when they're flat or straight). In an assembly, each pick
+/// is on a component, where it's placed, so it measures between components: the
+/// gap between two parts, or how far a wheel is from the body.
 /// @code
 /// const auto m = measure(doc, report, kernel, {{tag, top}, {tag, bottom}});
 /// for (const auto& line : describe(m, doc.lengthUnit())) std::cout << line << "\n";
 /// @endcode
 /// @param doc The design.
 /// @param report Its last rebuild.
-/// @param kernel The kernel it was built with.
+/// @param kernel The kernel it was built with; in an assembly, it moves each
+///        component's body to where the component is placed.
 /// @param picks One or two picks.
 /// @return What was found, or errors: measure.count for no picks or more than two,
 ///     measure.no_body for a step with no body, measure.missing for a pick that
-///     isn't on its body any more.
-Measurement measure(const Document& doc, const RebuildReport& report, const kernel::IKernel& kernel,
+///     isn't on its body any more, measure.no_component for a pick in an assembly
+///     on no component (or one that isn't there).
+Measurement measure(const Document& doc, const RebuildReport& report, kernel::IKernel& kernel,
                     const std::vector<MeasurePick>& picks);
 
 /// Writes what was measured for the student, one line each, in the design's unit:

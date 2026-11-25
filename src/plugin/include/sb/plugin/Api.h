@@ -197,7 +197,9 @@ class PluginContext;
 /// make shapes with (DocumentList::kernel(), not const).
 /// Version 68 added press fits to assemblies (model::PressFit,
 /// Document::pressFits(), AddPressFitCommand, DeletePressFitCommand).
-inline constexpr int kPluginApiVersion = 68;
+/// Version 69 measures between an assembly's components (model::MeasurePick::component,
+/// and model::measure() takes a kernel to move their bodies, not const).
+inline constexpr int kPluginApiVersion = 69;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

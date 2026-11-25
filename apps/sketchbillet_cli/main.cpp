@@ -10,6 +10,7 @@
 //   sketchbillet_cli check <file.sb> [--step <name>] [--min-wall <mm>]  check a part is ready to 3D print
 //   sketchbillet_cli check <assembly.sb> [--overlaps]                  check no components overlap
 //   sketchbillet_cli measure <file.sb> <name> face|edge|point <n> [<name> face|edge|point <n>]
+//     (in an assembly, <name> is a component: "Wheel 1", or "Wheel 1:Hub" for one of its bodies)
 //                                       measure one face, edge or point, or between two
 //   sketchbillet_cli materials [<file.sb>]      list materials (SketchBillet's own, and a design's)
 //   sketchbillet_cli regress [--update] <case|dir>... run regression cases (see tests/corpus/README.md)
@@ -626,13 +627,31 @@ int measureDesign(int argc, char** argv) {
             return 2;
         }
         const sb::model::Feature* step = nullptr;
-        for (std::size_t k = 0; k < doc.featureCount(); ++k)
-            if (doc.featureAt(k).name() == name) step = &doc.featureAt(k);
+        const sb::model::RebuildReport* built = &report;
+        sb::model::ComponentId component{};
+        if (doc.kind() == sb::model::DocKind::Assembly) {
+            // A component, or a component and its body: "Wheel 1", "Wheel 1:Hub".
+            const auto colon = name.find(':');
+            std::string why;
+            const auto found =
+                sb::cli::componentBody(doc, report, name.substr(0, colon),
+                                       colon == std::string::npos ? "" : name.substr(colon + 1), why);
+            if (!found) {
+                std::fprintf(stderr, "error: %s\n", why.c_str());
+                return 1;
+            }
+            step = found->body;
+            component = found->component->id;
+            built = report.part(found->component->part);
+        } else {
+            for (std::size_t k = 0; k < doc.featureCount(); ++k)
+                if (doc.featureAt(k).name() == name) step = &doc.featureAt(k);
+        }
         if (!step) {
             std::fprintf(stderr, "error: this design has no step called %s.\n", name.c_str());
             return 1;
         }
-        const auto* r = report.result(step->id());
+        const auto* r = built->result(step->id());
         if (!r || !r->names || r->status != sb::model::FeatureStatus::Ok) {
             std::fprintf(stderr, "error: %s has no body to measure (it's a sketch, or has a problem).\n",
                          name.c_str());
@@ -652,8 +671,9 @@ int measureDesign(int argc, char** argv) {
                          what, name.c_str());
             return 1;
         }
-        picks.push_back(
-            {step->id(), sb::model::referTo(*r->names, *kind, order[static_cast<std::size_t>(n - 1)])});
+        picks.push_back({step->id(),
+                         sb::model::referTo(*r->names, *kind, order[static_cast<std::size_t>(n - 1)]),
+                         component});
     }
     const auto m = sb::model::measure(doc, report, *kernel, picks);
     for (const auto& line : sb::model::describe(m, doc.lengthUnit())) std::printf("%s\n", line.c_str());

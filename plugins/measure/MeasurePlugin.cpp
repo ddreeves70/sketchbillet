@@ -59,10 +59,10 @@ model::Measurement current(plugin::PluginContext& ctx) {
     if (sel.pickMode() != plugin::PickMode::Measure || sel.elements().empty()) return {};
     const auto* doc = ctx.documents().find(sel.doc());
     const auto* report = ctx.documents().lastRebuild(sel.doc());
-    const auto* kernel = ctx.documents().kernel();
+    auto* kernel = ctx.documents().kernel();
     if (!doc || !report || !kernel) return {};
     std::vector<model::MeasurePick> picks;
-    for (const auto& e : sel.elements()) picks.push_back({e.body, e.ref});
+    for (const auto& e : sel.elements()) picks.push_back({e.body, e.ref, e.component});
     return model::measure(*doc, *report, *kernel, picks);
 }
 
@@ -336,7 +336,7 @@ void registerMeasure(plugin::PluginContext& ctx) {
     ctx.addAction(plugin::ActionSpec{
         .id = "sb.measure.measure",
         .text = "Measure",
-        .menu = "Model/Inspect;Inspect/Measure",
+        .menu = "Model/Inspect;Assemble/Inspect;Inspect/Measure",
         .shortcut = "Ctrl+Shift+I",
         .toolbar = true,
         .icon = std::string(icons::measure::measure_svg),
