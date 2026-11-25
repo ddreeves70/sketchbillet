@@ -25,6 +25,11 @@ the toolbar, then click what to measure in the view. With `sketchbillet_cli`, us
 What's measured stays picked while you change the design, so you can change a
 number in Properties and watch the distance change.
 
+**In an assembly**, Measure is on the Assemble tab too, and measures between
+components, where they're placed: the gap between a wheel and the car's body,
+or how far apart two wheels are. Move a component and the distance follows.
+See [Assemblies](assemblies.md#measuring-between-components).
+
 ## An example with sketchbillet_cli
 
 This tag has a 5 mm hole at each end, 42 mm apart, for a strap:

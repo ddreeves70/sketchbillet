@@ -360,6 +360,29 @@ balance point. Click **Done** to stop.
   out, and lists them as meant. If they stop overlapping, it says the fit will
   be loose. Click **Press fit** again to unmark them.
 
+## Measuring between components
+
+**Measure** works in an assembly too: it's on the Assemble tab, in the Inspect
+panel. Click a face, edge or point on one component, then one on another, and
+it gives the distance between them where they are in the assembly, and the
+angle when they're flat or straight. That's how to check a gap: will the wheel
+rub on the body?
+
+Here the wheels stand on their sides, 6 mm from the body:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli measure Car.sb "Wheel 1" face 1 "Body 1" face 2
+Wheel 1, Cylinder1, flat face: area 452.39 mm^2
+Body 1, Box1, flat face: area 800.00 mm^2
+Distance: 6 mm (x 0, y 6, z 0 mm)
+Angle: 0° (they're parallel)
+```
+
+On the command line, each name is a component; the numbers are the ones
+[`open --faces "Wheel 1"`](../cli/open.md#a-components-edges-faces-and-points)
+lists. [`measure`](../cli/measure.md#in-an-assembly) explains more.
+
 ## Linked and inside parts
 
 A part in an assembly is either **linked** to its own `.sb` file, or **inside**
@@ -426,6 +449,7 @@ it): you can move or copy the whole folder, and everything still links up.
 | Save an inside part to its own file, and link it | [`part.save_as`](../cli/commands.md#partsave_as) |
 | List the components and parts | [`open --components`](../cli/open.md#an-assembly) |
 | Check that no components overlap | [`check`](../cli/check.md#overlaps-in-an-assembly) |
+| Measure between two components | [`measure Car.sb "Wheel 1" face 1 "Body 1" face 2`](../cli/measure.md#in-an-assembly) |
 | Mark two components as meant to overlap, or unmark them | [`press_fit.add`](../cli/commands.md#press_fitadd), [`press_fit.delete`](../cli/commands.md#press_fitdelete) |
 
 Undo works for all of them in a script, like any other command.

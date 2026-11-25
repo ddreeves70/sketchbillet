@@ -321,3 +321,65 @@ TEST_CASE("the assembly checks are only for assemblies", "[app][measure][assembl
     CHECK_FALSE(app.shell->action("sb.measure.overlaps")->isEnabled());
     CHECK_FALSE(app.shell->action("sb.measure.balance")->isEnabled());
 }
+
+TEST_CASE("in an assembly, Measure is on the Assemble tab and measures between components",
+          "[app][measure][assembly]") {
+    App app;
+    auto& docs = app.host.documents();
+    // An assembly: a 20 x 20 x 10 mm base, and a 10 mm cube 10 mm to its right.
+    REQUIRE(docs.undo(app.design()));
+    REQUIRE(docs.run(app.design(), "assembly.new", {}).empty());
+    auto part = [](const char* name, kernel::Vec3 size) {
+        auto p = std::make_unique<model::Document>(model::DocKind::Part, name);
+        REQUIRE(p->execute(std::make_unique<model::AddFeatureCommand>(
+                               std::make_unique<model::BoxFeature>("Box1", kernel::Vec3{}, size)))
+                    .empty());
+        return p;
+    };
+    REQUIRE(
+        docs.execute(app.design(), std::make_unique<model::InsertPartCommand>(part("Base", {20, 20, 10}), 1))
+            .empty());
+    kernel::Placement right;
+    right.origin = {30, 0, 0};
+    REQUIRE(docs.execute(app.design(),
+                         std::make_unique<model::InsertPartCommand>(part("Cube", {10, 10, 10}), 1, right))
+                .empty());
+    settle();
+    const auto& design = *docs.find(app.design());
+    // A component's face whose middle is at `p` in its own part, as a click picks it.
+    auto face = [&](std::size_t which, kernel::Vec3 p) {
+        const auto& c = design.components()[which];
+        const auto* built = docs.lastRebuild(app.design())->part(c.part);
+        REQUIRE(built);
+        const auto body = built->bodies().front();
+        const auto& names = *built->result(body)->names;
+        const auto& faces = names.elements.faces;
+        for (std::size_t i = 0; i < faces.size(); ++i) {
+            const auto& f = faces[i].center;
+            if (std::abs(f.x - p.x) < 1e-9 && std::abs(f.y - p.y) < 1e-9 && std::abs(f.z - p.z) < 1e-9)
+                return plugin::PickedElement{
+                    body, model::referTo(names, kernel::TopoKind::Face, static_cast<int>(i)), c.id};
+        }
+        FAIL("no face at " << p.x << ", " << p.y << ", " << p.z);
+        return plugin::PickedElement{};
+    };
+
+    auto* measure = app.shell->action("sb.measure.measure");
+    REQUIRE(measure);
+    CHECK(measure->isEnabled());
+    measure->trigger();
+    settle();
+    CHECK(app.host.selection().pickMode() == plugin::PickMode::Measure);
+    // Base's right side (x 20) and the cube's left side, at x 30 where it's placed.
+    app.picked({face(0, {20, 10, 5}), face(1, {0, 5, 5})});
+    CHECK(app.text() == QString::fromUtf8("Base 1, Box1, flat face: area 200.00 mm^2\n"
+                                          "Cube 1, Box1, flat face: area 100.00 mm^2\n"
+                                          "Distance: 10 mm (x 10, y 0, z 0 mm)\n"
+                                          "Angle: 0° (they're parallel)"));
+    const auto* line = app.overlay("line");
+    REQUIRE(line);
+    CHECK(line->visible);
+    REQUIRE(line->points.size() == 2);
+    CHECK(line->points[0].x == 20.0);
+    CHECK(line->points[1].x == 30.0);
+}

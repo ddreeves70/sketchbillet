@@ -11,7 +11,7 @@ sketchbillet_cli measure <file.sb> <name> face|edge|point <n> [<name> face|edge|
 | Option | Meaning |
 | --- | --- |
 | `<file.sb>` | The design to measure |
-| `<name>` | The step whose body it's on, like `Tag` |
+| `<name>` | The step whose body it's on, like `Tag`. In an assembly, the component it's on, like `"Wheel 1"` (or `"Wheel 1:Hub"` for one of its part's bodies) |
 | `face`, `edge` or `point` | What to measure on it |
 | `<n>` | Which one: its number in [`open --faces`, `--edges` or `--points`](open.md#a-bodys-edges-and-faces) |
 
@@ -104,6 +104,49 @@ Tag, point: at x 60, y 30, z 4 mm
 Distance: 67.2 mm (x 60, y 30, z 4 mm)
 ```
 
+### In an assembly
+
+In an assembly, each name is a component, and it measures where the components
+are placed: the gap between two parts, or how far apart two wheels are. The
+numbers are the ones [`open --faces "Wheel 1"`](open.md#a-components-edges-faces-and-points)
+lists for the component's part.
+
+A car with its wheels standing on their sides, 6 mm from the body:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save Body.sb feature.add_box size=80,40,10
+...
+$ sketchbillet_cli run --save Wheel.sb feature.add_cylinder radius=12 height=6
+...
+$ sketchbillet_cli run --save Car.sb assembly.new
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.insert file=Body.sb
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.insert file=Wheel.sb count=2
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.place component="Wheel 1" origin=10,-6,12 z=0,-1,0
+...
+$ sketchbillet_cli run --open Car.sb --save Car.sb component.place component="Wheel 2" origin=70,-6,12 z=0,-1,0
+...
+$ sketchbillet_cli measure Car.sb "Wheel 1" face 1 "Body 1" face 2
+Wheel 1, Cylinder1, flat face: area 452.39 mm^2
+Body 1, Box1, flat face: area 800.00 mm^2
+Distance: 6 mm (x 0, y 6, z 0 mm)
+Angle: 0° (they're parallel)
+```
+
+Wheel 1's face 1 is its bottom in its own part; turned to face the body, it's
+the side next to it. The two wheels' rims are 60 mm − 24 mm = 36 mm apart:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli measure Car.sb "Wheel 1" face 2 "Wheel 2" face 2
+Wheel 1, Cylinder1, cylinder face: radius 12 mm (24 mm across), area 452.39 mm^2
+Wheel 2, Cylinder1, cylinder face: radius 12 mm (24 mm across), area 452.39 mm^2
+Distance: 36 mm (x 36, y 0, z 0 mm)
+```
+
 ## Errors
 
 A number that isn't in the list says how many there are, and how to list them:
@@ -118,6 +161,14 @@ error: Tag has 7 faces, numbered 1 to 7, so there's no face 9. `sketchbillet_cli
 ```console
 $ sketchbillet_cli measure tag.sb Lid face 1
 error: this design has no step called Lid.
+```
+
+In an assembly, a name that isn't a component lists the ones there are:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli measure Car.sb Wheel face 1
+error: Car has no component called Wheel. Its components are: Body 1, Wheel 1, Wheel 2.
 ```
 
 <!-- cli-example exit=2 -->
