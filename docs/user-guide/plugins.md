@@ -128,6 +128,8 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            action  Assemble/Parts > Find linked file  (part.relink)
            action  Assemble/Parts > Make part inside  (part.make_inside)
            action  Assemble/Parts > Save part as file  (part.save_as)
+           action  Assemble/Explode > Explode  (check mark)
+           action  Assemble/Explode > Add explode step  (runs plugin code)
 ```
 
 ## Use plugins from a folder

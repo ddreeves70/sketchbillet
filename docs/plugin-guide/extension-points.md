@@ -372,6 +372,19 @@ for (const auto& id : sel.joints()) {
 }
 ```
 
+**An exploded view** an assembly is shown in isn't a pick: it stays while the
+student picks components, to add a step. `sel.showExploded(carId, viewId)` shows
+it (the viewer draws each component slid by `model::explodePath()`), a nil view
+shows the assembly as it is again, and `sel.explodedView()` and
+`sel.explodedDoc()` say which is shown. Each change sends `ExplodedViewShown`:
+
+```cpp
+ctx.listen<sb::plugin::ExplodedViewShown>([&ctx](const auto& e) {
+    const auto* car = ctx.documents().find(e.doc);
+    if (const auto* view = car ? car->findExplodedView(e.view) : nullptr) ctx.log("Showing " + view->name);
+});
+```
+
 Edges or faces can be picked instead of steps. While `pickMode()` is
 `PickMode::Edges` (**Select > Pick edges**), clicking a body in the viewer picks
 the edge under the mouse; while it's `PickMode::Faces` (**Sketch > New sketch on a
@@ -857,6 +870,7 @@ ctx.listen<plugin::RebuildFinished>([&ctx](const plugin::RebuildFinished& e) {
 | `RebuildFinished` | A design was rebuilt after a change | `doc`, `ok` (did every step build?) |
 | `SelectionChanged` | The selection changes | `doc`, `features` (in picking order), `design` (the design itself is picked: Document settings), `elements` (picked edges), `components` (an assembly's picked components) |
 | `PickModeChanged` | Clicking a body switches between picking bodies, edges, faces and things to measure | `mode` |
+| `ExplodedViewShown` | An assembly is shown in an exploded view, or as it is again | `doc`, `view` (nil: as it is) |
 | `sb::viewoptions::ViewOptionChanged` | A view option changes (sent by `sb.viewoptions`, desktop app) | `option` (its id) |
 | `sb::grid::GridChanged` | The grid settings change (sent by `sb.grid`, desktop app) | `grid`: visible, spacing in mm, snap, style |
 | `OverlaysChanged` | An overlay is added, changed or removed | `id` |

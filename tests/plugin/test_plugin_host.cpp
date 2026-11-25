@@ -430,7 +430,9 @@ TEST_CASE("sb.modeling adds menu items that run its commands", "[plugin][host]")
                                           "sb.modeling.update_links",
                                           "sb.modeling.find_file",
                                           "sb.modeling.make_inside",
-                                          "sb.modeling.save_part"});
+                                          "sb.modeling.save_part",
+                                          "sb.modeling.explode",
+                                          "sb.modeling.explode_step"});
     CHECK(get(host, "sb.modeling").actions == ids);
 }
 

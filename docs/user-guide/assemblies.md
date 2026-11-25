@@ -395,8 +395,24 @@ An exploded view is made of **steps**. Each step slides one or more components
 in a direction, by a distance in mm, after the steps before it. A component in
 two steps moves by both: off the axle first, then out to the side.
 
-For now, make them with `sketchbillet_cli` (the desktop app's Explode button comes
-next). The wheels of the car, 20 mm to the front:
+**In the app**, on the Assemble tab:
+
+- **Explode** shows the assembly pulled apart, in its first exploded view (it
+  makes "Exploded 1" if there's none yet). Click it again to put it back
+  together. Each component it moves has a thin line back to where it came from.
+- To add a step, pick the components to slide out (click them in the view, or in
+  the feature tree), then click **Add step**: they slide 20 mm up. In
+  Properties, pick the step and change its **Direction** (up, down, to the front,
+  ...) and **Distance**, or **Delete step**.
+- The feature tree lists the **Exploded views**: click one to see it, right-click
+  to rename or delete it.
+
+Measure, Overlaps and Balance look at the assembly as it is, not pulled apart,
+and the move arrows go away while it's exploded.
+
+![The car exploded: its four wheels slid 30 mm out from the body, each with a thin line back, and Properties showing the second step, Back (+y), 30 mm](images/app-explode.png)
+
+On the command line, the wheels of the car, 20 mm to the front:
 
 <!-- cli-example -->
 ```console
@@ -521,7 +537,7 @@ it): you can move or copy the whole folder, and everything still links up.
 | Save an inside part to its own file, and link it | [`part.save_as`](../cli/commands.md#partsave_as) |
 | List the components and parts | [`open --components`](../cli/open.md#an-assembly) |
 | Check that no components overlap | [`check`](../cli/check.md#overlaps-in-an-assembly) |
-| Pull components apart in an exploded view | [`explode.add`](../cli/commands.md#explodeadd), [`explode.add_step`](../cli/commands.md#explodeadd_step), [`open --exploded`](../cli/open.md#an-exploded-view) |
+| Pull components apart in an exploded view (in the app: **Explode**, **Add step**) | [`explode.add`](../cli/commands.md#explodeadd), [`explode.add_step`](../cli/commands.md#explodeadd_step), [`open --exploded`](../cli/open.md#an-exploded-view) |
 | Measure between two components | [`measure Car.sb "Wheel 1" face 1 "Body 1" face 2`](../cli/measure.md#in-an-assembly) |
 | Mark two components as meant to overlap, or unmark them | [`press_fit.add`](../cli/commands.md#press_fitadd), [`press_fit.delete`](../cli/commands.md#press_fitdelete) |
 

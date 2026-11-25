@@ -247,6 +247,7 @@ public:
         subs_.push_back(ctx_.events().subscribe<RebuildFinished>(later));
         subs_.push_back(ctx_.events().subscribe<SelectionChanged>(later));
         subs_.push_back(ctx_.events().subscribe<PickModeChanged>(later));
+        subs_.push_back(ctx_.events().subscribe<ExplodedViewShown>(later));
         subs_.push_back(
             ctx_.events().subscribe<OverlaysChanged>([this](const OverlaysChanged&) { showOverlays(); }));
         subs_.push_back(ctx_.events().subscribe<viewoptions::ViewOptionChanged>(
@@ -1090,17 +1091,25 @@ view::SceneContent viewerScene(const plugin::DocumentList& docs, const plugin::S
                 if (found.found()) out.picked.push_back({e.body, found.index, e.ref.kind, e.component});
             }
         }
+        // Shown in an exploded view: each component slid as far as its steps say.
+        const auto* exploded =
+            selection.explodedDoc() == id ? design->findExplodedView(selection.explodedView()) : nullptr;
         for (const auto& c : design->components()) {
             const auto* part = design->findPart(c.part);
             const auto* built = report->part(c.part);
             if (!part || !built) continue;
+            const auto* at = report->placementOf(c.id);  // placed by its joints, or where it was put
+            auto placement = at ? *at : c.placement;
+            if (exploded) {
+                const auto by = model::explodePath(*exploded, c.id).back();
+                placement.origin = {placement.origin.x + by.x, placement.origin.y + by.y,
+                                    placement.origin.z + by.z};
+            }
             for (const auto& body : built->bodies()) {
                 const auto* shape = built->shapeOf(body);
                 if (!shape) continue;
                 const auto color = part->colorOf(body);
-                const auto* at = report->placementOf(c.id);  // placed by its joints, or where it was put
-                out.bodies.push_back(
-                    {body, *shape, false, {color.r, color.g, color.b}, c.id, at ? *at : c.placement});
+                out.bodies.push_back({body, *shape, false, {color.r, color.g, color.b}, c.id, placement});
             }
         }
         return out;

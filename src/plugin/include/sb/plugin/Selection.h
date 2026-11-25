@@ -138,8 +138,30 @@ public:
     /// @return True if it is; doc() says which design, and features() is empty.
     bool designPicked() const { return design_; }
 
+    /// Gives the exploded view the viewers show an assembly in, if any: its
+    /// components drawn pulled apart. It stays while picks change, so the
+    /// student can pick components to add a step.
+    /// @return The view, or nil when the assembly is drawn as it is.
+    const ExplodedViewId& explodedView() const { return exploded_; }
+
+    /// Gives the assembly the shown exploded view is of.
+    /// @return It, or nil when no exploded view is shown.
+    const DocId& explodedDoc() const { return explodedDoc_; }
+
+    /// Shows an assembly in one of its exploded views, or as it is again. Sends
+    /// ExplodedViewShown if it changes. It stops by itself when the view is
+    /// deleted or the assembly is closed.
+    /// @code
+    /// ctx.selection().showExploded(ctx.documents().active(), view.id);
+    /// @endcode
+    /// @param doc The assembly.
+    /// @param view The view, or nil to show the assembly as it is. One the
+    ///        assembly doesn't have shows it as it is.
+    void showExploded(const DocId& doc, const ExplodedViewId& view);
+
 private:
     void prune();
+    void pruneExploded();
 
     EventBus& bus_;
     const DocumentList& docs_;
@@ -151,6 +173,8 @@ private:
     PickMode mode_ = PickMode::Bodies;
     FeatureId only_{};
     bool design_ = false;
+    DocId explodedDoc_;        // the assembly an exploded view is shown of
+    ExplodedViewId exploded_;  // and the view
     std::vector<Subscription> subscriptions_;
 };
 

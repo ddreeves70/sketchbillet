@@ -75,6 +75,14 @@ struct SelectionChanged {
     std::vector<JointId> joints;
 };
 
+/// An assembly is shown in an exploded view, or as it is again (see
+/// Selection::showExploded()).
+struct ExplodedViewShown {
+    static constexpr std::string_view kType = "sb.ExplodedViewShown";  ///< Stable event type name.
+    DocId doc;            ///< The assembly; nil when none is shown exploded.
+    ExplodedViewId view;  ///< The view it's shown in; nil when it's shown as it is.
+};
+
 /// What clicking a body in a viewer picks changed (see Selection::setPickMode()).
 struct PickModeChanged {
     static constexpr std::string_view kType = "sb.PickModeChanged";  ///< Stable event type name.
