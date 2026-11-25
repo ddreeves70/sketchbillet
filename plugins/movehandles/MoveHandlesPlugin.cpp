@@ -46,6 +46,11 @@ public:
         const auto* doc = ctx_.documents().find(docId);
         const auto* report = ctx_.documents().lastRebuild(docId);
         const auto* kernel = ctx_.documents().kernel();
+        // Shown exploded, the components aren't drawn where they are: no handles.
+        if (doc && ctx_.selection().explodedDoc() == docId) {
+            viewer_.clearHandles(*this);
+            return;
+        }
         if (doc && kernel && report && doc->kind() == model::DocKind::Assembly) {
             // A component: a grounded one stays where it is, and a joint places a
             // joined one, so only a revolute or slider joint's handle moves it.
@@ -304,6 +309,7 @@ void registerMoveHandles(plugin::PluginContext& ctx) {
     ctx.listen<plugin::RebuildFinished>(refresh);
     ctx.listen<plugin::ActiveDocumentChanged>(refresh);
     ctx.listen<plugin::DocumentClosed>(refresh);
+    ctx.listen<plugin::ExplodedViewShown>(refresh);
 }
 
 }  // namespace

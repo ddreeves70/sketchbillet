@@ -208,6 +208,7 @@ public:
         subs_.push_back(ctx_.events().subscribe<ActiveDocumentChanged>([this](const auto&) { schedule(); }));
         subs_.push_back(ctx_.events().subscribe<DocumentChanged>([this](const auto&) { schedule(); }));
         subs_.push_back(ctx_.events().subscribe<RebuildFinished>([this](const auto&) { schedule(); }));
+        subs_.push_back(ctx_.events().subscribe<ExplodedViewShown>([this](const auto&) { schedule(); }));
         subs_.push_back(ctx_.events().subscribe<PickModeChanged>([this](const auto& e) {
             // Leaving edge picking some other way stops changing edges.
             if (e.mode != plugin::PickMode::Edges) changingStep_ = FeatureId{};
@@ -297,6 +298,14 @@ private:
             return;
         }
         shownJoint_ = {};
+        // Nothing picked, with the assembly shown exploded: its view and steps.
+        if (count == 0 && ctx_.selection().elements().empty() && changingStep_.isNil() &&
+            ctx_.selection().explodedDoc() == ctx_.documents().active() &&
+            !ctx_.selection().explodedView().isNil()) {
+            showExplodedView();
+            return;
+        }
+        shownView_ = {};
         changing_->setVisible(!changingStep_.isNil());
         if (!changingStep_.isNil()) {
             // Picking a Fillet's or Chamfer's edges again.
@@ -377,6 +386,164 @@ private:
             }
         }
         status_->setText(problems.trimmed());
+    }
+
+    // The exploded view the assembly is shown in: its name, and one of its steps
+    // (which components it slides, which way, how far), to change.
+    void showExplodedView() {
+        shown_ = FeatureId{};
+        const DocId doc = ctx_.selection().explodedDoc();
+        const auto* design = ctx_.documents().find(doc);
+        const auto* v = design ? design->findExplodedView(ctx_.selection().explodedView()) : nullptr;
+        if (!v) return;
+        title_->setText(qs(v->name));
+        const auto unit = design->lengthUnit();
+        // A new step (Add step): show it.
+        if (v->id != shownView_ || v->steps.size() > viewSteps_)
+            viewStep_ = v->steps.empty() ? 0 : v->steps.size() - 1;
+        if (viewStep_ >= v->steps.size()) viewStep_ = v->steps.empty() ? 0 : v->steps.size() - 1;
+        viewSteps_ = v->steps.size();
+        if (v->id != shownView_ || unit != unit_) {
+            unit_ = unit;
+            buildViewForm();
+            shownView_ = v->id;
+        }
+        filling_ = true;
+        for (auto& u : viewUpdaters_) u(*v);
+        filling_ = false;
+        status_->setStyleSheet(QStringLiteral("color: #57606a"));
+        status_->setText(
+            v->steps.empty()
+                ? tr("Pick the components to slide out, then click Add step on the Assemble tab.")
+                : tr("To slide more components, pick them and click Add step."));
+    }
+
+    // Changes the shown exploded view, as one step: a quick run of changes to one
+    // number merges into the step before.
+    void changeView(const QString& field, const std::function<void(model::ExplodedView&)>& change) {
+        if (filling_) return;
+        const DocId doc = ctx_.selection().explodedDoc();
+        const auto* design = ctx_.documents().find(doc);
+        const auto* now = design ? design->findExplodedView(shownView_) : nullptr;
+        if (!now) return;
+        model::ExplodedView copy = *now;
+        change(copy);
+        const bool merge = field == lastField_ && lastEdit_.isValid() && lastEdit_.elapsed() < kMergeMs;
+        lastField_ = field;
+        lastEdit_.start();
+        auto problems =
+            ctx_.documents().execute(doc, std::make_unique<model::SetExplodedViewCommand>(copy, merge));
+        if (!problems.empty()) {
+            ui_.showProblems(problems);
+            schedule();  // show it as it still is
+        }
+    }
+
+    void buildViewForm() {
+        clearForm();
+        auto* form = new QFormLayout(form_);
+        form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+
+        auto* name = new QLineEdit(form_);
+        name->setObjectName(QStringLiteral("viewname"));
+        form->addRow(tr("Name"), name);
+        connect(name, &QLineEdit::editingFinished, this, [this, name] {
+            const auto text = name->text().trimmed().toStdString();
+            changeView(QStringLiteral("name"), [text](model::ExplodedView& v) { v.name = text; });
+        });
+        viewUpdaters_.push_back([name](const model::ExplodedView& v) {
+            if (!name->hasFocus()) name->setText(qs(v.name));
+        });
+
+        // Which step to change: each with the components it slides.
+        auto* step = new QComboBox(form_);
+        step->setObjectName(QStringLiteral("viewstep"));
+        form->addRow(tr("Step"), step);
+        connect(step, &QComboBox::activated, this, [this](int i) {
+            viewStep_ = static_cast<std::size_t>(std::max(i, 0));
+            schedule();
+        });
+        auto names = [this](const model::ExplodeStep& st) {
+            const auto* d = ctx_.documents().find(ctx_.selection().explodedDoc());
+            QStringList out;
+            for (const auto& id : st.components) {
+                const auto* c = d ? d->findComponent(id) : nullptr;
+                if (c) out << qs(c->name);
+            }
+            return out.isEmpty() ? tr("nothing") : out.join(QStringLiteral(", "));
+        };
+        viewUpdaters_.push_back([this, step, names](const model::ExplodedView& v) {
+            step->clear();
+            for (std::size_t i = 0; i < v.steps.size(); ++i)
+                step->addItem(tr("%1: %2").arg(i + 1).arg(names(v.steps[i])));
+            step->setEnabled(!v.steps.empty());
+            if (!v.steps.empty()) step->setCurrentIndex(static_cast<int>(viewStep_));
+        });
+
+        // Which way: up, down, to the front, ..., or another way it was given.
+        struct Way {
+            const char* text;
+            kernel::Vec3 d;
+        };
+        static const Way ways[] = {{"Up (+z)", {0, 0, 1}},     {"Down (-z)", {0, 0, -1}},
+                                   {"Front (-y)", {0, -1, 0}}, {"Back (+y)", {0, 1, 0}},
+                                   {"Right (+x)", {1, 0, 0}},  {"Left (-x)", {-1, 0, 0}}};
+        auto* way = new QComboBox(form_);
+        way->setObjectName(QStringLiteral("viewdirection"));
+        for (const auto& w : ways) way->addItem(tr(w.text));
+        way->addItem(tr("Another way"));
+        form->addRow(tr("Direction"), way);
+        connect(way, &QComboBox::activated, this, [this](int i) {
+            if (i < 0 || i >= static_cast<int>(std::size(ways))) return;
+            const auto d = ways[i].d;
+            const auto at = viewStep_;
+            changeView(QStringLiteral("direction"), [d, at](model::ExplodedView& v) {
+                if (at < v.steps.size()) v.steps[at].direction = d;
+            });
+        });
+        viewUpdaters_.push_back([this, way](const model::ExplodedView& v) {
+            way->setEnabled(viewStep_ < v.steps.size());
+            if (viewStep_ >= v.steps.size()) return;
+            const auto& d = v.steps[viewStep_].direction;
+            const double n = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+            int found = static_cast<int>(std::size(ways));  // another way
+            for (std::size_t i = 0; i < std::size(ways) && n > 0; ++i) {
+                const auto& w = ways[i].d;
+                if (std::abs(d.x / n - w.x) < 1e-9 && std::abs(d.y / n - w.y) < 1e-9 &&
+                    std::abs(d.z / n - w.z) < 1e-9)
+                    found = static_cast<int>(i);
+            }
+            way->setCurrentIndex(found);
+        });
+
+        auto* distance = spin(QStringLiteral("viewdistance"), false,
+                              QLatin1Char(' ') + qs(std::string(unitSymbol(unit_))));
+        form->addRow(tr("Distance"), distance);
+        connect(distance, &QDoubleSpinBox::valueChanged, this, [this](double shown) {
+            const double mm = fromUnit(shown, unit_);
+            const auto at = viewStep_;
+            changeView(QStringLiteral("distance"), [mm, at](model::ExplodedView& v) {
+                if (at < v.steps.size()) v.steps[at].distance = mm;
+            });
+        });
+        viewUpdaters_.push_back([this, distance](const model::ExplodedView& v) {
+            distance->setEnabled(viewStep_ < v.steps.size());
+            if (viewStep_ < v.steps.size()) distance->setValue(toUnit(v.steps[viewStep_].distance, unit_));
+        });
+
+        auto* remove = new QPushButton(tr("Delete step"), form_);
+        remove->setObjectName(QStringLiteral("viewdeletestep"));
+        remove->setToolTip(tr("Take this step out: its components go back where the steps before put them."));
+        form->addRow(QString(), remove);
+        connect(remove, &QPushButton::clicked, this, [this] {
+            const auto at = viewStep_;
+            changeView(QStringLiteral("delete"), [at](model::ExplodedView& v) {
+                if (at < v.steps.size()) v.steps.erase(v.steps.begin() + static_cast<std::ptrdiff_t>(at));
+            });
+            if (viewStep_ > 0) --viewStep_;  // the one before
+        });
+        viewUpdaters_.push_back(
+            [this, remove](const model::ExplodedView& v) { remove->setEnabled(viewStep_ < v.steps.size()); });
     }
 
     // The joint tool: what to click next, and a way out.
@@ -804,6 +971,8 @@ private:
     void clearForm() {
         wrapped_ = nullptr;
         updaters_.clear();
+        viewUpdaters_.clear();  // the exploded view's boxes go too
+        shownView_ = {};
         delete form_->layout();
         for (auto* child : form_->findChildren<QWidget*>(Qt::FindDirectChildrenOnly)) delete child;
     }
@@ -2016,6 +2185,10 @@ private:
     model::ComponentId shownComponent_;  // the component the form shows, if one
     JointId shownJoint_;                 // or the joint
     std::vector<std::function<void(const model::Joint&)>> jointUpdaters_;  // fill the joint's form
+    ExplodedViewId shownView_;                                             // or the exploded view
+    std::size_t viewStep_ = 0;                                             // and which of its steps
+    std::size_t viewSteps_ = 0;  // how many it had, to show a new one
+    std::vector<std::function<void(const model::ExplodedView&)>> viewUpdaters_;  // fill the view's form
 
     LengthUnit unitNow() const {
         const auto* d = design();

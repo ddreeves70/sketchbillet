@@ -10,9 +10,11 @@ namespace sb::plugin {
 Selection::Selection(EventBus& bus, const DocumentList& docs) : bus_(bus), docs_(docs) {
     subscriptions_.push_back(bus_.subscribe<DocumentChanged>([this](const DocumentChanged& e) {
         if (e.doc == doc_) prune();
+        if (e.doc == explodedDoc_) pruneExploded();
     }));
     subscriptions_.push_back(bus_.subscribe<DocumentClosed>([this](const DocumentClosed& e) {
         if (e.doc == doc_) clear();
+        if (e.doc == explodedDoc_) showExploded({}, {});
     }));
 }
 
@@ -166,6 +168,21 @@ void Selection::setJoints(const DocId& doc, std::vector<JointId> joints) {
 
 void Selection::clear() {
     set(DocId{}, {});
+}
+
+void Selection::showExploded(const DocId& doc, const ExplodedViewId& view) {
+    const auto* design = docs_.find(doc);
+    const bool there = design && !view.isNil() && design->findExplodedView(view);
+    const DocId newDoc = there ? doc : DocId{};
+    const ExplodedViewId newView = there ? view : ExplodedViewId{};
+    if (newDoc == explodedDoc_ && newView == exploded_) return;
+    explodedDoc_ = newDoc;
+    exploded_ = newView;
+    bus_.publish(ExplodedViewShown{explodedDoc_, exploded_});
+}
+
+void Selection::pruneExploded() {
+    showExploded(explodedDoc_, exploded_);  // stops when the view is gone
 }
 
 void Selection::prune() {

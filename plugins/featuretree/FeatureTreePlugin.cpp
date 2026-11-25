@@ -36,6 +36,7 @@ constexpr const char* kManifest = R"({
 constexpr int kFolderRole = Qt::UserRole + 1;
 constexpr int kComponentRole = Qt::UserRole + 2;  // an assembly's component row: its id
 constexpr int kJointRole = Qt::UserRole + 3;      // an assembly's joint row: its id
+constexpr int kViewRole = Qt::UserRole + 4;       // an assembly's exploded view row: its id
 
 const char* kindName(const model::Feature& f) {
     switch (f.type()) {
@@ -147,6 +148,7 @@ public:
         subs_.push_back(ctx_.events().subscribe<DocumentChanged>([this](const auto&) { scheduleRefill(); }));
         subs_.push_back(ctx_.events().subscribe<RebuildFinished>([this](const auto&) { scheduleRefill(); }));
         subs_.push_back(ctx_.events().subscribe<SelectionChanged>([this](const auto&) { showSelection(); }));
+        subs_.push_back(ctx_.events().subscribe<ExplodedViewShown>([this](const auto&) { showSelection(); }));
         refill();
     }
 
@@ -319,6 +321,22 @@ private:
                 for (int col = 0; col < 3; ++col) item->setToolTip(col, tip);
             }
         }
+        if (!design.explodedViews().empty()) {
+            auto* views =
+                group(tr("Exploded views"),
+                      tr("The components pulled apart, to show how they go together. Click one to see "
+                         "it."));
+            for (const auto& v : design.explodedViews()) {
+                auto* item = new QTreeWidgetItem(views);
+                item->setText(0, QString::fromStdString(v.name));
+                item->setText(1, v.steps.size() == 1 ? tr("1 step") : tr("%1 steps").arg(v.steps.size()));
+                item->setData(0, kViewRole, QString::fromStdString(v.id.toString()));
+                item->setFlags(item->flags() | Qt::ItemIsEditable);
+                item->setToolTip(0,
+                                 tr("Click to see the assembly pulled apart like this; click Explode on the "
+                                    "Assemble tab to put it back together."));
+            }
+        }
         auto* parts =
             group(tr("Parts"), tr("The parts this assembly uses, each once, however many copies of it "
                                   "there are."));
@@ -346,6 +364,11 @@ private:
                 item->setToolTip(0, tr("Linked to %1: changing that file changes this assembly.").arg(file));
             }
         }
+    }
+
+    static ExplodedViewId viewIdOf(const QTreeWidgetItem* item) {
+        return ExplodedViewId::parse(item->data(0, kViewRole).toString().toStdString())
+            .value_or(ExplodedViewId{});
     }
 
     static JointId jointIdOf(const QTreeWidgetItem* item) {
@@ -414,6 +437,13 @@ private:
                 item->setSelected(here && sel.containsJoint(joint));
                 continue;
             }
+            if (const auto view = viewIdOf(item); !view.isNil()) {
+                // The view shown, while nothing else is picked (Properties shows it).
+                item->setSelected(sel.explodedDoc() == ctx_.documents().active() &&
+                                  sel.explodedView() == view && sel.components().empty() &&
+                                  sel.joints().empty() && sel.features().empty());
+                continue;
+            }
             const FolderId folder = folderIdOf(item);
             if (folder.isNil()) {
                 item->setSelected(here && sel.contains(idOf(item)));
@@ -439,6 +469,17 @@ private:
         const DocId doc = ctx_.documents().active();
         if (const auto* design = ctx_.documents().find(doc);
             design && design->kind() == model::DocKind::Assembly) {
+            // An exploded view, when the row just clicked is one: the assembly is
+            // shown in it, and Properties shows its steps.
+            if (const auto* current = tree_->currentItem(); current && !viewIdOf(current).isNil()) {
+                if (current->isSelected()) {
+                    const auto view = viewIdOf(current);
+                    ctx_.selection().clear();
+                    ctx_.selection().showExploded(doc, view);
+                }
+                showSelection();
+                return;
+            }
             // Joints, when the row just clicked is one: a joint and a component
             // aren't picked together.
             if (const auto* current = tree_->currentItem(); current && !jointIdOf(current).isNil()) {
@@ -505,6 +546,19 @@ private:
 
     void renamed(QTreeWidgetItem* item) {
         if (filling_) return;
+        if (const auto view = viewIdOf(item); !view.isNil()) {
+            const auto* design = ctx_.documents().find(ctx_.documents().active());
+            const auto* v = design ? design->findExplodedView(view) : nullptr;
+            const auto name = item->text(0).trimmed().toStdString();
+            if (!v || name == v->name) return;
+            auto problems = ctx_.documents().run(ctx_.documents().active(), "explode.rename",
+                                                 {{"view", v->name}, {"name", name}});
+            if (!problems.empty()) {
+                ui_.showProblems(problems);
+                scheduleRefill();  // put the old name back
+            }
+            return;
+        }
         if (const auto joint = jointIdOf(item); !joint.isNil()) {
             const auto* design = ctx_.documents().find(ctx_.documents().active());
             const auto* j = design ? design->findJoint(joint) : nullptr;
@@ -597,6 +651,16 @@ private:
             });
             m.addAction(tr("Delete component"), this,
                         [run, name] { run("component.delete", {{"component", name}}); });
+            m.exec(tree_->viewport()->mapToGlobal(at));
+            return;
+        }
+        if (const auto view = viewIdOf(item); !view.isNil()) {
+            const auto* v = design->findExplodedView(view);
+            if (!v) return;
+            const std::string name = v->name;
+            m.addAction(tr("Rename"), this, [this, item] { tree_->editItem(item, 0); });
+            m.addAction(tr("Delete exploded view"), this,
+                        [run, name] { run("explode.delete", {{"view", name}}); });
             m.exec(tree_->viewport()->mapToGlobal(at));
             return;
         }

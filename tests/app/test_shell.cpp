@@ -284,10 +284,10 @@ TEST_CASE("every toolbar button has a picture", "[app][icons]") {
             CHECK(b->toolButtonStyle() == Qt::ToolButtonTextUnderIcon);
     }
     // The top row (5), Import, Export and Check print (3), sb.modeling (15 on Model,
-    // 12 on Assemble), sb.sketcher (2 on Model, 1 main, 5 drawing, 3 editing, 5
+    // 14 on Assemble), sb.sketcher (2 on Model, 1 main, 5 drawing, 3 editing, 5
     // constraints), View options (1), the grid (2), the axes (2), the feature tree and
     // Properties panels (2), and Save and Reset layout (2).
-    CHECK(buttons == 5 + 3 + 15 + 12 + 16 + 1 + 2 + 2 + 2 + 2);
+    CHECK(buttons == 5 + 3 + 15 + 14 + 16 + 1 + 2 + 2 + 2 + 2);
     // The dropdown item shows the same picture as its button.
     CHECK_FALSE(app.shell->action("sb.modeling.box")->icon().isNull());
 }
@@ -5529,4 +5529,122 @@ TEST_CASE("type a line's length and angle, and a circle's diameter, while drawin
     const auto* last = std::get_if<sketch::CircleShape>(&sketchAt(app, 0).sketch().entities.back().shape);
     REQUIRE(last);
     CHECK(last->radius == Approx(30));
+}
+
+TEST_CASE(
+    "Explode shows an assembly pulled apart: Add step slides the picked components, Properties changes "
+    "the step, and the tree lists the views",
+    "[app][assembly][explode]") {
+    App app;
+    model::Document car(model::DocKind::Part, "Car");
+    REQUIRE(car.execute(std::make_unique<model::MakeAssemblyCommand>()).empty());
+    auto part = [](const char* name) {
+        auto p = std::make_unique<model::Document>(model::DocKind::Part, name);
+        REQUIRE(p->execute(std::make_unique<model::AddFeatureCommand>(std::make_unique<model::BoxFeature>(
+                               "Box1", kernel::Vec3{}, kernel::Vec3{10, 10, 4})))
+                    .empty());
+        return p;
+    };
+    REQUIRE(car.execute(std::make_unique<model::InsertPartCommand>(part("Body"), 1)).empty());
+    REQUIRE(car.execute(std::make_unique<model::InsertPartCommand>(part("Lid"), 1)).empty());
+    const auto path = app.dir.filePath(QStringLiteral("car.sb")).toStdWString();
+    REQUIRE(io::writeFile(car, path).empty());
+    REQUIRE(app.shell->openDesign(path).empty());
+    settle();
+    const auto& doc = app.doc();
+    const auto body = doc.components()[0].id;
+    const auto lid = doc.components()[1].id;
+    auto& sel = app.host.selection();
+    // Where the view draws a component.
+    auto drawnAt = [&](const model::ComponentId& c) {
+        for (const auto& b : plugins::viewerScene(app.host.documents(), sel).bodies)
+            if (b.component == c) return b.placement.origin;
+        FAIL("not drawn");
+        return kernel::Vec3{};
+    };
+
+    auto* explode = app.shell->action("sb.modeling.explode");
+    auto* addStep = app.shell->action("sb.modeling.explode_step");
+    REQUIRE(explode);
+    REQUIRE(addStep);
+    CHECK(explode->isEnabled());
+    CHECK_FALSE(addStep->isEnabled());  // pick components first
+
+    // Explode with no view yet: it makes Exploded 1, and shows it, with nothing
+    // pulled apart yet. Properties says what to do.
+    explode->trigger();
+    settle();
+    REQUIRE(doc.explodedViews().size() == 1);
+    CHECK(explode->isChecked());
+    CHECK(sel.explodedView() == doc.explodedViews()[0].id);
+    CHECK(app.field<QLineEdit>("viewname")->text() == QStringLiteral("Exploded 1"));
+    CHECK_FALSE(app.field<QComboBox>("viewstep")->isEnabled());
+
+    // Pick the lid, and Add step: it slides 20 mm up, drawn there with a thin
+    // line back; the lid itself doesn't move.
+    sel.setComponents(app.shell->activeDesign(), {lid});
+    settle();
+    CHECK(addStep->isEnabled());
+    CHECK(sel.explodedView() == doc.explodedViews()[0].id);  // still shown
+    addStep->trigger();
+    settle();
+    REQUIRE(doc.explodedViews()[0].steps.size() == 1);
+    CHECK(doc.undoLabel() == "Change Exploded 1");
+    CHECK(drawnAt(lid).z == 20);
+    CHECK(drawnAt(body).z == 0);
+    CHECK(doc.findComponent(lid)->placement.origin.z == 0);
+    const auto* lines = app.host.overlays().find("sb.modeling.explode.lines");
+    REQUIRE(lines);
+    CHECK(lines->visible);
+    REQUIRE(lines->points.size() == 2);
+    CHECK(lines->points[0].z == 2);   // the middle of the lid's box, where it is
+    CHECK(lines->points[1].z == 22);  // and where it's drawn
+    CHECK(sel.components().empty());  // Properties shows the view, at the new step
+    CHECK(app.field<QComboBox>("viewstep")->currentText() == QStringLiteral("1: Lid 1"));
+    CHECK(app.field<QComboBox>("viewdirection")->currentText() == QStringLiteral("Up (+z)"));
+
+    // Properties: to the front, 35 mm.
+    auto* way = app.field<QComboBox>("viewdirection");
+    way->setCurrentIndex(2);
+    emit way->activated(2);
+    settle();
+    auto* distance = app.field<QDoubleSpinBox>("viewdistance");
+    distance->setValue(35);
+    settle();
+    CHECK(doc.explodedViews()[0].steps[0].direction.y == -1);
+    CHECK(doc.explodedViews()[0].steps[0].distance == 35);
+    CHECK(drawnAt(lid).y == -35);
+    CHECK(drawnAt(lid).z == 0);
+
+    // The tree lists it; Explode again puts it back together.
+    auto* tree = app.tree();
+    REQUIRE(tree->topLevelItemCount() == 3);
+    auto* views = tree->topLevelItem(1);
+    CHECK(views->text(0) == QStringLiteral("Exploded views"));
+    REQUIRE(views->childCount() == 1);
+    CHECK(views->child(0)->text(0) == QStringLiteral("Exploded 1"));
+    CHECK(views->child(0)->text(1) == QStringLiteral("1 step"));
+    explode->trigger();
+    settle();
+    CHECK_FALSE(explode->isChecked());
+    CHECK(sel.explodedView().isNil());
+    CHECK(drawnAt(lid).y == 0);
+    CHECK_FALSE(app.host.overlays().find("sb.modeling.explode.lines")->visible);
+    // Clicking its row in the tree shows it again.
+    tree->setCurrentItem(views->child(0));
+    settle();
+    CHECK(sel.explodedView() == doc.explodedViews()[0].id);
+    CHECK(drawnAt(lid).y == -35);
+
+    // Delete step, in Properties; deleting the view stops showing it.
+    app.field<QPushButton>("viewdeletestep")->click();
+    settle();
+    CHECK(doc.explodedViews()[0].steps.empty());
+    CHECK(drawnAt(lid).y == 0);
+    REQUIRE(app.host.documents()
+                .run(app.shell->activeDesign(), "explode.delete", {{"view", std::string("Exploded 1")}})
+                .empty());
+    settle();
+    CHECK(sel.explodedView().isNil());
+    CHECK_FALSE(explode->isChecked());
 }

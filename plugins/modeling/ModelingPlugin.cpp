@@ -163,6 +163,142 @@ constexpr const char* kAssemblyMode = "sb.modeling.assembly";
 
 // The Assemble tab: putting parts in an assembly, its components, and its parts'
 // files. Each tool is a command, like every other.
+// The shown exploded view's thin lines: from where each component it moves was,
+// through where each step put it, to where it's drawn. From the middle of the
+// box around its bodies.
+void drawExplodeLines(plugin::PluginContext& ctx) {
+    plugin::Overlay lines;
+    lines.color = {90, 96, 106, 255};
+    lines.size = 1.2;
+    lines.overBodies = false;
+    auto& docs = ctx.documents();
+    const auto& sel = ctx.selection();
+    const auto* design = docs.find(sel.explodedDoc());
+    const auto* view = design ? design->findExplodedView(sel.explodedView()) : nullptr;
+    const auto* report = view ? docs.lastRebuild(sel.explodedDoc()) : nullptr;
+    const auto* kernel = docs.kernel();
+    if (view && report && kernel && sel.explodedDoc() == docs.active()) {
+        for (const auto& c : design->components()) {
+            const auto path = model::explodePath(*view, c.id);
+            const auto* built = report->part(c.part);
+            if (path.size() < 2 || !built) continue;
+            bool any = false;
+            kernel::Box3 box{};
+            for (const auto& body : built->bodies()) {
+                const auto* shape = built->shapeOf(body);
+                if (!shape) continue;
+                const auto b = kernel->bounds(*shape);
+                if (!any) box = b;
+                box.min = {std::min(box.min.x, b.min.x), std::min(box.min.y, b.min.y),
+                           std::min(box.min.z, b.min.z)};
+                box.max = {std::max(box.max.x, b.max.x), std::max(box.max.y, b.max.y),
+                           std::max(box.max.z, b.max.z)};
+                any = true;
+            }
+            if (!any) continue;
+            const auto* at = report->placementOf(c.id);
+            const auto middle =
+                kernel::apply(at ? *at : c.placement,
+                              kernel::Point3{(box.min.x + box.max.x) / 2, (box.min.y + box.max.y) / 2,
+                                             (box.min.z + box.max.z) / 2});
+            for (std::size_t i = 0; i + 1 < path.size(); ++i) {
+                lines.points.push_back({middle.x + path[i].x, middle.y + path[i].y, middle.z + path[i].z});
+                lines.points.push_back(
+                    {middle.x + path[i + 1].x, middle.y + path[i + 1].y, middle.z + path[i + 1].z});
+            }
+        }
+    }
+    lines.visible = !lines.points.empty();
+    ctx.overlays().set("explode.lines", lines);
+}
+
+// Explode on the Assemble tab: shows the assembly pulled apart in an exploded
+// view, and adds steps that slide the picked components.
+void addExplodeTools(plugin::PluginContext& ctx) {
+    using plugin::ActionSpec;
+    auto assembly = [&ctx]() -> const model::Document* {
+        const auto* doc = ctx.documents().find(ctx.documents().active());
+        return doc && doc->kind() == model::DocKind::Assembly ? doc : nullptr;
+    };
+    // The exploded view the active assembly is shown in, if it is.
+    auto shown = [&ctx, assembly]() -> const model::ExplodedView* {
+        const auto* doc = assembly();
+        const auto& sel = ctx.selection();
+        return doc && sel.explodedDoc() == ctx.documents().active()
+                   ? doc->findExplodedView(sel.explodedView())
+                   : nullptr;
+    };
+    // Shows the assembly in its first exploded view, making one if it has none.
+    auto showOne = [&ctx, assembly]() -> const model::ExplodedView* {
+        const auto* doc = assembly();
+        if (!doc) return nullptr;
+        const DocId id = ctx.documents().active();
+        if (doc->explodedViews().empty()) {
+            auto problems = ctx.documents().execute(
+                id, std::make_unique<model::AddExplodedViewCommand>(model::ExplodedView{}));
+            if (!problems.empty()) {
+                ctx.log(problems.front().message);
+                return nullptr;
+            }
+        }
+        const auto* view = &doc->explodedViews().front();
+        ctx.selection().showExploded(id, view->id);
+        return view;
+    };
+    ctx.addAction(ActionSpec{
+        .id = "sb.modeling.explode",
+        .text = "Explode",
+        .menu = "Assemble/Explode",
+        .toolbar = true,
+        .buttonText = "Explode",
+        .icon = std::string(icons::modeling::explode_svg),
+        .tip =
+            "Pull the components apart, to show how they go together. It never moves them really. Click it "
+            "again to put them back together.",
+        .run =
+            [&ctx, shown, showOne] {
+                if (shown()) {
+                    ctx.selection().showExploded({}, {});
+                    return;
+                }
+                if (showOne()) ctx.selection().clear();  // Properties shows the view
+            },
+        .checked = [shown] { return shown() != nullptr; },
+        .enabled = [assembly] { return assembly() != nullptr; }});
+    ctx.addAction(ActionSpec{
+        .id = "sb.modeling.explode_step",
+        .text = "Add explode step",
+        .menu = "Assemble/Explode",
+        .toolbar = true,
+        .buttonText = "Add step",
+        .icon = std::string(icons::modeling::explode_step_svg),
+        .tip = "Pick the components to slide out, then click this: they slide 20 mm up. Change which way and "
+               "how far in Properties.",
+        .run =
+            [&ctx, shown, showOne] {
+                const auto components = ctx.selection().components();
+                if (components.empty()) return;
+                const auto* view = shown();
+                if (!view) view = showOne();
+                if (!view) return;
+                model::ExplodedView changed = *view;
+                changed.steps.push_back({{}, components, {0, 0, 1}, 20});
+                const DocId id = ctx.documents().active();
+                auto problems = ctx.documents().execute(
+                    id, std::make_unique<model::SetExplodedViewCommand>(std::move(changed)));
+                if (!problems.empty()) {
+                    ctx.log(problems.front().message);
+                    return;
+                }
+                ctx.selection().clear();  // Properties shows the view, at its new step
+            },
+        .enabled = [&ctx, assembly] { return assembly() && !ctx.selection().components().empty(); }});
+    ctx.listen<plugin::ExplodedViewShown>([&ctx](const auto&) {
+        drawExplodeLines(ctx);
+        ctx.publish(plugin::ActionsChanged{});  // Explode's check mark
+    });
+}
+
 void addAssembleTools(plugin::PluginContext& ctx) {
     using plugin::ActionSpec;
     ctx.addTab({.name = "Assemble", .always = false, .mode = kAssemblyMode});
@@ -464,6 +600,7 @@ void registerModeling(plugin::PluginContext& ctx) {
     ctx.listen<plugin::RebuildFinished>([&ctx](const auto&) {
         drawPlanes(ctx);
         drawJoints(ctx);
+        drawExplodeLines(ctx);
     });
     ctx.listen<plugin::SelectionChanged>([&ctx](const auto&) {
         drawPlanes(ctx);
@@ -472,6 +609,7 @@ void registerModeling(plugin::PluginContext& ctx) {
     ctx.listen<plugin::ActiveDocumentChanged>([&ctx](const auto&) {
         drawPlanes(ctx);
         drawJoints(ctx);
+        drawExplodeLines(ctx);
     });
 
     const auto& builtin = model::CommandRegistry::builtin();
@@ -776,6 +914,7 @@ void registerModeling(plugin::PluginContext& ctx) {
                              .shortcut = "Delete",
                              .tip = "Delete the selected step."});
     addAssembleTools(ctx);
+    addExplodeTools(ctx);
 }
 
 }  // namespace

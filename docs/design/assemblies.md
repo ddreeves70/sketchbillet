@@ -26,7 +26,7 @@ This page covers what the student gets, in the order it gets built:
 | 4. Placing parts along chains | Exact, instant placement from joint to joint, smooth enough to drag | Built |
 | 5. In the app | The assembly tree, inserting parts, joining, dragging, editing a part | Built |
 | 6. Checks | Parts that overlap, the whole assembly's mass and balance point, measuring between parts | Built |
-| 7. Exploded views | Parts pulled apart to show how they fit, for pictures and drawings | Built, from the command line |
+| 7. Exploded views | Parts pulled apart to show how they fit, for pictures and drawings | Built (drawing views come with drawings) |
 | 8. Parts list | How many of each part, with material and mass, for printing and drawings | Planned |
 | 9. Parts from bodies | A part with several bodies turned into an assembly (copy-and-group's "groups that move together") | Planned |
 
@@ -542,8 +542,16 @@ Each line is one pull request, in this order:
      `explode.add`, `explode.add_step`, `explode.set_step`,
      `explode.delete_step`, `explode.rename`, `explode.delete`, and
      `open --exploded`.
-   - Next: in the app (Explode on the Assemble tab: the view drawn exploded,
-     with thin lines back, and its steps edited in Properties).
+   - **In the app** (built, Nov 25, 2026): `Selection::showExploded()` (plugin
+     API 71, `ExplodedViewShown`) says which view an assembly is shown in; it
+     stays while picks change. The viewer draws each component slid by
+     `explodePath()`; `sb.modeling` adds Explode (show or hide; makes
+     "Exploded 1" if none) and Add step (the picked components, 20 mm up), and
+     draws the thin lines (an overlay from the middle of each component's box).
+     Properties edits the shown view: its name, and a step's direction (six
+     ways, or another) and distance, or deletes it. The feature tree lists
+     Exploded views (click to show; rename, delete). Move handles hide while
+     exploded. Phase 4's drawings will use exploded views for drawing views.
 8. **Parts list,** and exporting each part once with its count; STEP export
    with the assembly's structure (parts, components and placements), and 3MF
    with every part.
