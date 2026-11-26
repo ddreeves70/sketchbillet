@@ -1,6 +1,9 @@
 #include "sb/io/ThreeMf.h"
 
+#include <algorithm>
 #include <charconv>
+#include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <string>
 
@@ -78,7 +81,29 @@ constexpr const char* kRels =
     "Type=\"http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel\"/>\n"
     "</Relationships>\n";
 
-std::string model(const std::vector<MeshObject>& objects, const std::string& title) {
+// The 3MF transform of a placement: the turned x, y and z axes, then where the
+// origin goes (3MF multiplies a row of x, y, z, 1 by it).
+std::string transformText(const kernel::Placement& p) {
+    const auto& x = p.xAxis;
+    const auto& z = p.zAxis;
+    const auto y = kernel::yAxisOf(p);
+    std::string out;
+    for (const double v : {x.x, x.y, x.z, y.x, y.y, y.z, z.x, z.y, z.z, p.origin.x, p.origin.y, p.origin.z}) {
+        if (!out.empty()) out += ' ';
+        char buf[32];
+        const auto r = std::to_chars(buf, buf + sizeof buf, std::abs(v) < 1e-12 ? 0.0 : v);
+        out.append(buf, r.ptr);
+    }
+    return out;
+}
+
+bool isIdentity(const kernel::Placement& p) {
+    return p.origin.x == 0 && p.origin.y == 0 && p.origin.z == 0 && p.xAxis.x == 1 && p.xAxis.y == 0 &&
+           p.xAxis.z == 0 && p.zAxis.x == 0 && p.zAxis.y == 0 && p.zAxis.z == 1;
+}
+
+std::string model(const std::vector<MeshObject>& objects, const std::vector<ThreeMfPart>& parts,
+                  const std::vector<ThreeMfItem>& items, const std::string& title) {
     std::string x;
     x += "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
     x += "<model unit=\"millimeter\" xml:lang=\"en-US\" "
@@ -114,17 +139,52 @@ std::string model(const std::vector<MeshObject>& objects, const std::string& tit
         }
         x += "    </triangles>\n   </mesh>\n  </object>\n";
     }
+    // A part with more than one mesh: an object made of them. Its id follows the meshes'.
+    std::vector<std::size_t> partId(parts.size());
+    std::size_t next = objects.size() + 2;
+    for (std::size_t i = 0; i < parts.size(); ++i) {
+        const auto& p = parts[i];
+        if (p.meshes.size() == 1) {
+            partId[i] = p.meshes.front() + 2;
+            continue;
+        }
+        partId[i] = next++;
+        x += "  <object id=\"" + std::to_string(partId[i]) + "\" type=\"model\" name=\"" + escape(p.name) +
+             "\">\n   <components>\n";
+        for (const auto m : p.meshes) x += "    <component objectid=\"" + std::to_string(m + 2) + "\"/>\n";
+        x += "   </components>\n  </object>\n";
+    }
     x += " </resources>\n <build>\n";
-    for (std::size_t i = 0; i < objects.size(); ++i)
-        x += "  <item objectid=\"" + std::to_string(i + 2) + "\"/>\n";
+    for (const auto& item : items) {
+        x += "  <item objectid=\"" + std::to_string(partId[item.part]) + "\"";
+        if (!isIdentity(item.at)) x += " transform=\"" + transformText(item.at) + "\"";
+        x += "/>\n";
+    }
     x += " </build>\n</model>\n";
     return x;
+}
+
+// Each mesh its own part, once, where it is: a design's bodies.
+void onePartEach(const std::vector<MeshObject>& objects, std::vector<ThreeMfPart>& parts,
+                 std::vector<ThreeMfItem>& items) {
+    for (std::size_t i = 0; i < objects.size(); ++i) {
+        parts.push_back({objects[i].name, {i}});
+        items.push_back({i, {}});
+    }
 }
 
 }  // namespace
 
 Diagnostics write3mfBytes(const std::vector<MeshObject>& objects, const std::string& title, Bytes& out) {
-    if (objects.empty())
+    std::vector<ThreeMfPart> parts;
+    std::vector<ThreeMfItem> items;
+    onePartEach(objects, parts, items);
+    return write3mfBytes(objects, parts, items, title, out);
+}
+
+Diagnostics write3mfBytes(const std::vector<MeshObject>& objects, const std::vector<ThreeMfPart>& parts,
+                          const std::vector<ThreeMfItem>& items, const std::string& title, Bytes& out) {
+    if (objects.empty() || items.empty())
         return {{"export.nothing",
                  Severity::Error,
                  "There's nothing to put in the 3MF file. Make a shape first.",
@@ -132,16 +192,15 @@ Diagnostics write3mfBytes(const std::vector<MeshObject>& objects, const std::str
     zip::Entries entries;
     entries.emplace_back("[Content_Types].xml", kContentTypes);
     entries.emplace_back("_rels/.rels", kRels);
-    entries.emplace_back("3D/3dmodel.model", model(objects, title));
+    entries.emplace_back("3D/3dmodel.model", model(objects, parts, items, title));
     return zip::pack(
         entries, out,
         {"export.3mf.failed", Severity::Error, "SketchBillet couldn't put the part into a 3MF file.", {}});
 }
 
-Diagnostics write3mf(const std::vector<MeshObject>& objects, const std::string& title,
-                     const std::filesystem::path& path) {
-    Bytes bytes;
-    if (auto issues = write3mfBytes(objects, title, bytes); !issues.empty()) return issues;
+namespace {
+
+Diagnostics writeBytes(const Bytes& bytes, const std::filesystem::path& path) {
     return zip::writeAtomically(bytes, path,
                                 {"export.cant_write",
                                  Severity::Error,
@@ -149,6 +208,15 @@ Diagnostics write3mf(const std::vector<MeshObject>& objects, const std::string& 
                                      ". Check that the folder exists, that you're allowed to save there, and "
                                      "that the disk isn't full.",
                                  {}});
+}
+
+}  // namespace
+
+Diagnostics write3mf(const std::vector<MeshObject>& objects, const std::string& title,
+                     const std::filesystem::path& path) {
+    Bytes bytes;
+    if (auto issues = write3mfBytes(objects, title, bytes); !issues.empty()) return issues;
+    return writeBytes(bytes, path);
 }
 
 Diagnostics export3mf(const model::Document& doc, const model::RebuildReport& report,
@@ -167,6 +235,83 @@ Diagnostics export3mf(const model::Document& doc, const model::RebuildReport& re
                  feature->name() + " has no surface to export. Pick a step that makes a solid shape.",
                  {}}};
     return write3mf({std::move(part)}, doc.name(), path);
+}
+
+Diagnostics exportAssembly3mf(const model::Document& assembly, const model::RebuildReport& report,
+                              const kernel::IKernel& kernel, AssemblyLayout layout,
+                              const std::filesystem::path& path) {
+    std::vector<MeshObject> objects;
+    std::vector<ThreeMfPart> parts;
+    std::vector<kernel::Box3> boxes;  // each part's, in its own place
+    std::vector<std::size_t> partOf(assembly.parts().size(), SIZE_MAX);
+    for (std::size_t k = 0; k < assembly.parts().size(); ++k) {
+        const auto* part = assembly.parts()[k];
+        const auto* built = report.part(part->id());
+        if (!built) continue;
+        ThreeMfPart p{part->name(), {}};
+        kernel::Box3 box{};
+        for (const auto& body : built->bodies()) {
+            const auto* shape = built->shapeOf(body);
+            const auto* feature = part->find(body);
+            if (!shape || !feature) continue;
+            MeshObject m{built->bodies().size() == 1 ? part->name() : part->name() + " " + feature->name(),
+                         kernel.tessellate(*shape, kernel::MeshQuality{}), part->materialOf(body)};
+            m.material.color = part->colorOf(body);
+            if (m.mesh.triangles.empty()) continue;
+            const auto b = kernel.bounds(*shape);
+            if (p.meshes.empty()) box = b;
+            box.min = {std::min(box.min.x, b.min.x), std::min(box.min.y, b.min.y),
+                       std::min(box.min.z, b.min.z)};
+            box.max = {std::max(box.max.x, b.max.x), std::max(box.max.y, b.max.y),
+                       std::max(box.max.z, b.max.z)};
+            p.meshes.push_back(objects.size());
+            objects.push_back(std::move(m));
+        }
+        if (p.meshes.empty()) continue;  // nothing to print yet
+        partOf[k] = parts.size();
+        parts.push_back(std::move(p));
+        boxes.push_back(box);
+    }
+
+    std::vector<ThreeMfItem> items;
+    if (layout == AssemblyLayout::Assembled) {
+        for (const auto& c : assembly.components()) {
+            const auto& all = assembly.parts();
+            const auto it =
+                std::find_if(all.begin(), all.end(), [&](const auto* p) { return p->id() == c.part; });
+            if (it == all.end() || partOf[static_cast<std::size_t>(it - all.begin())] == SIZE_MAX) continue;
+            const auto* at = report.placementOf(c.id);
+            items.push_back({partOf[static_cast<std::size_t>(it - all.begin())], at ? *at : c.placement});
+        }
+    } else {
+        // A row for each part, 5 mm apart, as many copies as components use it.
+        constexpr double gap = 5;
+        double y = 0;
+        for (std::size_t k = 0; k < assembly.parts().size(); ++k) {
+            if (partOf[k] == SIZE_MAX) continue;
+            const auto* part = assembly.parts()[k];
+            const auto count = std::count_if(assembly.components().begin(), assembly.components().end(),
+                                             [&](const model::Component& c) { return c.part == part->id(); });
+            const auto& box = boxes[partOf[k]];
+            double x = 0;
+            for (long n = 0; n < count; ++n) {
+                kernel::Placement at;
+                at.origin = {x - box.min.x, y - box.min.y, -box.min.z};
+                items.push_back({partOf[k], at});
+                x += box.max.x - box.min.x + gap;
+            }
+            y += box.max.y - box.min.y + gap;
+        }
+    }
+    if (items.empty())
+        return {{"export.nothing",
+                 Severity::Error,
+                 assembly.name() + " has no parts with a shape to export yet. Add a shape to a part first.",
+                 {}}};
+    Bytes bytes;
+    if (auto issues = write3mfBytes(objects, parts, items, assembly.name(), bytes); !issues.empty())
+        return issues;
+    return writeBytes(bytes, path);
 }
 
 }  // namespace sb::io
