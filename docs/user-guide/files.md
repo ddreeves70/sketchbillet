@@ -69,6 +69,10 @@ wrote tag.3mf
 Both STL and 3MF turn the part's curved faces into flat triangles, never more
 than 0.05 mm from the true surface: much finer than a printer can print.
 
+An [assembly](assemblies.md#exporting-an-assembly) exports to 3MF too: put
+together, or with every part laid out ready to print, each as many times as
+it's used.
+
 Export writes the design's one finished body. If the design has more than one,
 join them with a [union](combining.md#union), or pick one step with `--step`:
 

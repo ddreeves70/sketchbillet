@@ -67,7 +67,7 @@ int usage() {
         "       sketchbillet_cli check <file.sb> [--step <name>] [--min-wall <mm>]\n"
         "       sketchbillet_cli check <assembly.sb> [--overlaps]\n"
         "       sketchbillet_cli measure <file.sb> <name> face|edge|point <n> [<name> face|edge|point <n>]\n"
-        "       sketchbillet_cli parts <assembly.sb> [--csv <out.csv>]\n"
+        "       sketchbillet_cli parts <assembly.sb> [--csv <out.csv>] [--export <out.3mf>]\n"
         "       sketchbillet_cli materials [<file.sb>]\n"
         "       sketchbillet_cli regress [--update] <case.json|folder>...\n"
         "       sketchbillet_cli plugins [--plugins <folder>]... [--slow-start-ms <n>] [--strict]\n"
@@ -363,13 +363,33 @@ int openDesign(int argc, char** argv) {
     // An assembly: its components and parts. Its steps are in its parts.
     if (doc.kind() == sb::model::DocKind::Assembly) {
         const bool listing = showEdges || showFaces || showPoints;
+        if (exporting && !oneStep) {
+            // The whole assembly, put together: each part once, a copy where each component is.
+            const std::filesystem::path out = argv[4];
+            if (!isThreeMf(out)) {
+                std::fprintf(stderr,
+                             "error: %s is an assembly, and for now it exports to 3MF only, with each part "
+                             "in its place. Use a name ending in .3mf, or export one part at a time from "
+                             "its own file.\n",
+                             doc.name().c_str());
+                return 1;
+            }
+            if (!sb::cli::printAssembly(doc, report, *kernel, false)) return 1;
+            if (auto issues =
+                    sb::io::exportAssembly3mf(doc, report, *kernel, sb::io::AssemblyLayout::Assembled, out);
+                !issues.empty()) {
+                printIssues(issues);
+                return 1;
+            }
+            std::printf("wrote %s\n", out.string().c_str());
+            return 0;
+        }
         if (argc != 3 && !showComponents && !listing && !showExploded) {
             std::fprintf(stderr,
-                         "error: %s is an assembly. For now, list it with --components or --exploded, or a "
-                         "component's "
-                         "edges, faces or points with --edges \"Wheel 1\"; exporting it and listing its "
-                         "sketches come in a later version.\n",
-                         doc.name().c_str());
+                         "error: %s is an assembly. List it with --components or --exploded, a "
+                         "component's edges, faces or points with --edges \"Wheel 1\", or export it "
+                         "with --export %s.3mf; listing its sketches comes in a later version.\n",
+                         doc.name().c_str(), doc.name().c_str());
             return 1;
         }
         const bool ok = sb::cli::printAssembly(doc, report, *kernel, showComponents);
@@ -797,10 +817,29 @@ int regress(int argc, char** argv) {
     return sb::cli::runRegression(*kernel, paths, options);
 }
 
-// sketchbillet_cli parts <assembly.sb> [--csv <out.csv>]: the parts list, each part
-// once with how many components use it, and as CSV for a spreadsheet.
+// sketchbillet_cli parts <assembly.sb> [--csv <out.csv>] [--export <out.3mf>]: the
+// parts list, each part once with how many components use it, as CSV for a
+// spreadsheet, and as a 3MF with every copy laid out to print.
 int partsOf(int argc, char** argv) {
-    if (argc != 3 && !(argc == 5 && std::string_view(argv[3]) == "--csv")) return usage();
+    if (argc < 3 || argc % 2 == 0) return usage();
+    const char* csvPath = nullptr;
+    const char* printPath = nullptr;
+    for (int i = 3; i + 1 < argc; i += 2) {
+        const std::string_view flag = argv[i];
+        if (flag == "--csv" && !csvPath)
+            csvPath = argv[i + 1];
+        else if (flag == "--export" && !printPath)
+            printPath = argv[i + 1];
+        else
+            return usage();
+    }
+    if (printPath && !isThreeMf(printPath)) {
+        std::fprintf(stderr,
+                     "error: parts --export writes a 3MF file, with every part laid out to print. Use a name "
+                     "ending in .3mf, like %s.3mf.\n",
+                     std::filesystem::path(printPath).stem().string().c_str());
+        return 2;
+    }
     auto opened = sb::io::openFile(argv[2]);
     if (!opened.ok()) {
         printIssues(opened.issues);
@@ -863,18 +902,28 @@ int partsOf(int argc, char** argv) {
             std::printf("note: %s has a problem, so its mass may be wrong. Open it to see.\n",
                         r.name.c_str());
     }
-    if (argc == 5) {
+    if (csvPath) {
         const auto csv = sb::model::partsListCsv(rows, doc.lengthUnit());
-        std::ofstream out(std::filesystem::path(argv[4]), std::ios::binary);
+        std::ofstream out(std::filesystem::path(csvPath), std::ios::binary);
         out << csv;
         out.close();
         if (!out) {
             std::fprintf(stderr,
                          "error: couldn't write %s. Check the folder exists and you can save there.\n",
-                         argv[4]);
+                         csvPath);
             return 1;
         }
-        std::printf("wrote %s\n", argv[4]);
+        std::printf("wrote %s\n", csvPath);
+    }
+    if (printPath) {
+        // Each part as many times as it's used, side by side: the slicer gets four wheels.
+        if (auto issues =
+                sb::io::exportAssembly3mf(doc, report, *kernel, sb::io::AssemblyLayout::ToPrint, printPath);
+            !issues.empty()) {
+            printIssues(issues);
+            return 1;
+        }
+        std::printf("wrote %s\n", printPath);
     }
     return 0;
 }

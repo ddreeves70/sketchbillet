@@ -561,8 +561,17 @@ Each line is one pull request, in this order:
      each, mass in all, material cost, inside or linked (and the file's
      name), and whether it built; `partsListCsv()` writes it for a
      spreadsheet. `sketchbillet_cli parts <assembly.sb> [--csv <out.csv>]`.
-   - Next: exporting each part once with its count, STEP with the assembly's
-     structure and 3MF with every part; then the Parts List in the app.
+   - **3MF with every part** (built, Nov 26, 2026): the 3MF writer (sb_io)
+     takes parts, each made of one or more meshes (a part with several bodies
+     is a 3MF components object), and build items, each a copy of a part with
+     its own placement as a 3MF transform, so each part's mesh is written once.
+     `exportAssembly3mf()` writes an assembly Assembled (a copy where each
+     component is, `open car.sb --export car.3mf`) or ToPrint (each part as many
+     times as components use it, as modeled, in rows 5 mm apart with its lowest
+     point on the plate: `parts car.sb --export car-parts.3mf`).
+   - Next: STEP with the assembly's structure (parts, components and
+     placements, through OCCT's XCAF in sb_kernel_occt); then the Parts List
+     in the app.
 9. **Make Parts from Bodies.**
 10. **Guides:** user's guide pages for each piece as it's built, and two
     tutorials, a toy car whose wheels turn and a box with a hinged lid.

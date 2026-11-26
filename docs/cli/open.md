@@ -14,6 +14,7 @@ sketchbillet_cli open <file.sb> --faces <name>
 sketchbillet_cli open <file.sb> --points <name>
 sketchbillet_cli open <file.sb> --components
 sketchbillet_cli open <assembly.sb> --edges <component>
+sketchbillet_cli open <assembly.sb> --export <out.3mf>
 ```
 
 | Option | Meaning |
@@ -28,6 +29,7 @@ sketchbillet_cli open <assembly.sb> --edges <component>
 | `--faces <name>` | Also list the faces of this step's body, numbered |
 | `--points <name>` | Also list the points (corners) of this step's body, numbered |
 | `--components` | For an [assembly](#an-assembly): also say which way each component faces |
+| `--export <out.3mf>` | For an assembly: write it as a 3MF file, put together, each part once with a copy where each component is (see [below](#export-an-assembly)) |
 | `--edges "Wheel 1"` | For an assembly: list a component's edges (or `--faces`, `--points`), numbered as [joints](commands.md#jointadd) take them (see [below](#a-components-edges-faces-and-points)) |
 
 Each step shows one of these:
@@ -282,13 +284,49 @@ Balance point: 37.5, 0, 3 mm
 ```
 
 `--components` also says which way each component faces: where its part's x and
-z directions point. Exporting an assembly, and listing its parts' sketches, come
-in a later version:
+z directions point. Listing its parts' sketches comes in a later version:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli open Car.sb --sketch Sketch1
+error: Car is an assembly. List it with --components or --exploded, a component's edges, faces or points with --edges "Wheel 1", or export it with --export Car.3mf; listing its sketches comes in a later version.
+```
+
+### Export an assembly
+
+`--export` with a `.3mf` name writes the assembly put together, as it looks in
+the app. Each part's mesh is in the file once, and each component is a copy of
+it, moved and turned to where the component is: four wheels share one mesh. A
+slicer shows the parts by name, each in its material and color, so you can see
+the whole thing, or print it in one go if it fits on the plate and its parts
+don't touch.
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli open Car.sb --export car.3mf
+Car: assembly, 4 components, 1 part
+  Wheel 1      Wheel      grounded at 0, 0, 0 mm
+  Wheel 2      Wheel      free     at 25, 0, 0 mm
+  Wheel 3      Wheel      free     at 50, 0, 0 mm
+  Wheel 4      Wheel      free     at 75, 0, 0 mm
+Parts:
+  Wheel        1 step   ok        mass 3.37 g (PLA), 4 in the assembly
+    linked to Wheel.sb
+Mass in all: 13.46 g (weighs 0.132 N)
+Balance point: 37.5, 0, 3 mm
+wrote car.3mf
+```
+
+To print each part as many times as it's used, laid out side by side on the
+plate instead, use [`parts --export`](parts.md#print-every-part).
+
+An assembly exports only to 3MF for now. STL has no names or copies, and STEP
+with each part and component in it comes in a later version:
 
 <!-- cli-example exit=1 -->
 ```console
 $ sketchbillet_cli open Car.sb --export car.stl
-error: Car is an assembly. For now, list it with --components or --exploded, or a component's edges, faces or points with --edges "Wheel 1"; exporting it and listing its sketches come in a later version.
+error: Car is an assembly, and for now it exports to 3MF only, with each part in its place. Use a name ending in .3mf, or export one part at a time from its own file.
 ```
 
 ### A component's edges, faces and points

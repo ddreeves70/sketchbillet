@@ -493,6 +493,34 @@ Excel, Google Sheets or LibreOffice Calc: to plan the printing, add up the
 filament, or hand in with a project. [`parts`](../cli/parts.md) explains each
 column.
 
+## Exporting an assembly
+
+An assembly exports to **3MF**, the file slicers open for 3D printing, in two
+ways:
+
+- **Ready to print:** `parts Car.sb --export car-parts.3mf` puts each part on
+  the build plate as many times as it's used, side by side, 5 mm apart: the
+  body once and the wheel twice. Each stands the way it was modeled, so turn it
+  in the slicer if it prints better another way up.
+- **Put together:** `open Car.sb --export car.3mf` writes the car as it looks
+  in the app, each wheel where it goes. Open it in a slicer to see the whole
+  thing, or print it in one go if its parts don't touch.
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli parts Car.sb --export car-parts.3mf
+Car: 2 parts, 3 components
+  # Part  Count Material Mass each Mass in all Kept
+  1 Body      1 PLA        39.68 g     39.68 g linked to Body.sb
+  2 Wheel     2 PLA         3.37 g      6.73 g linked to Wheel.sb
+Mass in all: 46.41 g
+wrote car-parts.3mf
+```
+
+Either way, each part is in the file once, by name, in its material and color,
+and the slicer makes the copies. STEP, for other CAD programs, comes in a later
+version: for now, export each part from its own file.
+
 ## Linked and inside parts
 
 A part in an assembly is either **linked** to its own `.sb` file, or **inside**
@@ -561,6 +589,8 @@ it): you can move or copy the whole folder, and everything still links up.
 | Check that no components overlap | [`check`](../cli/check.md#overlaps-in-an-assembly) |
 | Pull components apart in an exploded view (in the app: **Explode**, **Add step**) | [`explode.add`](../cli/commands.md#explodeadd), [`explode.add_step`](../cli/commands.md#explodeadd_step), [`open --exploded`](../cli/open.md#an-exploded-view) |
 | List the parts: how many of each, material and mass | [`parts Car.sb`](../cli/parts.md) (`--csv` for a spreadsheet) |
+| Export every part to print, side by side | [`parts Car.sb --export car-parts.3mf`](../cli/parts.md#print-every-part) |
+| Export the assembly put together | [`open Car.sb --export car.3mf`](../cli/open.md#export-an-assembly) |
 | Measure between two components | [`measure Car.sb "Wheel 1" face 1 "Body 1" face 2`](../cli/measure.md#in-an-assembly) |
 | Mark two components as meant to overlap, or unmark them | [`press_fit.add`](../cli/commands.md#press_fitadd), [`press_fit.delete`](../cli/commands.md#press_fitdelete) |
 
@@ -579,8 +609,8 @@ Undo works for all of them in a script, like any other command.
 - **An assembly has no steps of its own.** Boxes, sketches and fillets go in its
   parts. Typing a step command for an assembly says so.
 - **Assemblies can't go inside assemblies yet.** Insert the parts one at a time.
-- **Exporting an assembly** to STL, 3MF or STEP comes in a later version. For
-  now, export each part from its own file.
+- **Exporting an assembly** to STL or STEP comes in a later version. For now,
+  export to 3MF, or each part from its own file.
 - `.sb` files with assemblies need this version of SketchBillet or newer. An
   older one says to update. The [file format](../file-format.md#assemblies-schema-2)
   page shows what's inside.
