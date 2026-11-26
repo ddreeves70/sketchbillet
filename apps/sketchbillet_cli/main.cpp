@@ -39,6 +39,7 @@
 #include "Plugins.h"
 #include "Regression.h"
 #include "sb/core/Version.h"
+#include "sb/io/AssemblyStep.h"
 #include "sb/io/SketchBilletFile.h"
 #include "sb/io/ThreeMf.h"
 #include "sb/kernel_occt/OcctKernel.h"
@@ -366,17 +367,19 @@ int openDesign(int argc, char** argv) {
         if (exporting && !oneStep) {
             // The whole assembly, put together: each part once, a copy where each component is.
             const std::filesystem::path out = argv[4];
-            if (!isThreeMf(out)) {
+            const bool step = !isThreeMf(out) && formatFor(out) == sb::kernel::ExportFormat::Step;
+            if (!isThreeMf(out) && !step) {
                 std::fprintf(stderr,
-                             "error: %s is an assembly, and for now it exports to 3MF only, with each part "
-                             "in its place. Use a name ending in .3mf, or export one part at a time from "
-                             "its own file.\n",
+                             "error: %s is an assembly, and an STL file holds only one shape, with no names "
+                             "or copies. Use a name ending in .3mf (for a slicer) or .step (for another CAD "
+                             "program), or export one part at a time from its own file.\n",
                              doc.name().c_str());
                 return 1;
             }
             if (!sb::cli::printAssembly(doc, report, *kernel, false)) return 1;
-            if (auto issues =
-                    sb::io::exportAssembly3mf(doc, report, *kernel, sb::io::AssemblyLayout::Assembled, out);
+            if (auto issues = step ? sb::io::exportAssemblyStep(doc, report, *kernel, out)
+                                   : sb::io::exportAssembly3mf(doc, report, *kernel,
+                                                               sb::io::AssemblyLayout::Assembled, out);
                 !issues.empty()) {
                 printIssues(issues);
                 return 1;
@@ -388,7 +391,7 @@ int openDesign(int argc, char** argv) {
             std::fprintf(stderr,
                          "error: %s is an assembly. List it with --components or --exploded, a "
                          "component's edges, faces or points with --edges \"Wheel 1\", or export it "
-                         "with --export %s.3mf; listing its sketches comes in a later version.\n",
+                         "with --export %s.step; listing its sketches comes in a later version.\n",
                          doc.name().c_str(), doc.name().c_str());
             return 1;
         }

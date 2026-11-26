@@ -42,6 +42,8 @@
 #include <Message_PrinterOStream.hxx>
 #include <Poly_Triangulation.hxx>
 #include <Precision.hxx>
+#include <Quantity_Color.hxx>
+#include <STEPCAFControl_Writer.hxx>
 #include <STEPControl_Reader.hxx>
 #include <STEPControl_Writer.hxx>
 #include <ShapeFix_Shape.hxx>
@@ -52,6 +54,9 @@
 #include <TColStd_Array1OfInteger.hxx>
 #include <TColStd_Array1OfReal.hxx>
 #include <TColgp_Array1OfPnt.hxx>
+#include <TDF_Label.hxx>
+#include <TDataStd_Name.hxx>
+#include <TDocStd_Document.hxx>
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopLoc_Location.hxx>
@@ -68,6 +73,10 @@
 #include <TopoDS_Solid.hxx>
 #include <TopoDS_Vertex.hxx>
 #include <TopoDS_Wire.hxx>
+#include <XCAFApp_Application.hxx>
+#include <XCAFDoc_ColorTool.hxx>
+#include <XCAFDoc_DocumentTool.hxx>
+#include <XCAFDoc_ShapeTool.hxx>
 #include <gp_Ax1.hxx>
 #include <gp_Ax2.hxx>
 #include <gp_Ax3.hxx>
@@ -84,6 +93,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 #include <functional>
 #include <map>
 #include <mutex>
@@ -633,6 +643,45 @@ OpResult blend(const TopoDS_Shape* s, const std::vector<int>& edges, double size
                                        : "The edges couldn't be beveled. Try a smaller distance.",
                       describe(e));
     }
+}
+
+// OCCT numbers each copy in an assembly (its NEXT_ASSEMBLY_USAGE_OCCURRENCE's
+// id) from a count kept for the whole program, so the second file written would
+// differ from the first. Number them 1, 2, 3, ... in the file instead.
+bool numberCopies(const std::filesystem::path& path) {
+    std::string text;
+    {
+        std::ifstream in(path, std::ios::binary);
+        if (!in) return false;
+        std::ostringstream all;
+        all << in.rdbuf();
+        text = all.str();
+    }
+    const std::string tag = "NEXT_ASSEMBLY_USAGE_OCCURRENCE('";
+    std::string out;
+    out.reserve(text.size());
+    std::size_t from = 0;
+    int n = 0;
+    for (auto at = text.find(tag); at != std::string::npos; at = text.find(tag, from)) {
+        const auto start = at + tag.size();
+        const auto end = text.find('\'', start);
+        if (end == std::string::npos) break;
+        out.append(text, from, start - from);
+        out += std::to_string(++n);
+        from = end;
+    }
+    out.append(text, from, std::string::npos);
+    std::ofstream again(path, std::ios::binary | std::ios::trunc);
+    again << out;
+    again.close();
+    return static_cast<bool>(again);
+}
+
+// OCCT's STEP reader and writer share settings for the whole program, so only
+// one of them runs at a time.
+std::mutex& stepSettings() {
+    static std::mutex m;
+    return m;
 }
 
 class OcctKernel final : public IKernel {
@@ -1217,6 +1266,93 @@ public:
         return {error("export.format", "That file type is not supported.")};
     }
 
+    Diagnostics exportStepAssembly(const StepAssembly& assembly,
+                                   const std::filesystem::path& path) const override {
+        const auto named = [](const TDF_Label& label, const std::string& name) {
+            TDataStd_Name::Set(label, TCollection_ExtendedString(name.c_str(), Standard_True));  // UTF-8
+        };
+        // OCCT's STEP writer keeps settings for the whole program: one at a time.
+        std::lock_guard<std::mutex> lock(stepSettings());
+        Handle(XCAFApp_Application) app = XCAFApp_Application::GetApplication();
+        Handle(TDocStd_Document) doc;
+        try {
+            app->NewDocument("MDTV-XCAF", doc);
+            Handle(XCAFDoc_ShapeTool) shapes = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
+            Handle(XCAFDoc_ColorTool) colors = XCAFDoc_DocumentTool::ColorTool(doc->Main());
+            const auto color = [&](const TDF_Label& label, const StepBody& body) {
+                if (!body.color) return;
+                const auto& c = *body.color;
+                colors->SetColor(label,
+                                 Quantity_Color(c[0] / 255.0, c[1] / 255.0, c[2] / 255.0, Quantity_TOC_sRGB),
+                                 XCAFDoc_ColorSurf);
+            };
+
+            // Each part once: its one body, or a small assembly of its bodies.
+            std::vector<TDF_Label> parts(assembly.parts.size());
+            for (std::size_t i = 0; i < assembly.parts.size(); ++i) {
+                const auto& part = assembly.parts[i];
+                std::vector<const StepBody*> bodies;
+                for (const auto& b : part.bodies)
+                    if (unwrap(b.shape)) bodies.push_back(&b);
+                if (bodies.empty()) continue;
+                if (bodies.size() == 1) {
+                    parts[i] = shapes->AddShape(*unwrap(bodies.front()->shape), Standard_False);
+                    color(parts[i], *bodies.front());
+                } else {
+                    parts[i] = shapes->NewShape();
+                    for (const auto* b : bodies) {
+                        const TDF_Label body = shapes->AddShape(*unwrap(b->shape), Standard_False);
+                        named(body, b->name);
+                        color(body, *b);
+                        named(shapes->AddComponent(parts[i], body, TopLoc_Location()), b->name);
+                    }
+                }
+                named(parts[i], part.name);
+            }
+
+            // The assembly: a placed, named copy of a part for each component.
+            const TDF_Label top = shapes->NewShape();
+            named(top, assembly.name);
+            int placed = 0;
+            for (const auto& copy : assembly.copies) {
+                if (copy.part >= parts.size())
+                    return {error("export.step.part", "A component uses a part that isn't in the assembly.",
+                                  copy.name)};
+                if (parts[copy.part].IsNull()) continue;  // a part with no body yet
+                const auto& p = copy.at;
+                const auto y = yAxisOf(p);
+                gp_Trsf move;  // the part's own x, y and z to the component's, then its origin
+                move.SetValues(p.xAxis.x, y.x, p.zAxis.x, p.origin.x, p.xAxis.y, y.y, p.zAxis.y, p.origin.y,
+                               p.xAxis.z, y.z, p.zAxis.z, p.origin.z);
+                const TDF_Label component =
+                    shapes->AddComponent(top, parts[copy.part], TopLoc_Location(move));
+                named(component, copy.name);
+                ++placed;
+            }
+            if (placed == 0) {
+                app->Close(doc);
+                return {
+                    error("export.step.empty", "There's nothing to export: no component has a body yet.")};
+            }
+            shapes->UpdateAssemblies();
+
+            Interface_Static::SetCVal("write.step.unit", "MM");
+            STEPCAFControl_Writer writer;
+            writer.SetNameMode(Standard_True);
+            writer.SetColorMode(Standard_True);
+            const std::string file = utf8(path);
+            const bool ok =
+                writer.Transfer(doc, STEPControl_AsIs) && writer.Write(file.c_str()) == IFSelect_RetDone;
+            app->Close(doc);
+            if (!ok || !numberCopies(path))
+                return {error("export.step.failed", "The STEP file could not be written.", file)};
+            return {};
+        } catch (const Standard_Failure& e) {
+            if (!doc.IsNull()) app->Close(doc);
+            return {error("export.failed", "The file could not be exported.", describe(e))};
+        }
+    }
+
     Closest distance(const ElementOf& a, const ElementOf& b) const override {
         Closest out;
         auto part = [&](const ElementOf& e, TopoDS_Shape& into) {
@@ -1267,8 +1403,7 @@ public:
         };
         if (text.find("ISO-10303-21") == std::string_view::npos) return unreadable("no ISO-10303-21 header");
         // OCCT's STEP reader keeps settings for the whole program: one at a time.
-        static std::mutex reading;
-        std::lock_guard<std::mutex> lock(reading);
+        std::lock_guard<std::mutex> lock(stepSettings());
         try {
             Interface_Static::SetCVal("xstep.cascade.unit", "MM");  // whatever the file's unit, in mm
             STEPControl_Reader reader;

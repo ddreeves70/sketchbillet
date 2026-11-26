@@ -1,5 +1,6 @@
-// Exporting an assembly to 3MF: each part's mesh once, and a build item for each
-// component, where it is (assembled) or side by side on the plate (to print).
+// Exporting an assembly to 3MF (each part's mesh once, and a build item for each
+// component, where it is or side by side on the plate) and to STEP (each part
+// once, and a named, placed copy for each component).
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -13,6 +14,7 @@
 #include <sstream>
 
 #include "ThreeMfReader.h"
+#include "sb/io/AssemblyStep.h"
 #include "sb/io/ThreeMf.h"
 #include "sb/kernel_occt/OcctKernel.h"
 #include "sb/model/AssemblyCommands.h"
@@ -212,6 +214,62 @@ TEST_CASE("an assembly with nothing built can't be exported to 3MF", "[io][three
     const auto path = std::filesystem::temp_directory_path() / "sb_empty.3mf";
     const auto issues =
         io::exportAssembly3mf(doc, doc.regenerate(*kernel), *kernel, io::AssemblyLayout::ToPrint, path);
+    REQUIRE(issues.size() == 1);
+    CHECK(issues[0].code == "export.nothing");
+    CHECK_FALSE(std::filesystem::exists(path));
+}
+
+TEST_CASE("an assembly's STEP file has each part once and a named copy where each component is",
+          "[io][step][assembly][occt]") {
+    auto kernel = kernel::makeOcctKernel();
+    Document doc(DocKind::Part, "Car");
+    makeCar(doc);
+    const auto& report = doc.regenerate(*kernel);
+
+    // What goes in: two parts, the wheel with its two bodies, and four copies,
+    // each where the rebuild placed its component.
+    const auto step = io::stepAssemblyOf(doc, report);
+    CHECK(step.name == "Car");
+    REQUIRE(step.parts.size() == 2);
+    CHECK(step.parts[0].name == "Body");
+    REQUIRE(step.parts[1].bodies.size() == 2);
+    CHECK(step.parts[1].bodies[0].name == "Box1");
+    CHECK(step.parts[1].bodies[1].name == "Tyre");
+    REQUIRE(step.copies.size() == 4);
+    for (std::size_t k = 0; k < 4; ++k) {
+        CHECK(step.copies[k].name == doc.components()[k].name);
+        CHECK(step.copies[k].part == (k == 0 ? 0u : 1u));
+        const auto* at = report.placementOf(doc.components()[k].id);
+        REQUIRE(at);
+        CHECK(step.copies[k].at.origin.x == at->origin.x);
+        CHECK(step.copies[k].at.zAxis.x == at->zAxis.x);
+    }
+
+    // What comes out: the same solids, in the same places.
+    const auto path = std::filesystem::temp_directory_path() / "sb_assembled.step";
+    REQUIRE(io::exportAssemblyStep(doc, report, *kernel, path).empty());
+    const auto bytes = readFile(path);
+    std::filesystem::remove(path);
+    const std::string text(bytes.begin(), bytes.end());
+    const auto back = kernel->importStep(text);
+    REQUIRE(back.ok());
+    CHECK(kernel->topology(back.shape).solids == 7);  // the body, and three wheels of two
+    double volume = 0;
+    for (const auto& c : doc.components())
+        for (const auto& body : report.part(c.part)->bodies())
+            volume += kernel->massProps(*report.part(c.part)->shapeOf(body)).volume;
+    CHECK(kernel->massProps(back.shape).volume == Approx(volume));
+}
+
+TEST_CASE("an assembly with nothing built can't be exported to STEP", "[io][step][assembly][occt]") {
+    auto kernel = kernel::makeOcctKernel();
+    Document doc(DocKind::Part, "Empty");
+    REQUIRE(doc.execute(std::make_unique<MakeAssemblyCommand>()).empty());
+    REQUIRE(
+        doc.execute(std::make_unique<InsertPartCommand>(std::make_unique<Document>(DocKind::Part, "Axle"), 1))
+            .empty());
+    const auto path = std::filesystem::temp_directory_path() / "sb_empty.step";
+    const auto issues = io::exportAssemblyStep(doc, doc.regenerate(*kernel), *kernel, path);
     REQUIRE(issues.size() == 1);
     CHECK(issues[0].code == "export.nothing");
     CHECK_FALSE(std::filesystem::exists(path));

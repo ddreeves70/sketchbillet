@@ -203,7 +203,9 @@ class PluginContext;
 /// Document::explodedViews(), its commands, and model::explodePath()).
 /// Version 71 shows an assembly in an exploded view in the app
 /// (Selection::showExploded(), explodedView(), ExplodedViewShown).
-inline constexpr int kPluginApiVersion = 71;
+/// Version 72 writes an assembly as STEP: kernel::IKernel::exportStepAssembly(),
+/// which a kernel must now provide, and sb/kernel/StepAssembly.h.
+inline constexpr int kPluginApiVersion = 72;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

@@ -71,7 +71,8 @@ than 0.05 mm from the true surface: much finer than a printer can print.
 
 An [assembly](assemblies.md#exporting-an-assembly) exports to 3MF too: put
 together, or with every part laid out ready to print, each as many times as
-it's used.
+it's used. And to STEP, which other CAD programs open as an assembly of its
+parts.
 
 Export writes the design's one finished body. If the design has more than one,
 join them with a [union](combining.md#union), or pick one step with `--step`:
