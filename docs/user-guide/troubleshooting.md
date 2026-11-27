@@ -73,6 +73,9 @@ The desktop app shows these in the status bar after **File > Export...**:
 | `export.nothing` | There's no shape to export yet, or the picked step didn't build | Make a shape (Create > Box), or fix the step that failed |
 | `export.which` | The design has two or more finished bodies, and Export writes one | Pick one step in the feature tree, or join the bodies with Combine > Union |
 | `export.format` | The file name doesn't end with `.stl`, `.3mf`, `.step` or `.stp` | End the name with `.stl` or `.3mf` (3D printing) or `.step` (other CAD programs) |
+| `export.assembly_stl` | The design is an assembly, and an STL file holds only one shape | End the name with `.3mf` (for a slicer) or `.step` (for another CAD program), or open a part to export it on its own |
+| `parts.print_format` | **Export to print** in the Parts List writes a 3MF file, and the name doesn't end with `.3mf` | End the name with `.3mf` |
+| `parts.csv_write` | **Save as CSV** in the Parts List couldn't write the file | Check the folder is still there and that you're allowed to save in it |
 | `export.stl.failed`, `export.step.failed`, `export.cant_write` | The file couldn't be written | Check the folder is still there, that you're allowed to save in it, and that the disk isn't full |
 
 ## Import didn't work

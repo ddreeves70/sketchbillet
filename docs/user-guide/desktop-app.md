@@ -487,7 +487,7 @@ the design that's showing. Opening a design starts a fresh history.
 | File > Save | Ctrl+S | Saves to the design's file (asks for a name the first time) |
 | File > Save as... | Ctrl+Shift+S | Saves under a new name |
 | File > Close | Ctrl+W | Closes the design that's showing |
-| File > Export... | Ctrl+E | Writes the part as STL or 3MF (for 3D printing) or STEP (for other CAD programs) |
+| File > Export... | Ctrl+E | Writes the part as STL or 3MF (for 3D printing) or STEP (for other CAD programs); an assembly as 3MF or STEP |
 | File > Check for Printing... | Ctrl+Shift+P | Checks the part is closed all round and has no wall too thin to print (see [Getting ready to print](printing.md)) |
 
 A `*` after the name in the title bar, and on the design's tab, means there are
@@ -544,6 +544,12 @@ Export writes one body:
 - If the design has two or more finished bodies and none is picked, SketchBillet says so:
   pick the one you want in the feature tree, or join them with
   [Combine > Union](combining.md#union).
+
+An **assembly** exports as `.3mf` (put together, each component where it is)
+or `.step` (an assembly of its parts, for other CAD programs), and starts as
+`.3mf`. It can't be an `.stl`, which holds only one shape. To print each part
+as many times as it's used, use **Export to print** in the
+[Parts List](assemblies.md#parts-list) instead.
 
 An exported file holds only the shape, so keep your `.sb` file too: it's the
 one you can change later. More about the formats is on the

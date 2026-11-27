@@ -488,23 +488,36 @@ Car: 2 parts, 3 components
 Mass in all: 46.41 g
 ```
 
-Add `--csv car-parts.csv` to save it as a spreadsheet file too, to open in
-Excel, Google Sheets or LibreOffice Calc: to plan the printing, add up the
-filament, or hand in with a project. [`parts`](../cli/parts.md) explains each
-column.
+In the app, click **Parts list** on the Assemble tab. The Parts List opens
+under the view, and changes as you change the assembly:
+
+![The Parts List under the toy car: the body once and the wheel four times, 53.14 g in all](images/app-parts-list.png)
+
+- **Click a part** in the list to pick its components in the view: click
+  Wheel to see all four wheels.
+- **Save as CSV** saves the list as a spreadsheet file, to open in Excel,
+  Google Sheets or LibreOffice Calc: to plan the printing, add up the filament,
+  or hand in with a project.
+- **Export to print** writes every part, as many times as it's used, to a 3MF
+  file for a slicer (see [below](#exporting-an-assembly)).
+
+On the command line, `parts Car.sb` prints the same list, and `--csv
+car-parts.csv` saves it. [`parts`](../cli/parts.md) explains each column.
 
 ## Exporting an assembly
 
 An assembly exports to **3MF**, the file slicers open for 3D printing, in two
 ways:
 
-- **Ready to print:** `parts Car.sb --export car-parts.3mf` puts each part on
-  the build plate as many times as it's used, side by side, 5 mm apart: the
-  body once and the wheel twice. Each stands the way it was modeled, so turn it
-  in the slicer if it prints better another way up.
-- **Put together:** `open Car.sb --export car.3mf` writes the car as it looks
-  in the app, each wheel where it goes. Open it in a slicer to see the whole
-  thing, or print it in one go if its parts don't touch.
+- **Ready to print:** **Export to print** in the Parts List (or `parts Car.sb
+  --export car-parts.3mf`) puts each part on the build plate as many times as
+  it's used, side by side, 5 mm apart: the body once and the wheel twice. Each
+  stands the way it was modeled, so turn it in the slicer if it prints better
+  another way up.
+- **Put together:** **File > Export** with a name ending in `.3mf` (or `open
+  Car.sb --export car.3mf`) writes the car as it looks in the app, each wheel
+  where it goes. Open it in a slicer to see the whole thing, or print it in one
+  go if its parts don't touch.
 
 <!-- cli-example -->
 ```console
@@ -521,7 +534,8 @@ Either way, each part is in the file once, by name, in its material and color,
 and the slicer makes the copies.
 
 For another CAD program (Fusion, Onshape, SolidWorks, FreeCAD), export to
-**STEP**: `open Car.sb --export car.step`. It opens there as an assembly with
+**STEP**: **File > Export** with a name ending in `.step` (or `open Car.sb
+--export car.step`). It opens there as an assembly with
 the same parts and components, by name, each where it is, with exact shapes
 rather than triangles. [`open`](../cli/open.md#export-an-assembly) has an
 example.
@@ -593,9 +607,9 @@ it): you can move or copy the whole folder, and everything still links up.
 | List the components and parts | [`open --components`](../cli/open.md#an-assembly) |
 | Check that no components overlap | [`check`](../cli/check.md#overlaps-in-an-assembly) |
 | Pull components apart in an exploded view (in the app: **Explode**, **Add step**) | [`explode.add`](../cli/commands.md#explodeadd), [`explode.add_step`](../cli/commands.md#explodeadd_step), [`open --exploded`](../cli/open.md#an-exploded-view) |
-| List the parts: how many of each, material and mass | [`parts Car.sb`](../cli/parts.md) (`--csv` for a spreadsheet) |
-| Export every part to print, side by side | [`parts Car.sb --export car-parts.3mf`](../cli/parts.md#print-every-part) |
-| Export the assembly put together, for a slicer or another CAD program | [`open Car.sb --export car.3mf`](../cli/open.md#export-an-assembly), or `car.step` |
+| List the parts: how many of each, material and mass (in the app: **Parts list**) | [`parts Car.sb`](../cli/parts.md) (`--csv` for a spreadsheet) |
+| Export every part to print, side by side (in the app: **Export to print** in the Parts List) | [`parts Car.sb --export car-parts.3mf`](../cli/parts.md#print-every-part) |
+| Export the assembly put together, for a slicer or another CAD program (in the app: **File > Export**) | [`open Car.sb --export car.3mf`](../cli/open.md#export-an-assembly), or `car.step` |
 | Measure between two components | [`measure Car.sb "Wheel 1" face 1 "Body 1" face 2`](../cli/measure.md#in-an-assembly) |
 | Mark two components as meant to overlap, or unmark them | [`press_fit.add`](../cli/commands.md#press_fitadd), [`press_fit.delete`](../cli/commands.md#press_fitdelete) |
 

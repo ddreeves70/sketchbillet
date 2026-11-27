@@ -27,7 +27,7 @@ This page covers what the student gets, in the order it gets built:
 | 5. In the app | The assembly tree, inserting parts, joining, dragging, editing a part | Built |
 | 6. Checks | Parts that overlap, the whole assembly's mass and balance point, measuring between parts | Built |
 | 7. Exploded views | Parts pulled apart to show how they fit, for pictures and drawings | Built (drawing views come with drawings) |
-| 8. Parts list | How many of each part, with material and mass, for printing and drawings | The list and CSV built, from the command line |
+| 8. Parts list | How many of each part, with material and mass, for printing and drawings | Built: the list, CSV, 3MF and STEP export, in the app and the command line |
 | 9. Parts from bodies | A part with several bodies turned into an assembly (copy-and-group's "groups that move together") | Planned |
 
 ## Words
@@ -578,7 +578,15 @@ Each line is one pull request, in this order:
      kept for the whole program, so the adapter renumbers them 1, 2, 3, ... to
      keep the file the same every time. `io::exportAssemblyStep()` gathers it
      from the assembly; `open car.sb --export car.step`. Plugin API 72.
-   - Next: the Parts List in the app.
+   - **The Parts List in the app** (built, Nov 26, 2026): **Assemble > Parts
+     List** opens a panel under the view (in `sb.measure`) with the same
+     columns as `sketchbillet_cli parts`, kept up to date after each rebuild
+     while it's open. Clicking a row picks that part's components. **Save as
+     CSV** writes `partsListCsv()`, and **Export to print** writes
+     `exportAssembly3mf()` ToPrint. Both ask for the file with
+     `ui::UiRegistry::askSaveFile()` (plugin API 73). **File > Export** now
+     writes an assembly too: 3MF put together, or STEP, and refuses STL.
+   - Still to come: the parts list table in drawings (Phase 5).
 9. **Make Parts from Bodies.**
 10. **Guides:** user's guide pages for each piece as it's built, and two
     tutorials, a toy car whose wheels turn and a box with a hinged lid.

@@ -1,22 +1,30 @@
 #include "sb/plugins/Measure.h"
 
+#include <QFileInfo>
 #include <QHBoxLayout>
+#include <QHeaderView>
 #include <QLabel>
 #include <QPushButton>
 #include <QStringList>
+#include <QTableWidget>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "MeasureIcons.h"
+#include "sb/io/ThreeMf.h"
 #include "sb/model/AssemblyCommands.h"
 #include "sb/model/AssemblyMass.h"
 #include "sb/model/Document.h"
 #include "sb/model/Overlaps.h"
+#include "sb/model/PartsList.h"
 #include "sb/plugin/Events.h"
 #include "sb/ui/UiRegistry.h"
 
@@ -28,7 +36,7 @@ constexpr const char* kManifest = R"({
   "id": "sb.measure",
   "name": "Measure",
   "version": "0.1.0",
-  "description": "Inspect > Measure: click a face, edge or point to see its size, or two to see the distance and angle between them. In an assembly, Check for Overlaps shows where parts overlap, in red, and Balance Point shows its mass and where it balances.",
+  "description": "Inspect > Measure: click a face, edge or point to see its size, or two to see the distance and angle between them. In an assembly, Check for Overlaps shows where parts overlap, in red, Balance Point shows its mass and where it balances, and the Parts List says how many of each part to print or make.",
   "uses": ["sb.viewer"],
   "tier": "ui"
 })";
@@ -320,6 +328,249 @@ void registerChecks(plugin::PluginContext& ctx, ui::UiRegistry& ui) {
     });
 }
 
+// The Parts List panel (Assemble > Parts List): each part once, with how many
+// components use it, its material and mass, as `sketchbillet_cli parts` lists it.
+// Picking a row picks that part's components. It saves the list as CSV, and
+// exports every part, as many times as it's used, to a 3MF file to print.
+constexpr const char* kPartsPanelId = "sb.measure.parts.panel";
+
+QString grams(double g) {
+    return QStringLiteral("%1 g").arg(g, 0, 'f', 2);
+}
+
+class PartsListPanel final : public QWidget {
+public:
+    PartsListPanel(plugin::PluginContext& ctx, ui::UiRegistry& ui) : ctx_(ctx), ui_(ui) {
+        setObjectName(QStringLiteral("sb.measure.parts.widget"));
+        summary_ = new QLabel(this);
+        summary_->setObjectName(QStringLiteral("sb.measure.parts.summary"));
+        summary_->setWordWrap(true);
+        summary_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        table_ = new QTableWidget(0, 7, this);
+        table_->setObjectName(QStringLiteral("sb.measure.parts.table"));
+        table_->setHorizontalHeaderLabels({tr("#"), tr("Part"), tr("Count"), tr("Material"), tr("Mass each"),
+                                           tr("Mass in all"), tr("Kept")});
+        table_->horizontalHeaderItem(2)->setToolTip(
+            tr("How many components use it: how many to print or make"));
+        table_->horizontalHeaderItem(6)->setToolTip(
+            tr("Linked to its own .sb file, or kept inside the assembly"));
+        table_->verticalHeader()->hide();
+        table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        table_->setSelectionBehavior(QAbstractItemView::SelectRows);
+        table_->setSelectionMode(QAbstractItemView::ExtendedSelection);
+        table_->horizontalHeader()->setStretchLastSection(true);
+        table_->setToolTip(tr("Click a part to pick its components in the view."));
+        connect(table_, &QTableWidget::itemSelectionChanged, this, [this] { pickRows(); });
+        notes_ = new QLabel(this);
+        notes_->setObjectName(QStringLiteral("sb.measure.parts.notes"));
+        notes_->setWordWrap(true);
+        csv_ = new QPushButton(tr("Save as CSV..."), this);
+        csv_->setObjectName(QStringLiteral("sb.measure.parts.csv"));
+        csv_->setToolTip(
+            tr("Save the list as a spreadsheet file, to open in Excel, Google Sheets or "
+               "LibreOffice Calc."));
+        connect(csv_, &QPushButton::clicked, this, [this] { saveCsv(); });
+        print_ = new QPushButton(tr("Export to print..."), this);
+        print_->setObjectName(QStringLiteral("sb.measure.parts.print"));
+        print_->setToolTip(
+            tr("Write every part, as many times as it's used, side by side in a 3MF file for "
+               "a slicer: the body once and each wheel four times."));
+        connect(print_, &QPushButton::clicked, this, [this] { exportToPrint(); });
+        auto* done = new QPushButton(tr("Done"), this);
+        done->setObjectName(QStringLiteral("sb.measure.parts.done"));
+        done->setToolTip(tr("Close the parts list."));
+        connect(done, &QPushButton::clicked, this, [this] { ui_.hidePanel(kPartsPanelId); });
+        auto* buttons = new QHBoxLayout;
+        buttons->addWidget(csv_);
+        buttons->addWidget(print_);
+        buttons->addStretch();
+        buttons->addWidget(done);
+        auto* layout = new QVBoxLayout(this);
+        layout->setContentsMargins(4, 4, 4, 4);
+        layout->addWidget(summary_);
+        layout->addWidget(table_, 1);
+        layout->addWidget(notes_);
+        layout->addLayout(buttons);
+        auto later = [this](const auto&) {
+            if (isVisible()) fill();
+        };
+        subs_.push_back(ctx_.events().subscribe<plugin::RebuildFinished>(later));
+        subs_.push_back(ctx_.events().subscribe<plugin::ActiveDocumentChanged>(later));
+    }
+
+protected:
+    void showEvent(QShowEvent* event) override {
+        QWidget::showEvent(event);
+        fill();  // it isn't kept up to date while it's closed
+    }
+
+private:
+    struct Active {
+        DocId id{};
+        const model::Document* doc = nullptr;
+        const model::RebuildReport* report = nullptr;
+        kernel::IKernel* kernel = nullptr;
+    };
+
+    Active active() const {
+        auto& docs = ctx_.documents();
+        Active a{docs.active(), docs.find(docs.active()), nullptr, docs.kernel()};
+        if (a.doc && a.doc->kind() != model::DocKind::Assembly) a.doc = nullptr;
+        if (a.doc) a.report = docs.lastRebuild(a.id);
+        return a;
+    }
+
+    void fill() {
+        const auto a = active();
+        rows_.clear();
+        if (a.doc && a.report && a.kernel) rows_ = model::partsList(*a.doc, *a.report, *a.kernel);
+        filling_ = true;
+        table_->setRowCount(static_cast<int>(rows_.size()));
+        int count = 0;
+        double total = 0;
+        QStringList notes;
+        for (int i = 0; i < static_cast<int>(rows_.size()); ++i) {
+            const auto& r = rows_[static_cast<std::size_t>(i)];
+            const QStringList cells{QString::number(r.item),
+                                    qs(r.name),
+                                    QString::number(r.count),
+                                    r.bodies == 0 ? QStringLiteral("-") : qs(r.material),
+                                    grams(r.gramsEach),
+                                    grams(r.gramsAll),
+                                    r.linked ? tr("linked to %1").arg(qs(r.file)) : tr("inside")};
+            for (int c = 0; c < cells.size(); ++c) {
+                auto* item = new QTableWidgetItem(cells[c]);
+                // Numbers (the count and the masses) line up on the right, as in the CLI.
+                if (c == 0 || c == 2 || c == 4 || c == 5)
+                    item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+                table_->setItem(i, c, item);
+            }
+            count += r.count;
+            total += r.gramsAll;
+            if (r.built && r.bodies == 0)
+                notes << tr("%1 has no body yet, so it weighs nothing. Add a shape to it.").arg(qs(r.name));
+            else if (!r.built)
+                notes << tr("%1 has a problem, so its mass may be wrong. Open it to see.").arg(qs(r.name));
+        }
+        table_->resizeColumnsToContents();
+        filling_ = false;
+        if (!a.doc) {
+            summary_->setText(tr("Open an assembly to see its parts list."));
+        } else if (rows_.empty()) {
+            summary_->setText(tr("%1 has no parts yet. Put one in with Insert part on the Assemble tab.")
+                                  .arg(qs(a.doc->name())));
+        } else {
+            summary_->setText(tr("%1: %2, %3. Mass in all: %4.")
+                                  .arg(qs(a.doc->name()),
+                                       rows_.size() == 1 ? tr("1 part") : tr("%1 parts").arg(rows_.size()),
+                                       count == 1 ? tr("1 component") : tr("%1 components").arg(count),
+                                       grams(total)));
+        }
+        notes_->setText(notes.join(QLatin1Char('\n')));
+        notes_->setVisible(!notes.isEmpty());
+        csv_->setEnabled(!rows_.empty());
+        print_->setEnabled(!rows_.empty() && count > 0);
+    }
+
+    // Picks the components of the parts whose rows are picked.
+    void pickRows() {
+        if (filling_) return;
+        const auto a = active();
+        if (!a.doc) return;
+        std::vector<DocId> parts;
+        for (const auto& range : table_->selectedRanges())
+            for (int i = range.topRow(); i <= range.bottomRow(); ++i)
+                if (i < static_cast<int>(rows_.size()))
+                    parts.push_back(rows_[static_cast<std::size_t>(i)].part);
+        std::vector<model::ComponentId> picked;
+        for (const auto& c : a.doc->components())
+            if (std::find(parts.begin(), parts.end(), c.part) != parts.end()) picked.push_back(c.id);
+        ctx_.selection().setComponents(a.id, std::move(picked));
+    }
+
+    void saveCsv() {
+        const auto a = active();
+        if (!a.doc || rows_.empty()) return;
+        const QString path = ui_.askSaveFile(tr("Save the parts list"), tr("CSV spreadsheets (*.csv)"),
+                                             tr("%1 parts.csv").arg(qs(a.doc->name())));
+        if (path.isEmpty()) return;
+        const std::filesystem::path file = path.toStdWString();
+        const auto csv = model::partsListCsv(rows_, a.doc->lengthUnit());
+        std::ofstream out(file, std::ios::binary);
+        out << csv;
+        out.close();
+        const QString name = QString::fromStdWString(file.filename().wstring());
+        if (!out) {
+            ui_.showProblems({{"parts.csv_write",
+                               Severity::Error,
+                               tr("SketchBillet couldn't write %1. Check that the folder is still there and "
+                                  "that you're allowed to save in it.")
+                                   .arg(name)
+                                   .toStdString(),
+                               {}}});
+            return;
+        }
+        ui_.showMessage(tr("Saved the parts list to %1").arg(name));
+    }
+
+    void exportToPrint() {
+        const auto a = active();
+        if (!a.doc || !a.report || !a.kernel || rows_.empty()) return;
+        const QString path = ui_.askSaveFile(tr("Export parts to print"), tr("3MF, for 3D printing (*.3mf)"),
+                                             tr("%1 parts.3mf").arg(qs(a.doc->name())));
+        if (path.isEmpty()) return;
+        const std::filesystem::path file = path.toStdWString();
+        const QString name = QString::fromStdWString(file.filename().wstring());
+        if (QFileInfo(path).suffix().compare(QStringLiteral("3mf"), Qt::CaseInsensitive) != 0) {
+            ui_.showProblems({{"parts.print_format",
+                               Severity::Error,
+                               tr("Export to print writes a 3MF file, for a slicer. End the name with .3mf, "
+                                  "like %1.3mf.")
+                                   .arg(QFileInfo(path).completeBaseName())
+                                   .toStdString(),
+                               {}}});
+            return;
+        }
+        // Each part as many times as it's used, side by side: the slicer gets four wheels.
+        if (auto problems =
+                io::exportAssembly3mf(*a.doc, *a.report, *a.kernel, io::AssemblyLayout::ToPrint, file);
+            !problems.empty()) {
+            ui_.showProblems(problems);
+            return;
+        }
+        ui_.showMessage(tr("Exported %1's parts to %2, ready to print").arg(qs(a.doc->name()), name));
+    }
+
+    plugin::PluginContext& ctx_;
+    ui::UiRegistry& ui_;
+    QLabel* summary_ = nullptr;
+    QTableWidget* table_ = nullptr;
+    QLabel* notes_ = nullptr;
+    QPushButton* csv_ = nullptr;
+    QPushButton* print_ = nullptr;
+    std::vector<model::PartsListRow> rows_;
+    bool filling_ = false;  // so filling the table doesn't pick components
+    std::vector<plugin::Subscription> subs_;
+};
+
+void registerPartsList(plugin::PluginContext& ctx, ui::UiRegistry& ui) {
+    ui::PanelSpec spec{kPartsPanelId, QObject::tr("Parts List"), ui::PanelArea::Bottom,
+                       [&ctx, &ui] { return new PartsListPanel(ctx, ui); }};
+    spec.startHidden = true;  // Assemble > Parts List opens it
+    ui.addPanel(std::move(spec));
+    ctx.addAction(plugin::ActionSpec{
+        .id = "sb.measure.parts_list",
+        .text = "Parts List",
+        .menu = "Assemble/Parts",
+        .toolbar = true,
+        .buttonText = "Parts list",
+        .icon = std::string(icons::measure::parts_list_svg),
+        .tip = "Lists each part once, with how many to print or make, what it's made of and what it weighs. "
+               "Save it as a spreadsheet, or export the parts to print.",
+        .run = [&ui] { ui.showPanel(kPartsPanelId); },
+        .enabled = [&ctx] { return assemblyActive(ctx); }});
+}
+
 void registerMeasure(plugin::PluginContext& ctx) {
     auto* ui = ctx.service<ui::UiRegistry>();
     if (!ui) {
@@ -363,6 +614,7 @@ void registerMeasure(plugin::PluginContext& ctx) {
     ctx.listen<plugin::ActiveDocumentChanged>([&ctx](const auto&) { drawLine(ctx); });
     drawLine(ctx);
     registerChecks(ctx, *ui);
+    registerPartsList(ctx, *ui);
 }
 
 }  // namespace

@@ -205,7 +205,9 @@ class PluginContext;
 /// (Selection::showExploded(), explodedView(), ExplodedViewShown).
 /// Version 72 writes an assembly as STEP: kernel::IKernel::exportStepAssembly(),
 /// which a kernel must now provide, and sb/kernel/StepAssembly.h.
-inline constexpr int kPluginApiVersion = 72;
+/// Version 73 asks the student for a file to save to
+/// (ui::UiRegistry::askSaveFile(), which the desktop app must now provide).
+inline constexpr int kPluginApiVersion = 73;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.
