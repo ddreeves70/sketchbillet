@@ -1,8 +1,8 @@
 #pragma once
 
 /// @file
-/// sb.measure: the built-in plugin with the Measure tool, and the assembly
-/// checks (Check for Overlaps and Balance Point).
+/// sb.measure: the built-in plugin with the Measure tool, the assembly
+/// checks (Check for Overlaps and Balance Point), and the Parts List.
 
 #include <string>
 #include <utility>
@@ -28,6 +28,12 @@ namespace sb::plugins {
 /// shows where parts overlap in red, and Balance Point
 /// (model::assemblyMass()) a dot where the assembly balances; the Checks panel
 /// says what they found. They're done again after each rebuild while they're on.
+///
+/// Assemble > Parts List opens the Parts List panel (model::partsList()): each
+/// part once, with its count, material and mass. Clicking a part picks its
+/// components; Save as CSV and Export to print (io::exportAssembly3mf(), each
+/// part as many times as it's used) ask for the file with
+/// ui::UiRegistry::askSaveFile().
 /// @return Its manifest and register function, for PluginHost::addBuiltin().
 plugin::BuiltinPlugin measurePlugin();
 

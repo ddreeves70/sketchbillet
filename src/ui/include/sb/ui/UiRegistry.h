@@ -134,6 +134,21 @@ public:
     /// @param filter Which files it shows, in Qt's form: "Points (*.csv *.txt)".
     /// @return The file's whole path, or empty if the student cancelled.
     virtual QString askOpenFile(const QString& title, const QString& filter) = 0;
+
+    /// Asks the student for a file to save to, with the computer's own file
+    /// window, which warns before replacing a file that's there (tests answer
+    /// it themselves). If the student types a name with no ending, the first
+    /// ending in `filter` is added.
+    /// @code
+    /// const QString file = ui->askSaveFile(QObject::tr("Save the parts list"),
+    ///                                      QObject::tr("Spreadsheets (*.csv)"), "Car parts.csv");
+    /// if (!file.isEmpty()) { /* write it */ }
+    /// @endcode
+    /// @param title The window's title, like "Save the parts list".
+    /// @param filter Which files it shows, in Qt's form: "Spreadsheets (*.csv)".
+    /// @param suggested The file name it starts with, like "Car parts.csv". May be empty.
+    /// @return The file's whole path, or empty if the student cancelled.
+    virtual QString askSaveFile(const QString& title, const QString& filter, const QString& suggested) = 0;
 };
 
 }  // namespace sb::ui

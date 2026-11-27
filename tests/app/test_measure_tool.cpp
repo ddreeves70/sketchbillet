@@ -1,14 +1,17 @@
 // Tests for the Measure tool (sb.measure): Tools > Measure, the Measure panel,
-// and the line it draws between the nearest points; and the assembly checks,
-// Check for Overlaps and Balance Point.
+// and the line it draws between the nearest points; the assembly checks,
+// Check for Overlaps and Balance Point; and the Parts List.
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <QAction>
 #include <QApplication>
+#include <QFile>
 #include <QLabel>
 #include <QPushButton>
 #include <QSettings>
+#include <QStatusBar>
+#include <QTableWidget>
 #include <QTemporaryDir>
 
 #include <cmath>
@@ -382,4 +385,194 @@ TEST_CASE("in an assembly, Measure is on the Assemble tab and measures between c
     REQUIRE(line->points.size() == 2);
     CHECK(line->points[0].x == 20.0);
     CHECK(line->points[1].x == 30.0);
+}
+
+TEST_CASE("Assemble > Parts List lists each part once, picks its components, and saves or exports them",
+          "[app][measure][assembly][parts_list]") {
+    App app;
+    auto& docs = app.host.documents();
+    auto* action = app.shell->action("sb.measure.parts_list");
+    REQUIRE(action);
+    CHECK_FALSE(action->isEnabled());  // a part has no parts list
+
+    // An assembly: a 20 x 20 x 10 mm base, and three 10 mm cubes of one part, in PLA
+    // (1.24 g/cm^3): 4000 mm^3 is 4.96 g, and each cube 1000 mm^3, 1.24 g.
+    REQUIRE(docs.undo(app.design()));
+    REQUIRE(docs.run(app.design(), "assembly.new", {}).empty());
+    auto part = [](const char* name, kernel::Vec3 size) {
+        auto p = std::make_unique<model::Document>(model::DocKind::Part, name);
+        REQUIRE(p->execute(std::make_unique<model::AddFeatureCommand>(
+                               std::make_unique<model::BoxFeature>("Box1", kernel::Vec3{}, size)))
+                    .empty());
+        return p;
+    };
+    REQUIRE(
+        docs.execute(app.design(), std::make_unique<model::InsertPartCommand>(part("Base", {20, 20, 10}), 1))
+            .empty());
+    kernel::Placement up;
+    up.origin = {0, 0, 10};
+    REQUIRE(docs.execute(app.design(), std::make_unique<model::InsertPartCommand>(
+                                           part("Cube", {10, 10, 10}), 3, up, kernel::Vec3{12, 0, 0}))
+                .empty());
+    settle();
+    const auto& car = *docs.find(app.design());
+    const QString name = QString::fromStdString(car.name());
+    CHECK(action->isEnabled());
+    CHECK(action->text() == QStringLiteral("Parts List"));
+
+    auto* panel = app.shell->panelWidget(QStringLiteral("sb.measure.parts.panel"));
+    REQUIRE(panel);
+    CHECK_FALSE(panel->isVisible());  // until it's asked for
+    action->trigger();
+    settle();
+    CHECK(panel->isVisible());
+    auto summary = [&] {
+        return panel->findChild<QLabel*>(QStringLiteral("sb.measure.parts.summary"))->text();
+    };
+    auto* table = panel->findChild<QTableWidget*>(QStringLiteral("sb.measure.parts.table"));
+    REQUIRE(table);
+    auto cell = [&](int row, int column) { return table->item(row, column)->text(); };
+    CHECK(summary() == name + QStringLiteral(": 2 parts, 4 components. Mass in all: 8.68 g."));
+    REQUIRE(table->rowCount() == 2);
+    REQUIRE(table->columnCount() == 7);
+    CHECK(table->horizontalHeaderItem(4)->text() == QStringLiteral("Mass each"));
+    CHECK(cell(0, 0) == QStringLiteral("1"));
+    CHECK(cell(0, 1) == QStringLiteral("Base"));
+    CHECK(cell(0, 2) == QStringLiteral("1"));
+    CHECK(cell(0, 3) == QStringLiteral("PLA"));
+    CHECK(cell(0, 4) == QStringLiteral("4.96 g"));
+    CHECK(cell(0, 5) == QStringLiteral("4.96 g"));
+    CHECK(cell(0, 6) == QStringLiteral("inside"));
+    CHECK(cell(1, 1) == QStringLiteral("Cube"));
+    CHECK(cell(1, 2) == QStringLiteral("3"));
+    CHECK(cell(1, 4) == QStringLiteral("1.24 g"));
+    CHECK(cell(1, 5) == QStringLiteral("3.72 g"));
+    CHECK_FALSE(panel->findChild<QLabel*>(QStringLiteral("sb.measure.parts.notes"))->isVisibleTo(panel));
+
+    // Clicking the cube's row picks its three components.
+    table->selectRow(1);
+    settle();
+    CHECK(app.host.selection().doc() == app.design());
+    REQUIRE(app.host.selection().components().size() == 3);
+    for (const auto& c : app.host.selection().components())
+        CHECK(car.findComponent(c)->part == car.components()[1].part);
+
+    // Save as CSV: a name typed with no ending gets .csv.
+    QString askedTitle, askedSuggested;
+    app.ui.answerSaveFile = [&](const QString& title, const QString&, const QString& suggested) {
+        askedTitle = title;
+        askedSuggested = suggested;
+        return app.dir.filePath(QStringLiteral("cubes"));
+    };
+    panel->findChild<QPushButton*>(QStringLiteral("sb.measure.parts.csv"))->click();
+    settle();
+    CHECK(askedTitle == QStringLiteral("Save the parts list"));
+    CHECK(askedSuggested == name + QStringLiteral(" parts.csv"));
+    QFile csv(app.dir.filePath(QStringLiteral("cubes.csv")));
+    REQUIRE(csv.open(QIODevice::ReadOnly));
+    CHECK(
+        QString::fromUtf8(csv.readAll()) ==
+        QStringLiteral("Item,Part,Count,Material,Mass each (g),Mass in all (g),Volume each (mm^3),Kept,File\n"
+                       "1,Base,1,PLA,4.96,4.96,4000.00,inside,\n"
+                       "2,Cube,3,PLA,1.24,3.72,1000.00,inside,\n"));
+    CHECK(app.shell->statusBar()->currentMessage() == QStringLiteral("Saved the parts list to cubes.csv"));
+
+    // Export to print: a 3MF file (a zip) with every part to print.
+    app.ui.answerSaveFile = [&](const QString& title, const QString&, const QString& suggested) {
+        askedTitle = title;
+        askedSuggested = suggested;
+        return app.dir.filePath(QStringLiteral("to-print.3mf"));
+    };
+    panel->findChild<QPushButton*>(QStringLiteral("sb.measure.parts.print"))->click();
+    settle();
+    CHECK(askedTitle == QStringLiteral("Export parts to print"));
+    CHECK(askedSuggested == name + QStringLiteral(" parts.3mf"));
+    QFile print(app.dir.filePath(QStringLiteral("to-print.3mf")));
+    REQUIRE(print.open(QIODevice::ReadOnly));
+    CHECK(print.read(2) == QByteArray("PK"));
+    CHECK(app.shell->statusBar()->currentMessage() ==
+          QStringLiteral("Exported %1's parts to to-print.3mf, ready to print").arg(name));
+    CHECK(app.shell->lastProblems().empty());
+    // Any other ending is refused, and says how to fix it.
+    app.ui.answerSaveFile = [&](const QString&, const QString&, const QString&) {
+        return app.dir.filePath(QStringLiteral("to-print.stl"));
+    };
+    panel->findChild<QPushButton*>(QStringLiteral("sb.measure.parts.print"))->click();
+    settle();
+    REQUIRE(app.shell->lastProblems().size() == 1);
+    CHECK(app.shell->lastProblems().front().code == "parts.print_format");
+    CHECK(app.shell->lastProblems().front().message ==
+          "Export to print writes a 3MF file, for a slicer. End the name with .3mf, like to-print.3mf.");
+    CHECK_FALSE(QFile::exists(app.dir.filePath(QStringLiteral("to-print.stl"))));
+    // Cancelling the window writes nothing.
+    app.ui.answerSaveFile = [](const QString&, const QString&, const QString&) { return QString(); };
+    panel->findChild<QPushButton*>(QStringLiteral("sb.measure.parts.csv"))->click();
+    settle();
+
+    // It follows changes: without the cubes, one part is left.
+    REQUIRE(docs.undo(app.design()));
+    settle();
+    CHECK(summary() == name + QStringLiteral(": 1 part, 1 component. Mass in all: 4.96 g."));
+    CHECK(table->rowCount() == 1);
+
+    // Done closes it.
+    panel->findChild<QPushButton*>(QStringLiteral("sb.measure.parts.done"))->click();
+    settle();
+    CHECK_FALSE(panel->isVisible());
+}
+
+TEST_CASE("File > Export writes an assembly as 3MF or STEP, but not STL", "[app][assembly][export]") {
+    App app;
+    auto& docs = app.host.documents();
+    REQUIRE(docs.undo(app.design()));
+    REQUIRE(docs.run(app.design(), "assembly.new", {}).empty());
+    auto wheel = std::make_unique<model::Document>(model::DocKind::Part, "Wheel");
+    REQUIRE(wheel
+                ->execute(std::make_unique<model::AddFeatureCommand>(std::make_unique<model::CylinderFeature>(
+                    "Cylinder1", kernel::Vec3{}, kernel::Vec3{0, 0, 1}, 12.0, 6.0)))
+                .empty());
+    REQUIRE(docs.execute(app.design(), std::make_unique<model::InsertPartCommand>(
+                                           std::move(wheel), 2, kernel::Placement{}, kernel::Vec3{30, 0, 0}))
+                .empty());
+    settle();
+    const QString name = QString::fromStdString(docs.find(app.design())->name());
+
+    // File > Export starts as 3MF: an assembly can't be one STL shape.
+    QString suggested;
+    app.shell->askExportPath = [&](const QString& s) {
+        suggested = s;
+        return app.dir.filePath(QStringLiteral("wheels.3mf"));
+    };
+    auto* exportAct = app.shell->findChild<QAction*>(QStringLiteral("sb.shell.export"));
+    REQUIRE(exportAct);
+    exportAct->trigger();
+    settle();
+    CHECK(suggested == name + QStringLiteral(".3mf"));
+    CHECK(app.shell->lastProblems().empty());
+    QFile threeMf(app.dir.filePath(QStringLiteral("wheels.3mf")));
+    REQUIRE(threeMf.open(QIODevice::ReadOnly));
+    CHECK(threeMf.read(2) == QByteArray("PK"));
+    CHECK(app.shell->statusBar()->currentMessage() == QStringLiteral("Exported %1 to wheels.3mf").arg(name));
+
+    const QString step = app.dir.filePath(QStringLiteral("wheels.step"));
+    REQUIRE(app.shell->exportDesign(step.toStdWString()).empty());
+    QFile stepFile(step);
+    REQUIRE(stepFile.open(QIODevice::ReadOnly));
+    const QByteArray text = stepFile.readAll();
+    CHECK(text.startsWith("ISO-10303-21"));
+    CHECK(text.contains("NEXT_ASSEMBLY_USAGE_OCCURRENCE('1'"));
+    CHECK(text.contains("NEXT_ASSEMBLY_USAGE_OCCURRENCE('2'"));
+    CHECK(text.contains("'Wheel 2'"));
+
+    const auto problems =
+        app.shell->exportDesign(app.dir.filePath(QStringLiteral("wheels.stl")).toStdWString());
+    REQUIRE(problems.size() == 1);
+    CHECK(problems.front().code == "export.assembly_stl");
+    CHECK(
+        problems.front().message ==
+        name.toStdString() +
+            " is an assembly, and an STL file holds only one shape, with no names or copies. End the name "
+            "with .3mf (for a slicer) or .step (for another CAD program), or open a part to export it on its "
+            "own.");
+    CHECK_FALSE(QFile::exists(app.dir.filePath(QStringLiteral("wheels.stl"))));
 }

@@ -1078,6 +1078,17 @@ void registerNotes(sb::plugin::PluginContext& ctx) {
   if (file.isEmpty()) return;  // cancelled
   ```
 
+  To save one, `ui->askSaveFile(title, filter, suggested)` asks for a new file
+  instead, starting with the name you suggest. The window warns before
+  replacing a file, and a name typed with no ending gets the filter's first
+  one. The Parts List's **Save as CSV** uses it:
+
+  ```cpp
+  const QString file = ui->askSaveFile(QObject::tr("Save notes"), QObject::tr("Text files (*.txt)"),
+                                       QStringLiteral("notes.txt"));
+  if (file.isEmpty()) return;  // cancelled
+  ```
+
 - `PanelArea::Center` puts the panel in the middle of the window. The first
   Center panel (SketchBillet's viewer) fills it; later ones become tabs next to it.
 - In CMake, link `sb::ui` as well: `DEPS sb::model sb::ui`.

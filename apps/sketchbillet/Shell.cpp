@@ -49,6 +49,7 @@
 #include "Updates.h"
 #include "ViewOverlay.h"
 #include "sb/core/Version.h"
+#include "sb/io/AssemblyStep.h"
 #include "sb/io/SketchBilletFile.h"
 #include "sb/io/Steps.h"
 #include "sb/io/ThreeMf.h"
@@ -190,7 +191,8 @@ Shell::Shell(plugin::PluginHost& host, AppUi& ui, QSettings& settings, QWidget* 
         const QString stl = tr("STL, for 3D printing (*.stl)");
         const QString threeMf = tr("3MF, for 3D printing, with the part's name, material and color (*.3mf)");
         const QString step = tr("STEP, for other CAD programs (*.step *.stp)");
-        QString filter = stl;
+        // Start on the kind the name ends with: an assembly's is .3mf.
+        QString filter = suggested.endsWith(QStringLiteral(".3mf"), Qt::CaseInsensitive) ? threeMf : stl;
         QString path = QFileDialog::getSaveFileName(
             this, tr("Export"), suggested, stl + QStringLiteral(";;") + threeMf + QStringLiteral(";;") + step,
             &filter);
@@ -345,14 +347,18 @@ void Shell::buildMenus() {
     importAct->setToolTip(importAct->statusTip());
     export_ = file->addAction(tr("&Export..."), this, [this] {
         const auto* doc = host_.documents().find(activeDesign());
-        const auto path = askExportPath(qs(doc ? doc->name() : "Untitled") + QStringLiteral(".stl"));
+        // An assembly can't be one STL shape, so it starts as 3MF.
+        const bool assembly = doc && doc->kind() == model::DocKind::Assembly;
+        const auto path = askExportPath(qs(doc ? doc->name() : "Untitled") +
+                                        (assembly ? QStringLiteral(".3mf") : QStringLiteral(".stl")));
         if (!path.isEmpty()) exportDesign(path.toStdWString());
     });
     export_->setObjectName(QStringLiteral("sb.shell.export"));
     export_->setShortcut(QKeySequence(QStringLiteral("Ctrl+E")));
     export_->setIcon(svgIcon(icons::app::export_svg));
     export_->setStatusTip(
-        tr("Write the part as STL or 3MF (for 3D printing) or STEP (for other CAD programs)."));
+        tr("Write the part as STL or 3MF (for 3D printing) or STEP (for other CAD programs). An assembly "
+           "writes as 3MF or STEP, with each part once and every component where it is."));
     export_->setToolTip(export_->statusTip());
     auto* check = file->addAction(tr("Check for &Printing..."), this, [this] { checkForPrinting(); });
     check->setObjectName(QStringLiteral("sb.shell.check_print"));
@@ -1406,6 +1412,30 @@ Diagnostics Shell::exportDesign(const std::filesystem::path& path) {
         return fail("export.format",
                     tr("SketchBillet can export .stl and .3mf files (for 3D printing) and .step files (for "
                        "other CAD programs). End the file name with .stl, .3mf or .step."));
+    }
+
+    if (doc->kind() == model::DocKind::Assembly) {
+        // Each part once, and a copy of it where each component is.
+        const QString file = QString::fromStdWString(path.filename().wstring());
+        Diagnostics problems;
+        if (threeMf) {
+            problems = io::exportAssembly3mf(*doc, *report, *kernel, io::AssemblyLayout::Assembled, path);
+        } else if (format == kernel::ExportFormat::Step) {
+            problems = io::exportAssemblyStep(*doc, *report, *kernel, path);
+        } else {
+            return fail(
+                "export.assembly_stl",
+                tr("%1 is an assembly, and an STL file holds only one shape, with no names or copies. "
+                   "End the name with .3mf (for a slicer) or .step (for another CAD program), or open "
+                   "a part to export it on its own.")
+                    .arg(qs(doc->name())));
+        }
+        if (!problems.empty()) {
+            showProblems(problems);
+            return problems;
+        }
+        showMessage(tr("Exported %1 to %2").arg(qs(doc->name()), file));
+        return {};
     }
 
     FeatureId which{};
