@@ -14,7 +14,7 @@ sketchbillet_cli open <file.sb> --faces <name>
 sketchbillet_cli open <file.sb> --points <name>
 sketchbillet_cli open <file.sb> --components
 sketchbillet_cli open <assembly.sb> --edges <component>
-sketchbillet_cli open <assembly.sb> --export <out.3mf>
+sketchbillet_cli open <assembly.sb> --export <out.3mf|out.step>
 ```
 
 | Option | Meaning |
@@ -30,6 +30,7 @@ sketchbillet_cli open <assembly.sb> --export <out.3mf>
 | `--points <name>` | Also list the points (corners) of this step's body, numbered |
 | `--components` | For an [assembly](#an-assembly): also say which way each component faces |
 | `--export <out.3mf>` | For an assembly: write it as a 3MF file, put together, each part once with a copy where each component is (see [below](#export-an-assembly)) |
+| `--export <out.step>` | For an assembly: write it as a STEP file that other CAD programs open as an assembly, each part once with a named copy for each component (see [below](#export-an-assembly)) |
 | `--edges "Wheel 1"` | For an assembly: list a component's edges (or `--faces`, `--points`), numbered as [joints](commands.md#jointadd) take them (see [below](#a-components-edges-faces-and-points)) |
 
 Each step shows one of these:
@@ -289,7 +290,7 @@ z directions point. Listing its parts' sketches comes in a later version:
 <!-- cli-example exit=1 -->
 ```console
 $ sketchbillet_cli open Car.sb --sketch Sketch1
-error: Car is an assembly. List it with --components or --exploded, a component's edges, faces or points with --edges "Wheel 1", or export it with --export Car.3mf; listing its sketches comes in a later version.
+error: Car is an assembly. List it with --components or --exploded, a component's edges, faces or points with --edges "Wheel 1", or export it with --export Car.step; listing its sketches comes in a later version.
 ```
 
 ### Export an assembly
@@ -320,13 +321,36 @@ wrote car.3mf
 To print each part as many times as it's used, laid out side by side on the
 plate instead, use [`parts --export`](parts.md#print-every-part).
 
-An assembly exports only to 3MF for now. STL has no names or copies, and STEP
-with each part and component in it comes in a later version:
+With a `.step` (or `.stp`) name it writes a STEP file for other CAD programs,
+like Fusion, Onshape, SolidWorks or FreeCAD. It opens there as an assembly, not
+one lump: a `Wheel` part, written once, and four copies of it named `Wheel 1`
+to `Wheel 4`, each where its component is, in the part's color. The shapes are
+exact, not triangles, so the other program can measure them, add to them, or
+make drawings and toolpaths from them:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli open Car.sb --export car.step
+Car: assembly, 4 components, 1 part
+  Wheel 1      Wheel      grounded at 0, 0, 0 mm
+  Wheel 2      Wheel      free     at 25, 0, 0 mm
+  Wheel 3      Wheel      free     at 50, 0, 0 mm
+  Wheel 4      Wheel      free     at 75, 0, 0 mm
+Parts:
+  Wheel        1 step   ok        mass 3.37 g (PLA), 4 in the assembly
+    linked to Wheel.sb
+Mass in all: 13.46 g (weighs 0.132 N)
+Balance point: 37.5, 0, 3 mm
+wrote car.step
+```
+
+An STL file holds only one shape, with no names or copies, so an assembly
+can't be exported to STL:
 
 <!-- cli-example exit=1 -->
 ```console
 $ sketchbillet_cli open Car.sb --export car.stl
-error: Car is an assembly, and for now it exports to 3MF only, with each part in its place. Use a name ending in .3mf, or export one part at a time from its own file.
+error: Car is an assembly, and an STL file holds only one shape, with no names or copies. Use a name ending in .3mf (for a slicer) or .step (for another CAD program), or export one part at a time from its own file.
 ```
 
 ### A component's edges, faces and points

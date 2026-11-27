@@ -5,6 +5,7 @@
 
 #include <filesystem>
 
+#include "sb/kernel/StepAssembly.h"
 #include "sb/kernel/Types.h"
 
 namespace sb::kernel {
@@ -240,6 +241,18 @@ public:
     ///     (so it has no clear inside), or import.mesh.failed. The same mesh
     ///     always gives the same solid.
     virtual OpResult solidFromMesh(const Mesh& mesh) = 0;
+
+    /// Writes an assembly as one STEP file (AP214, in mm), keeping its structure:
+    /// each part is a product written once, with its bodies' names and colors,
+    /// and each component is an instance of its part, placed and named, so other
+    /// CAD programs open it as an assembly.
+    /// @param assembly The assembly: its parts and its copies of them.
+    /// @param path Where to write. An existing file is replaced.
+    /// @return No diagnostics on success; export.step.empty if no copy has a
+    ///     body, export.step.part if a copy names a part that isn't there, or
+    ///     export.step.failed if the file couldn't be written.
+    virtual Diagnostics exportStepAssembly(const StepAssembly& assembly,
+                                           const std::filesystem::path& path) const = 0;
 };
 
 }  // namespace sb::kernel

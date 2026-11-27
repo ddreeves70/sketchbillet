@@ -2,6 +2,7 @@
 # formats (STEP, STL, 3MF) moves here as file-format plugins in the plugin shell.
 sb_add_library(sb_io
   SOURCES
+    AssemblyStep.cpp
     LinkedParts.cpp
     PartCommands.cpp
     SketchBilletFile.cpp

@@ -569,9 +569,16 @@ Each line is one pull request, in this order:
      component is, `open car.sb --export car.3mf`) or ToPrint (each part as many
      times as components use it, as modeled, in rows 5 mm apart with its lowest
      point on the plate: `parts car.sb --export car-parts.3mf`).
-   - Next: STEP with the assembly's structure (parts, components and
-     placements, through OCCT's XCAF in sb_kernel_occt); then the Parts List
-     in the app.
+   - **STEP with the assembly's structure** (built, Nov 26, 2026):
+     `IKernel::exportStepAssembly()` takes a `StepAssembly` (sb_kernel: parts
+     with their bodies' shapes, names and colors, and copies with a name and
+     placement) and writes AP214 in mm through OCCT's XCAF: each part a
+     product once (several bodies make a small sub-assembly), each component a
+     named instance with its placement. OCCT numbers instances from a count
+     kept for the whole program, so the adapter renumbers them 1, 2, 3, ... to
+     keep the file the same every time. `io::exportAssemblyStep()` gathers it
+     from the assembly; `open car.sb --export car.step`. Plugin API 72.
+   - Next: the Parts List in the app.
 9. **Make Parts from Bodies.**
 10. **Guides:** user's guide pages for each piece as it's built, and two
     tutorials, a toy car whose wheels turn and a box with a hinged lid.
