@@ -101,4 +101,7 @@ See [`feature.import`](../cli/commands.md#featureimport) and
   middle, add a **Move** step to bring it to where you want it.
 - **Big files are slow.** Files up to 64 MB can be imported; a simpler export
   (just the part you need, without tiny details) builds faster.
+- **Designing around a part?** Keep the imported part
+  [for reference](designs-and-steps.md#reference-bodies): it's drawn
+  see-through, and it isn't exported or printed with your part.
 - To send your part back to another program, [export](files.md#exporting) it as STEP.

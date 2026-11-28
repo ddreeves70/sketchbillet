@@ -4612,6 +4612,45 @@ TEST_CASE("the viewer shows finished bodies, and picked used-up steps see-throug
     CHECK(scene.selected == std::vector{cyl, cut});
 }
 
+TEST_CASE("a body kept for reference is drawn see-through and marked in the tree, and Export skips it",
+          "[app][viewer][reference]") {
+    App app;
+    auto& docs = app.host.documents();
+    const DocId doc = app.shell->activeDesign();
+    REQUIRE(docs.run(doc, "feature.add_box", {{"size", kernel::Vec3{20, 20, 20}}}).empty());
+    REQUIRE(docs.run(doc, "feature.add_cylinder",
+                     {{"radius", 4.0}, {"height", 30.0}, {"base", kernel::Vec3{40, 0, 0}}})
+                .empty());
+    const auto box = app.doc().featureAt(0).id();
+    const auto cyl = app.doc().featureAt(1).id();
+    settle();
+
+    // Model > Use for reference, on the picked cylinder.
+    app.pickRows({1});
+    app.click("sb.modeling.use_for_reference");
+    CHECK(app.doc().find(cyl)->reference());
+    app.host.selection().clear();
+    auto scene = plugins::viewerScene(docs, app.host.selection());
+    REQUIRE(scene.bodies.size() == 2);
+    CHECK(scene.bodies[0].feature == box);
+    CHECK_FALSE(scene.bodies[0].reference);
+    CHECK(scene.bodies[1].feature == cyl);
+    CHECK(scene.bodies[1].reference);
+    CHECK_FALSE(scene.bodies[1].ghost);  // its faces can still be picked
+    CHECK(app.tree()->topLevelItem(0)->text(2) == QStringLiteral("ok"));
+    CHECK(app.tree()->topLevelItem(1)->text(2) == QStringLiteral("reference"));
+
+    // Export writes the one body: the cylinder isn't one.
+    const QString stl = app.dir.filePath(QStringLiteral("box.stl"));
+    REQUIRE(app.shell->exportDesign(stl.toStdWString()).empty());
+
+    // Make a body puts it back.
+    app.pickRows({1});
+    app.click("sb.modeling.make_body");
+    CHECK_FALSE(app.doc().find(cyl)->reference());
+    CHECK(app.tree()->topLevelItem(1)->text(2) == QStringLiteral("ok"));
+}
+
 TEST_CASE("Properties shows a body's material, mass and cost, and picks a material", "[app][material]") {
     App app;
     app.click("sb.modeling.box");  // a 20 mm cube: 8 cm^3

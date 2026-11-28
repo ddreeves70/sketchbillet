@@ -763,6 +763,54 @@ void SuppressFeaturesCommand::revert(DocumentEditor& editor) {
     }
 }
 
+ReferenceFeaturesCommand::ReferenceFeaturesCommand(std::vector<FeatureId> ids, bool on)
+    : ids_(std::move(ids)), on_(on) {}
+
+std::string ReferenceFeaturesCommand::label() const {
+    return label_;
+}
+
+Diagnostics ReferenceFeaturesCommand::apply(DocumentEditor& editor) {
+    const auto& doc = editor.document();
+    if (ids_.empty()) {
+        return {error("feature.nothing", on_ ? "Pick the bodies to keep for reference."
+                                             : "Pick the reference bodies to make bodies again.")};
+    }
+    for (const auto& id : ids_) {
+        const Feature* f = doc.find(id);
+        if (!f) return {error("feature.not_found", "That step isn't in the design anymore.")};
+        // Sketches and planes make no body, so there's nothing to keep for reference.
+        if (f->type() == FeatureType::Sketch || f->type() == FeatureType::Plane) {
+            return {error("feature.reference_no_body",
+                          f->name() + " is a " + (f->type() == FeatureType::Sketch ? "sketch" : "plane") +
+                              ", not a body, so it's always only for reference. Pick a step that makes a "
+                              "body, like a Box or an Import.")};
+        }
+    }
+    changed_.clear();
+    for (const auto& id : ids_) {
+        if (editor.find(id)->reference() != on_ &&
+            std::find(changed_.begin(), changed_.end(), id) == changed_.end())
+            changed_.push_back(id);
+    }
+    if (changed_.empty()) {
+        const std::string what = ids_.size() == 1 ? doc.find(ids_[0])->name() + " is" : "Those steps are";
+        return {error(on_ ? "feature.already_reference" : "feature.already_body",
+                      what + (on_ ? " already for reference only." : " already a body, not for reference."))};
+    }
+    for (const auto& id : changed_) editor.find(id)->setReference(on_);
+    const std::string which =
+        changed_.size() == 1 ? doc.find(changed_[0])->name() : std::to_string(changed_.size()) + " steps";
+    label_ = on_ ? "Use " + which + " for reference" : "Make " + which + " a body";
+    return {};
+}
+
+void ReferenceFeaturesCommand::revert(DocumentEditor& editor) {
+    for (const auto& id : changed_) {
+        if (Feature* f = editor.find(id)) f->setReference(!on_);
+    }
+}
+
 }  // namespace sb::model
 
 namespace sb::model {

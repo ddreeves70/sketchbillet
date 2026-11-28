@@ -798,6 +798,20 @@
   ]
  },
     {
+      "out": "docs/user-guide/images/app-reference-body.png",
+      "size": "1280x800",
+      "commands": [
+        "run --save case.sb feature.add_box name=Phone size=70,140,14 corner=0,0,2",
+        "run --open case.sb --save case.sb feature.add_box name=Case size=80,150,10 corner=-5,-5,0",
+        "run --open case.sb --save case.sb feature.add_box name=Pocket size=70,140,10 corner=0,0,2",
+        "run --open case.sb --save case.sb feature.add_boolean operation=cut a=Case b=Pocket name=Tray",
+        "run --open case.sb --save case.sb feature.set_color feature=Phone color=#e08a2c",
+        "run --open case.sb --save case.sb feature.reference steps=Phone"
+      ],
+      "app": {"open": "case.sb"},
+      "crop": [0, 0, 1280, 685]
+    },
+    {
       "out": "docs/user-guide/images/app-parts-list.png",
       "size": "1280x800",
       "commands": [

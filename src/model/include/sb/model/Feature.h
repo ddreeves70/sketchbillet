@@ -185,6 +185,19 @@ public:
     /// @param color The color, or nothing to go back to the color it gets by default.
     void setColor(std::optional<Color> color) { color_ = color; }
 
+    /// Checks whether this step's body is kept only for reference: drawn
+    /// see-through, to sketch on or design around (a phone a case fits), but not
+    /// one of the design's bodies (RebuildReport::referenceBodies()), so it has no
+    /// mass and isn't exported, printed or checked for overlaps. If a later step
+    /// uses the body up (a Union, say), the result is a body like any other.
+    /// @return True if it's for reference only.
+    bool reference() const { return reference_; }
+
+    /// Keeps this step's body for reference only, or makes it a body again. Use
+    /// on a copy, or from a Command (ReferenceFeaturesCommand).
+    /// @param r True for reference only.
+    void setReference(bool r) { reference_ = r; }
+
     /// Gives the kind of feature.
     /// @return The feature type.
     virtual FeatureType type() const = 0;
@@ -336,6 +349,7 @@ private:
     bool suppressed_ = false;
     std::string material_;
     std::optional<Color> color_;
+    bool reference_ = false;                                    // kept only for reference (see reference())
     std::map<std::string, std::string, std::less<>> formulas_;  // number key -> formula
 };
 

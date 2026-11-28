@@ -227,6 +227,10 @@ Under them, each row is one step: its name, its kind, and its status.
   that's off isn't built, but it isn't deleted: its numbers are kept, and Edit >
   Turn on (or right-click > Turn on) brings it back. Every picked step changes
   at once, as one Undo. A step that uses a step that's off shows `blocked`.
+- **Keep a body for reference** with Steps > Use for reference, or right-click >
+  Use for reference: it's drawn see-through, to sketch on or design around, and
+  has no mass. Steps > Make a body changes it back. See
+  [Reference bodies](designs-and-steps.md#reference-bodies).
 - **Put steps in a folder** with Steps > New folder. See [Folders](#folders).
 - **Duplicate** a step with Steps > Duplicate step (Ctrl+D). See
   [Copying steps](#copying-steps).

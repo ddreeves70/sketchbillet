@@ -900,6 +900,22 @@ void registerModeling(plugin::PluginContext& ctx) {
                              .args = {{"off", false}},
                              .fromSelectionList = "steps",
                              .tip = "Turn the picked steps back on."});
+    ctx.addAction(ActionSpec{.id = "sb.modeling.use_for_reference",
+                             .text = "Use for reference",
+                             .menu = "Model/Steps",
+                             .command = "feature.reference",
+                             .args = {{"on", true}},
+                             .fromSelectionList = "steps",
+                             .tip =
+                                 "Keep the picked bodies only to sketch on or design around, like a phone a "
+                                 "case must fit: drawn see-through, with no mass, and not exported."});
+    ctx.addAction(ActionSpec{.id = "sb.modeling.make_body",
+                             .text = "Make a body",
+                             .menu = "Model/Steps",
+                             .command = "feature.reference",
+                             .args = {{"on", false}},
+                             .fromSelectionList = "steps",
+                             .tip = "Make the picked reference bodies bodies again, with mass, exported."});
     ctx.addAction(ActionSpec{.id = "sb.modeling.new_folder",
                              .text = "New folder",
                              .menu = "Model/Steps",

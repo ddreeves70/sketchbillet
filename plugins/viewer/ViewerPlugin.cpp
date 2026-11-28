@@ -1130,11 +1130,22 @@ view::SceneContent viewerScene(const plugin::DocumentList& docs, const plugin::S
             if (const auto* shape = report->shapeOf(body))
                 out.bodies.push_back({body, *shape, false, colorOf(body)});
         }
+        // Bodies kept for reference: see-through, but their faces can be picked to
+        // sketch on. (An assembly leaves them out: they're only for designing the part.)
+        for (const auto& body : report->referenceBodies()) {
+            if (const auto* shape = report->shapeOf(body)) {
+                view::SceneBody b{body, *shape, false, colorOf(body)};
+                b.reference = true;
+                out.bodies.push_back(std::move(b));
+            }
+        }
     }
     // A selected step that a later step used up (the tool of a cut, say) is
     // drawn see-through, so the student can see what they picked.
+    const auto& references = report->referenceBodies();
     for (const auto& picked : out.selected) {
         if (std::find(bodies.begin(), bodies.end(), picked) != bodies.end()) continue;
+        if (std::find(references.begin(), references.end(), picked) != references.end()) continue;
         const auto* r = report->result(picked);
         if (r && r->status == model::FeatureStatus::Ok && r->shape.valid())
             out.bodies.push_back({picked, r->shape, true, colorOf(picked)});

@@ -91,6 +91,31 @@ private:
     std::string label_;
 };
 
+/// Keeps steps' bodies for reference only (Feature::reference()), or makes them
+/// bodies again, as one undo step. A reference body is drawn see-through, to
+/// sketch on or design around, but has no mass and isn't exported.
+///
+/// @code
+/// doc.execute(std::make_unique<ReferenceFeaturesCommand>(std::vector<FeatureId>{phoneId}, true));
+/// @endcode
+class ReferenceFeaturesCommand final : public Command {
+public:
+    /// Prepares the change.
+    /// @param ids The steps, in the order picked.
+    /// @param on True to keep their bodies for reference only, false to make them bodies again.
+    ReferenceFeaturesCommand(std::vector<FeatureId> ids, bool on);
+
+    std::string label() const override;
+    Diagnostics apply(DocumentEditor& editor) override;
+    void revert(DocumentEditor& editor) override;
+
+private:
+    std::vector<FeatureId> ids_;
+    bool on_;
+    std::vector<FeatureId> changed_;  // the steps that weren't already that way
+    std::string label_;
+};
+
 /// Moves the rollback marker. The steps after it are kept but not built, so you
 /// see the part as it was then; a new step goes in at the marker. It's saved with
 /// the design, and undo puts it back.

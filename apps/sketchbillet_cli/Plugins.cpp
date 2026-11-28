@@ -741,6 +741,9 @@ int runCommand(int argc, char** argv) {
             const auto& bodies = report->bodies();
             if (std::find(bodies.begin(), bodies.end(), f.id()) != bodies.end()) {
                 std::printf("  mass %.2f g (%s)", mass.grams, material.name.c_str());
+            } else if (const auto& refs = report->referenceBodies();
+                       std::find(refs.begin(), refs.end(), f.id()) != refs.end()) {
+                std::printf("  for reference");  // no mass: it isn't one of the design's bodies
             }
         }
         std::printf("\n");

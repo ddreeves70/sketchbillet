@@ -26,6 +26,7 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`feature.slide`](#featureslide) | Slides a body by a distance, as dragging its arrows does |
 | [`feature.set_value`](#featureset_value) | Changes a step's number, like an extrude's distance, to a number or a formula |
 | [`feature.suppress`](#featuresuppress) | Turns steps off, or back on |
+| [`feature.reference`](#featurereference) | Keeps bodies only for reference, to sketch on or design around, or makes them bodies again |
 | [`folder.add`](#folderadd) | Puts steps in a folder in the feature tree |
 | [`folder.rename`](#folderrename) | Renames a folder |
 | [`folder.delete`](#folderdelete) | Removes a folder, keeping its steps |
@@ -762,6 +763,78 @@ Steps that are already that way can't be changed again:
 ```console
 $ sketchbillet_cli run --open demo.sb feature.suppress steps=Plate,Hole off=false
 error [feature.already_on]: Those steps are already turned on.
+```
+
+## feature.reference
+
+Keeps bodies only for reference: to sketch on, measure or design around, like a
+phone a case must fit. A reference body is drawn see-through, and the feature
+tree says `reference`. It has no mass, and it's left out of exports, printing,
+the parts list and overlap checks. Its faces can still be picked, to sketch on or
+measure. Changing several steps is one undo step.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `steps` | step names | yes | The steps that make the bodies, separated by commas, like `Phone,Box1` |
+| `on` | true or false | no | `true` (the default) keeps them for reference; `false` makes them bodies again |
+
+Here a 70 x 140 x 8 mm phone sits in the pocket of a tray. Kept for reference,
+the phone has no mass, so the design's one body is the tray, and that's what
+Export writes:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save case.sb feature.add_box name=Phone size=70,140,8 corner=0,0,2
+case: 1 step
+  Phone        ok  volume 78400.00 mm^3  mass 97.22 g (PLA)
+wrote case.sb
+$ sketchbillet_cli run --open case.sb --save case.sb feature.add_box name=Case size=80,150,10 corner=-5,-5,0
+case: 2 steps
+  Phone        ok  volume 78400.00 mm^3  mass 97.22 g (PLA)
+  Case         ok  volume 120000.00 mm^3  mass 148.80 g (PLA)
+wrote case.sb
+$ sketchbillet_cli run --open case.sb --save case.sb feature.add_box name=Pocket size=70,140,10 corner=0,0,2
+case: 3 steps
+  Phone        ok  volume 78400.00 mm^3  mass 97.22 g (PLA)
+  Case         ok  volume 120000.00 mm^3  mass 148.80 g (PLA)
+  Pocket       ok  volume 98000.00 mm^3  mass 121.52 g (PLA)
+wrote case.sb
+$ sketchbillet_cli run --open case.sb --save case.sb feature.add_boolean operation=cut a=Case b=Pocket name=Tray
+case: 4 steps
+  Phone        ok  volume 78400.00 mm^3  mass 97.22 g (PLA)
+  Case         ok  volume 120000.00 mm^3
+  Pocket       ok  volume 98000.00 mm^3
+  Tray         ok  volume 41600.00 mm^3  mass 51.58 g (PLA)
+wrote case.sb
+$ sketchbillet_cli run --open case.sb --save case.sb feature.reference steps=Phone
+case: 4 steps
+  Phone        ok  volume 78400.00 mm^3  for reference
+  Case         ok  volume 120000.00 mm^3
+  Pocket       ok  volume 98000.00 mm^3
+  Tray         ok  volume 41600.00 mm^3  mass 51.58 g (PLA)
+wrote case.sb
+```
+
+A step that uses the body up, like a Union, makes an ordinary body. Make it a
+body again with `on=false`:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --open case.sb feature.reference steps=Phone on=false
+case: 4 steps
+  Phone        ok  volume 78400.00 mm^3  mass 97.22 g (PLA)
+  Case         ok  volume 120000.00 mm^3
+  Pocket       ok  volume 98000.00 mm^3
+  Tray         ok  volume 41600.00 mm^3  mass 51.58 g (PLA)
+```
+
+A body that's for reference already can't be changed again. Neither can a sketch
+or a plane, which makes no body:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open case.sb feature.reference steps=Phone
+error [feature.already_reference]: Phone is already for reference only.
 ```
 
 ## folder.add
