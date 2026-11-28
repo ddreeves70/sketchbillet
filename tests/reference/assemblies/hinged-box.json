@@ -1,0 +1,112 @@
+{
+  "title": "Hinged box",
+  "about": "Tutorial 11's box: a tray with two knuckles, a lid with one between them, and a pin, modeled in one design and made into parts with assembly.from_bodies; the pin is held by a rigid joint, the lid turns on a revolute hinge with limits.",
+  "numbers": {
+    "W": 60,
+    "D": 40,
+    "H": 20,
+    "t": 2,
+    "Lm": 56,
+    "hm": 3,
+    "dm": 7,
+    "Rk": 3,
+    "G": 24,
+    "rh": 1.75,
+    "lt": 2,
+    "Lk": 20,
+    "Lt": 16,
+    "rp": 1.5,
+    "ya": 43,
+    "za": 21,
+    "th": -110
+  },
+  "commands": [
+    "run --save box.sb feature.add_box size=60,40,20 name=Tray",
+    "run --open box.sb --save box.sb feature.add_shell body=Tray faces=6 name=Hollow",
+    "run --open box.sb --save box.sb feature.add_box size=56,3,7 corner=2,40,14 name=Mount",
+    "run --open box.sb --save box.sb feature.add_cylinder radius=3 height=60 base=0,43,21 axis=1,0,0 name=Barrel",
+    "run --open box.sb --save box.sb feature.add_boolean operation=union a=Hollow b=Mount name=WithMount",
+    "run --open box.sb --save box.sb feature.add_boolean operation=union a=WithMount b=Barrel name=WithBarrel",
+    "run --open box.sb --save box.sb feature.add_box size=24,7,12 corner=18,40,13 name=Gap",
+    "run --open box.sb --save box.sb feature.add_boolean operation=cut a=WithBarrel b=Gap name=Knuckles",
+    "run --open box.sb --save box.sb feature.add_cylinder radius=1.75 height=60 base=0,43,21 axis=1,0,0 name=TrayPinHole",
+    "run --open box.sb --save box.sb feature.add_boolean operation=cut a=Knuckles b=TrayPinHole name=Base",
+    "run --open box.sb --save box.sb feature.add_box size=60,40,2 corner=0,0,20 name=Plate",
+    "run --open box.sb --save box.sb feature.add_box size=16,3,2 corner=22,40,20 name=Tab",
+    "run --open box.sb --save box.sb feature.add_cylinder radius=3 height=20 base=20,43,21 axis=1,0,0 name=Knuckle",
+    "run --open box.sb --save box.sb feature.add_boolean operation=union a=Plate b=Tab name=PlateTab",
+    "run --open box.sb --save box.sb feature.add_boolean operation=union a=PlateTab b=Knuckle name=LidKnuckle",
+    "run --open box.sb --save box.sb feature.add_cylinder radius=1.75 height=20 base=20,43,21 axis=1,0,0 name=LidPinHole",
+    "run --open box.sb --save box.sb feature.add_boolean operation=cut a=LidKnuckle b=LidPinHole name=Lid",
+    "run --open box.sb --save box.sb feature.add_cylinder radius=1.5 height=60 base=0,43,21 axis=1,0,0 name=Pin",
+    "run --save \"Hinged box.sb\" assembly.from_bodies file=box.sb",
+    "run --open \"Hinged box.sb\" --save \"Hinged box.sb\" joint.add kind=rigid \"a=Base 1:edge:59\" \"b=Pin 1:edge:1\" flip=true name=PinJoint",
+    "run --open \"Hinged box.sb\" --save \"Hinged box.sb\" joint.add kind=revolute \"a=Base 1:edge:61\" \"b=Lid 1:edge:22\" offset=2 name=Hinge",
+    "run --open \"Hinged box.sb\" --save \"Hinged box.sb\" joint.set joint=Hinge lowest=-180 highest=0 value=-110"
+  ],
+  "assembly": "Hinged box.sb",
+  "expect": {
+    "components": {
+      "Base 1": {
+        "at": [
+          "0",
+          "0",
+          "0"
+        ],
+        "x": [
+          "1",
+          "0",
+          "0"
+        ],
+        "z": [
+          "0",
+          "0",
+          "1"
+        ]
+      },
+      "Pin 1": {
+        "at": [
+          "0",
+          "0",
+          "0"
+        ],
+        "x": [
+          "1",
+          "0",
+          "0"
+        ],
+        "z": [
+          "0",
+          "0",
+          "1"
+        ]
+      },
+      "Lid 1": {
+        "at": [
+          "0",
+          "ya - ya*cos(radians(th)) + za*sin(radians(th))",
+          "za - ya*sin(radians(th)) - za*cos(radians(th))"
+        ],
+        "x": [
+          "1",
+          "0",
+          "0"
+        ],
+        "z": [
+          "0",
+          "-sin(radians(th))",
+          "cos(radians(th))"
+        ]
+      }
+    },
+    "mass": "rho*(W*D*H - (W - 2*t)*(D - 2*t)*(H - t) + (Lm - G)*hm*dm + pi*Rk**2*(W - G) - pi*Rk**2/4*(Lm - G) - pi*rh**2*(W - G) + W*D*lt + Lt*hm*lt + pi*Rk**2*Lk - Lt*band(Rk, lt/2)/2 - pi*rh**2*Lk + pi*rp**2*W)",
+    "overlaps": []
+  },
+  "change": {
+    "command": "run --open \"Hinged box.sb\" --save \"Hinged box.sb\" joint.set joint=Hinge value=-45",
+    "numbers": {
+      "th": -45
+    },
+    "about": "close the lid to 45 degrees open: it turns about the pin's line, at y 43 mm and z 21 mm."
+  }
+}

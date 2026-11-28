@@ -6,8 +6,8 @@
 > step 3 (linked parts, from the command line) is built (Nov 20, 2026), and
 > step 4 (assemblies in the app) is built (Nov 23, 2026), and step 5's joints
 > are built from the command line (Nov 23, 2026); steps 5 to 10 followed, to
-> the two tutorials (Nov 28, 2026). Still to come: the reference assemblies
-> (see [Tested by](#tested-by)). Two choices were made on Nov 13, 2026: an
+> the two tutorials, and the reference assemblies (see [Tested by](#tested-by))
+> followed (Nov 28, 2026). Two choices were made on Nov 13, 2026: an
 > assembly's parts can live **inside** the assembly file or be **linked** to
 > other files, from the start; and parts move along **chains** of joints first,
 > with loops (like a four-bar linkage) later. Changes to `sb_model`, naming and
@@ -645,7 +645,11 @@ Each line is one pull request, in this order:
 - **Reference assemblies,** like Phase 2's reference parts: a hinged box, the
   toy car, a three-joint arm, and a four-bar linkage that shows the loop
   warning, each built on every change and checked against values worked out by
-  hand (placements, overlaps, mass).
+  hand (placements, overlaps, mass). Built Nov 28, 2026: `tests/reference/assemblies/`,
+  checked by `tools/reference/check_assemblies.py` as `reference.assembly.<name>`
+  (see `tests/reference/README.md`); each also makes a change (a joint turned) and
+  is checked again, and the four-bar's change opens its loop by a worked-out
+  distance.
 
 ## Choices
 

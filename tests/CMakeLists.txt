@@ -118,6 +118,17 @@ if(TARGET sketchbillet_cli)
         COMMAND Python3::Interpreter -I ${PROJECT_SOURCE_DIR}/tools/reference/check_parts.py
                 --sketchbillet-cli $<TARGET_FILE:sketchbillet_cli> ${part_name})
     endforeach()
+    # The reference assemblies (Phase 4): each one builds, and its placements, mass,
+    # overlaps and warnings match values worked out by hand, before and after a change.
+    file(GLOB SB_REFERENCE_ASSEMBLIES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/reference/assemblies/*.json")
+    foreach(assembly_file IN LISTS SB_REFERENCE_ASSEMBLIES)
+      get_filename_component(assembly_name "${assembly_file}" NAME_WE)
+      add_test(NAME "reference.assembly.${assembly_name}"
+        COMMAND Python3::Interpreter -I ${PROJECT_SOURCE_DIR}/tools/reference/check_assemblies.py
+                --sketchbillet-cli $<TARGET_FILE:sketchbillet_cli> ${assembly_name})
+    endforeach()
+    add_test(NAME reference.assembly_checker
+      COMMAND Python3::Interpreter -I ${PROJECT_SOURCE_DIR}/tools/reference/test_check_assemblies.py)
     add_test(NAME reference.gallery
       COMMAND Python3::Interpreter -I ${PROJECT_SOURCE_DIR}/tools/reference/check_parts.py
               --gallery ${PROJECT_SOURCE_DIR}/docs/user-guide/reference-parts.md)
