@@ -11,6 +11,7 @@ and file formats. SketchBillet's own modeling commands come from a built-in plug
 $ sketchbillet_cli plugins
 loaded   sb.modeling 0.1.0  Modeling (built in)
            tier    foundation
+           command assembly.from_bodies
            command assembly.new
            command component.add
            command component.delete
@@ -119,6 +120,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            action  Model/Steps > Delete step  (feature.delete)
            action  Assemble/Insert > Insert part  (component.insert)
            action  Assemble/Insert > Insert copy  (component.insert)
+           action  Model/Make > Make Parts from Bodies  (runs plugin code)
            action  Assemble/Insert > New part  (component.new)
            action  Assemble/Insert > Add another  (runs plugin code)
            action  Assemble/Component > Ground  (check mark)

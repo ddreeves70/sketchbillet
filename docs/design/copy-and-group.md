@@ -2,8 +2,9 @@
 
 > **Draft.** Parts 1 to 3 and the Move step are built (Oct 27 to 28, 2026). They
 > were pulled forward from later phases after Phase 0; linked copies followed in
-> Phase 2 (Nov 12, 2026), and groups that move together wait for Phase 4's
-> assemblies (see the [roadmap](roadmap.md)).
+> Phase 2 (Nov 12, 2026), and groups that move together came with Phase 4's
+> assemblies as Make Parts from Bodies (Nov 28, 2026; see
+> [Assemblies](assemblies.md#9-parts-from-bodies)).
 
 Students want to reuse what they've made (another hole like this one, the same
 bracket in a new design) and to keep big feature trees tidy. This page covers
@@ -15,7 +16,7 @@ six asks, built in this order:
 | 2. Turn steps off together | Turn off (suppress) several picked steps at once, and back on | Built |
 | 3. Folders in the feature tree | Put steps in a named folder that opens and closes | Built |
 | 4. Move, then linked copies | A Move step, then copies that follow their original | Built |
-| 5. Groups that move together | Bodies grouped into a part you can place as one | Phase 4 (assemblies) |
+| 5. Groups that move together | Bodies grouped into a part you can place as one | Built in Phase 4: Make Parts from Bodies |
 
 Copy between designs is part 1: the clipboard works across designs.
 

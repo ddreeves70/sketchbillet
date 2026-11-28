@@ -209,7 +209,9 @@ class PluginContext;
 /// (ui::UiRegistry::askSaveFile(), which the desktop app must now provide).
 /// Version 74 added bodies kept for reference (model::Feature::reference(),
 /// which changes Feature's layout, and RebuildReport::referenceBodies()).
-inline constexpr int kPluginApiVersion = 74;
+/// Version 75 added Make Parts from Bodies (sb/model/PartsFromBodies.h:
+/// model::partsFromBodies(), finishedBodySteps() and MakePartsFromBodiesCommand).
+inline constexpr int kPluginApiVersion = 75;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

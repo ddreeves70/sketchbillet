@@ -8,6 +8,7 @@
 #include "sb/io/SketchBilletFile.h"
 #include "sb/model/AssemblyCommands.h"
 #include "sb/model/Commands.h"
+#include "sb/model/PartsFromBodies.h"
 
 namespace sb::io {
 
@@ -117,6 +118,60 @@ void addPartCommands(model::CommandRegistry& r) {
             return std::make_unique<model::InsertPartCommand>(std::move(read.design), count, at,
                                                               model::argVec3(a, "step"), std::move(link));
         });
+
+    r.add({"assembly.from_bodies",
+           "Make parts from bodies",
+           "Makes this new, empty design an assembly of the bodies of a part in a .sb file: one inside part "
+           "for each body, with the steps that make it, placed where it was. A body and its linked copies "
+           "become one part with a component for each. The first is grounded; join the rest with joints. "
+           "The file isn't changed.",
+           {{"file", ArgType::Text, "The part with the bodies, like robot.sb.", true, {}},
+            {"bodies",
+             ArgType::Text,
+             "Just these bodies, as step names separated by commas, like Arm,Base. Leave it out for every "
+             "finished body.",
+             false,
+             {}}}},
+          [](const model::Document& doc, const model::Args& a) -> std::unique_ptr<model::Command> {
+              if (doc.kind() == model::DocKind::Assembly || doc.featureCount() > 0 ||
+                  !doc.parameters().empty()) {
+                  return problem("assembly.not_empty",
+                                 doc.name() +
+                                     " isn't a new, empty design, so it can't become an assembly. Start "
+                                     "a new design for the parts.");
+              }
+              auto read = readPart(model::argText(a, "file"));
+              if (read.problem) return std::move(read.problem);
+              const auto& design = *read.design;
+              std::vector<FeatureId> picked;
+              const std::string list = model::argText(a, "bodies");
+              for (std::size_t start = 0; start < list.size();) {
+                  std::size_t end = list.find(',', start);
+                  if (end == std::string::npos) end = list.size();
+                  std::string name = list.substr(start, end - start);
+                  name.erase(0, name.find_first_not_of(' '));
+                  name.erase(name.find_last_not_of(' ') + 1);
+                  start = end + 1;
+                  if (name.empty()) continue;
+                  const model::Feature* found = nullptr;
+                  for (std::size_t i = 0; i < design.featureCount() && !found; ++i)
+                      if (design.featureAt(i).name() == name) found = &design.featureAt(i);
+                  if (!found) {
+                      std::string names;
+                      for (const auto& id : model::finishedBodySteps(design))
+                          names += (names.empty() ? "" : ", ") + design.find(id)->name();
+                      return problem("parts.no_such_body",
+                                     design.name() + " has no step called " + name +
+                                         ". Its finished bodies are: " +
+                                         (names.empty() ? std::string("none yet") : names) + ".");
+                  }
+                  picked.push_back(found->id());
+              }
+              auto made = model::partsFromBodies(design, picked);
+              if (!made.problems.empty())
+                  return std::make_unique<model::ProblemCommand>(made.problems.front());
+              return std::make_unique<model::MakePartsFromBodiesCommand>(std::move(made.parts));
+          });
 
     r.add({"part.update",
            "Update linked parts",

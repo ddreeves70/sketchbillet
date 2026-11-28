@@ -812,6 +812,20 @@
       "crop": [0, 0, 1280, 685]
     },
     {
+      "out": "docs/user-guide/images/app-parts-from-bodies.png",
+      "size": "1280x800",
+      "commands": [
+        "run --save Toy.sb feature.add_box name=Body size=80,40,10",
+        "run --open Toy.sb --save Toy.sb feature.add_cylinder name=Wheel radius=12 height=6 base=10,0,12 axis=0,-1,0",
+        "run --open Toy.sb --save Toy.sb feature.add_move body=Wheel copy=true by=60,0,0 name=Wheel2",
+        "run --open Toy.sb --save Toy.sb feature.add_move body=Wheel copy=true by=0,46,0 name=Wheel3",
+        "run --open Toy.sb --save Toy.sb feature.add_move body=Wheel copy=true by=60,46,0 name=Wheel4",
+        "run --save \"Toy assembly.sb\" assembly.from_bodies file=Toy.sb"
+      ],
+      "app": {"open": "Toy assembly.sb"},
+      "crop": [0, 0, 1280, 685]
+    },
+    {
       "out": "docs/user-guide/images/app-parts-list.png",
       "size": "1280x800",
       "commands": [

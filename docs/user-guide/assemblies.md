@@ -101,6 +101,65 @@ as one step of its Undo. Saving the assembly keeps it.
 Want to change a linked part only in this assembly? Click **Make part inside**
 first, then **Edit part**.
 
+## Making parts from bodies
+
+Sometimes a design starts as one part with several bodies: a toy car modeled
+as a body and four wheels, side by side in one file. **Make Parts from Bodies**
+turns it into an assembly. Open the part and click **Make parts** on the Model
+tab (in the Make group). A new assembly opens in a tab of its own, named after
+the part (like "Toy assembly"):
+
+- Each body becomes a part inside the assembly, named after its step, with a
+  copy of the steps that make it. Change one later with **Edit part**.
+- Each component sits where its body was, so the assembly looks just like the
+  part. The first is grounded and the rest are free: join them with
+  [joints](#joints).
+- A body and its [linked copies](moving.md#linked-copies) become one part, with
+  a component for each copy. Four wheels made with Linked Copy are Wheel x4 in
+  the [parts list](#parts-list), so the slicer prints one wheel four times.
+- A body that another body's steps only look at, like the body a sketch is
+  drawn on, comes along in that part [for reference](designs-and-steps.md#reference-bodies):
+  see-through, with no mass, so the sketch still finds its face.
+- Pick some bodies first to make parts of just those.
+
+The part you started from isn't changed. Save the new assembly with **File >
+Save As**.
+
+![The toy car made from one part's bodies: the Body and the Wheel part used four times, each where its body was](images/app-parts-from-bodies.png)
+
+With `sketchbillet_cli`, run [`assembly.from_bodies`](../cli/commands.md#assemblyfrom_bodies)
+in a new design:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save toy.sb feature.add_box name=Body size=80,40,10
+toy: 1 step
+  Body         ok  volume 32000.00 mm^3  mass 39.68 g (PLA)
+wrote toy.sb
+$ sketchbillet_cli run --open toy.sb --save toy.sb feature.add_cylinder name=Wheel radius=12 height=6 base=10,0,12 axis=0,-1,0
+toy: 2 steps
+  Body         ok  volume 32000.00 mm^3  mass 39.68 g (PLA)
+  Wheel        ok  volume 2714.34 mm^3  mass 3.37 g (PLA)
+wrote toy.sb
+$ sketchbillet_cli run --open toy.sb --save toy.sb feature.add_move body=Wheel copy=true by=60,0,0 name=Wheel2
+toy: 3 steps
+  Body         ok  volume 32000.00 mm^3  mass 39.68 g (PLA)
+  Wheel        ok  volume 2714.34 mm^3  mass 3.37 g (PLA)
+  Wheel2       ok  volume 2714.34 mm^3  mass 3.37 g (PLA)
+wrote toy.sb
+$ sketchbillet_cli run --save car.sb assembly.from_bodies file=toy.sb
+car: assembly, 3 components, 2 parts
+  Body 1       Body       grounded at 0, 0, 0 mm
+  Wheel 1      Wheel      free     at 0, 0, 0 mm
+  Wheel 2      Wheel      free     at 60, 0, 0 mm
+Parts:
+  Body         1 step   ok        mass 39.68 g (PLA), 1 in the assembly
+  Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+Mass in all: 46.41 g (weighs 0.455 N)
+Balance point: 40, 16.66, 6.02 mm
+wrote car.sb
+```
+
 ## An example: a toy car
 
 First make the parts, each in its own file: a body 80 mm long, 40 mm wide and
@@ -588,6 +647,7 @@ it): you can move or copy the whole folder, and everything still links up.
 | To | Use |
 | --- | --- |
 | Make a new design an assembly | [`assembly.new`](../cli/commands.md#assemblynew) |
+| Turn a part's bodies into an assembly (in the app: **Make parts**) | [`assembly.from_bodies`](../cli/commands.md#assemblyfrom_bodies) |
 | Put in a part from a `.sb` file | [`component.insert`](../cli/commands.md#componentinsert) |
 | Put in more of a part it has already | [`component.add`](../cli/commands.md#componentadd) |
 | Add an empty part, to make later | [`component.new`](../cli/commands.md#componentnew) |

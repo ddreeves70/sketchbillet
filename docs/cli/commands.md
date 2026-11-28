@@ -55,6 +55,7 @@ volumes and sketch lengths in the design's unit. Positions and sizes are written
 | [`parameter.rename`](#parameterrename) | Renames a parameter, and every value that uses it |
 | [`parameter.delete`](#parameterdelete) | Removes a parameter nothing uses |
 | [`assembly.new`](#assemblynew) | Makes a new, empty design an assembly |
+| [`assembly.from_bodies`](#assemblyfrom_bodies) | Makes a new design an assembly of a part's bodies, each where it was |
 | [`component.new`](#componentnew) | Adds an empty part to an assembly, and a component of it |
 | [`component.insert`](#componentinsert) | Puts a part from a `.sb` file into an assembly, linked to the file |
 | [`component.add`](#componentadd) | Puts more of a part an assembly has already in it |
@@ -2932,6 +2933,76 @@ It has no settings.
 $ sketchbillet_cli run --save Car.sb assembly.new
 Car: assembly, 0 components, 0 parts
 wrote Car.sb
+```
+
+## assembly.from_bodies
+
+**Make Parts from Bodies.** Makes a new, empty design an assembly of the bodies
+of a part in a `.sb` file: one inside part for each body, named after its step,
+with a copy of the steps that make it. Each component is placed where its body
+was, the first is grounded, and the rest are free: join them with
+[`joint.add`](#jointadd). The file isn't changed.
+
+- A body and its **linked copies** (made with
+  [`feature.add_move copy=true`](#featureadd_move)) become one part, with a
+  component for each copy: four wheels made with linked copies are Wheel x4.
+- A body the steps only **look at**, like the body a sketch is drawn on, comes
+  along in the part [for reference](#featurereference): see-through, with no
+  mass, so the sketch still finds its face.
+
+| Setting | Kind | Needed | Meaning |
+| --- | --- | --- | --- |
+| `file` | file name | yes | The part with the bodies, like `toy.sb` |
+| `bodies` | step names | no | Just these bodies, separated by commas, like `Wheel,Body`. Leave it out for every finished body |
+
+A toy car made as one part: a body, a wheel, and a linked copy of the wheel
+60 mm along. Making parts from its bodies gives two parts, and the wheel twice:
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save toy.sb feature.add_box name=Body size=80,40,10
+toy: 1 step
+  Body         ok  volume 32000.00 mm^3  mass 39.68 g (PLA)
+wrote toy.sb
+$ sketchbillet_cli run --open toy.sb --save toy.sb feature.add_cylinder name=Wheel radius=12 height=6 base=10,0,12 axis=0,-1,0
+toy: 2 steps
+  Body         ok  volume 32000.00 mm^3  mass 39.68 g (PLA)
+  Wheel        ok  volume 2714.34 mm^3  mass 3.37 g (PLA)
+wrote toy.sb
+$ sketchbillet_cli run --open toy.sb --save toy.sb feature.add_move body=Wheel copy=true by=60,0,0 name=Wheel2
+toy: 3 steps
+  Body         ok  volume 32000.00 mm^3  mass 39.68 g (PLA)
+  Wheel        ok  volume 2714.34 mm^3  mass 3.37 g (PLA)
+  Wheel2       ok  volume 2714.34 mm^3  mass 3.37 g (PLA)
+wrote toy.sb
+$ sketchbillet_cli run --save car.sb assembly.from_bodies file=toy.sb
+car: assembly, 3 components, 2 parts
+  Body 1       Body       grounded at 0, 0, 0 mm
+  Wheel 1      Wheel      free     at 0, 0, 0 mm
+  Wheel 2      Wheel      free     at 60, 0, 0 mm
+Parts:
+  Body         1 step   ok        mass 39.68 g (PLA), 1 in the assembly
+  Wheel        1 step   ok        mass 3.37 g (PLA), 2 in the assembly
+Mass in all: 46.41 g (weighs 0.455 N)
+Balance point: 40, 16.66, 6.02 mm
+wrote car.sb
+```
+
+Pick bodies with `bodies=`. A name that isn't a step says which bodies there
+are:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --save wheel.sb assembly.from_bodies file=toy.sb bodies=Tire
+error [parts.no_such_body]: toy has no step called Tire. Its finished bodies are: Body, Wheel, Wheel2.
+```
+
+It needs a new design, so use `--save` without `--open`:
+
+<!-- cli-example exit=1 -->
+```console
+$ sketchbillet_cli run --open toy.sb assembly.from_bodies file=toy.sb
+error [assembly.not_empty]: toy isn't a new, empty design, so it can't become an assembly. Start a new design for the parts.
 ```
 
 ## component.new

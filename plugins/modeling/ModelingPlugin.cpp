@@ -11,6 +11,7 @@
 #include "sb/kernel/Types.h"
 #include "sb/model/AssemblyCommands.h"
 #include "sb/model/CommandRegistry.h"
+#include "sb/model/PartsFromBodies.h"
 #include "sb/plugin/Actions.h"
 #include "sb/plugin/Events.h"
 #include "sb/plugin/Overlays.h"
@@ -360,6 +361,53 @@ void addAssembleTools(plugin::PluginContext& ctx) {
                              .tip = "Put a copy of a part from a .sb file in the assembly. The copy doesn't "
                                     "change when the file does.",
                              .enabled = [assembly] { return assembly() != nullptr; }});
+    // Make Parts from Bodies: the part's bodies become the parts of a new assembly,
+    // opened in a tab of its own. The part isn't changed.
+    auto bodiesHere = [&ctx]() -> std::size_t {
+        auto& docs = ctx.documents();
+        const auto* doc = docs.find(docs.active());
+        const auto* report = docs.lastRebuild(docs.active());
+        if (!doc || !report || doc->kind() != model::DocKind::Part) return 0;
+        return report->bodies().size();
+    };
+    ctx.addAction(ActionSpec{
+        .id = "sb.modeling.parts_from_bodies",
+        .text = "Make Parts from Bodies",
+        .menu = "Model/Make",
+        .toolbar = true,
+        .buttonText = "Make parts",
+        .icon = std::string(icons::modeling::parts_from_bodies_svg),
+        .tip = "Make a new assembly with one part for each body (or each picked body), each where it was, "
+               "ready to join with joints. A body and its linked copies become one part. This design isn't "
+               "changed.",
+        .run =
+            [&ctx] {
+                auto& docs = ctx.documents();
+                const DocId from = docs.active();
+                const auto* design = docs.find(from);
+                if (!design) return;
+                // The picked bodies, if any are picked; otherwise all of them.
+                std::vector<FeatureId> bodies;
+                const auto finished = model::finishedBodySteps(*design);
+                if (ctx.selection().doc() == from) {
+                    for (const auto& id : ctx.selection().features())
+                        if (std::find(finished.begin(), finished.end(), id) != finished.end())
+                            bodies.push_back(id);
+                }
+                auto made = model::partsFromBodies(*design, bodies);
+                if (!made.problems.empty()) {
+                    ctx.log(made.problems.front().message);
+                    return;
+                }
+                const DocId to = docs.add(
+                    std::make_unique<model::Document>(model::DocKind::Part, design->name() + " assembly"));
+                docs.setActive(to);
+                if (auto problems = docs.execute(
+                        to, std::make_unique<model::MakePartsFromBodiesCommand>(std::move(made.parts)));
+                    !problems.empty())
+                    ctx.log(problems.front().message);
+            },
+        .enabled = [bodiesHere] { return bodiesHere() >= 2; }});
     ctx.addAction(ActionSpec{.id = "sb.modeling.new_part",
                              .text = "New part",
                              .menu = "Assemble/Insert",

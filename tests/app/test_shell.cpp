@@ -283,11 +283,11 @@ TEST_CASE("every toolbar button has a picture", "[app][icons]") {
             !b->objectName().endsWith(QStringLiteral(".primary")))
             CHECK(b->toolButtonStyle() == Qt::ToolButtonTextUnderIcon);
     }
-    // The top row (5), Import, Export and Check print (3), sb.modeling (15 on Model,
+    // The top row (5), Import, Export and Check print (3), sb.modeling (16 on Model,
     // 14 on Assemble), sb.sketcher (2 on Model, 1 main, 5 drawing, 3 editing, 5
     // constraints), View options (1), the grid (2), the axes (2), the feature tree and
     // Properties panels (2), and Save and Reset layout (2).
-    CHECK(buttons == 5 + 3 + 15 + 14 + 16 + 1 + 2 + 2 + 2 + 2);
+    CHECK(buttons == 5 + 3 + 16 + 14 + 16 + 1 + 2 + 2 + 2 + 2);
     // The dropdown item shows the same picture as its button.
     CHECK_FALSE(app.shell->action("sb.modeling.box")->icon().isNull());
 }
@@ -4649,6 +4649,66 @@ TEST_CASE("a body kept for reference is drawn see-through and marked in the tree
     app.click("sb.modeling.make_body");
     CHECK_FALSE(app.doc().find(cyl)->reference());
     CHECK(app.tree()->topLevelItem(1)->text(2) == QStringLiteral("ok"));
+}
+
+TEST_CASE("Make Parts from Bodies opens a new assembly with a part for each body",
+          "[app][parts_from_bodies]") {
+    App app;
+    auto& docs = app.host.documents();
+    const DocId toy = app.shell->activeDesign();
+    auto* action = app.shell->action("sb.modeling.parts_from_bodies");
+    REQUIRE(action);
+    REQUIRE(
+        docs.run(toy, "feature.add_box", {{"size", kernel::Vec3{80, 40, 10}}, {"name", std::string("Body")}})
+            .empty());
+    settle();
+    CHECK_FALSE(action->isEnabled());  // one body: nothing to split
+    REQUIRE(docs.run(toy, "feature.add_cylinder",
+                     {{"radius", 12.0},
+                      {"height", 6.0},
+                      {"base", kernel::Vec3{10, 0, 12}},
+                      {"axis", kernel::Vec3{0, -1, 0}},
+                      {"name", std::string("Wheel")}})
+                .empty());
+    const auto wheel = app.doc().featureAt(1).id();
+    REQUIRE(
+        docs.run(toy, "feature.add_move", {{"body", wheel}, {"copy", true}, {"by", kernel::Vec3{60, 0, 0}}})
+            .empty());
+    settle();
+    REQUIRE(action->isEnabled());
+
+    action->trigger();
+    settle();
+    const DocId car = app.shell->activeDesign();
+    REQUIRE(car != toy);
+    const auto& assembly = *docs.find(car);
+    CHECK(assembly.name() == "Untitled assembly");
+    REQUIRE(assembly.kind() == model::DocKind::Assembly);
+    CHECK(assembly.parts().size() == 2);
+    REQUIRE(assembly.components().size() == 3);
+    CHECK(assembly.components()[0].name == "Body 1");
+    CHECK(assembly.components()[2].name == "Wheel 2");
+    CHECK(assembly.components()[2].placement.origin.x == Approx(60));
+    CHECK(designTabs(app)->count() == 2);
+    CHECK(designTabs(app)
+              ->tabText(designTabs(app)->currentIndex())
+              .startsWith(QStringLiteral("Untitled assembly")));
+    CHECK(docs.find(toy)->featureCount() == 3);  // the part isn't changed
+    CHECK_FALSE(action->isEnabled());            // an assembly has no bodies of its own
+    // Undo in the new assembly leaves it empty.
+    REQUIRE(docs.undo(car));
+    CHECK(docs.find(car)->components().empty());
+
+    // With bodies picked, just those.
+    docs.setActive(toy);
+    settle();
+    app.host.selection().set(toy, {wheel});
+    action->trigger();
+    settle();
+    const auto& wheels = *docs.find(app.shell->activeDesign());
+    REQUIRE(wheels.parts().size() == 1);
+    CHECK(wheels.parts().front()->name() == "Wheel");
+    CHECK(wheels.components().size() == 1);  // its copy wasn't picked
 }
 
 TEST_CASE("Properties shows a body's material, mass and cost, and picks a material", "[app][material]") {
