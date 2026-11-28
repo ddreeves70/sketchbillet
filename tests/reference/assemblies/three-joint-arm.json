@@ -1,0 +1,105 @@
+{
+  "title": "Three-joint arm",
+  "about": "A planar arm: a base and three links, each 50 mm long with a hole at each end, 40 mm apart. Each link turns on the one before on a revolute joint whose sides are the holes' rims, so each sits on top of the last, 4 mm higher.",
+  "numbers": {
+    "B": 30,
+    "hb": 10,
+    "r": 2,
+    "L": 50,
+    "w": 10,
+    "t": 4,
+    "n": 5,
+    "p": 40,
+    "a1": 30,
+    "a2": 45,
+    "a3": -60
+  },
+  "commands": [
+    "run --save Base.sb feature.add_box size=30,30,10 corner=-15,-15,0 name=Block",
+    "run --open Base.sb --save Base.sb feature.add_cylinder radius=2 height=10 name=PivotHole",
+    "run --open Base.sb --save Base.sb feature.add_boolean operation=cut a=Block b=PivotHole name=Base",
+    "run --save Link.sb feature.add_box size=50,10,4 corner=0,-5,0 name=Bar",
+    "run --open Link.sb --save Link.sb feature.add_cylinder radius=2 height=4 base=5,0,0 name=NearHole",
+    "run --open Link.sb --save Link.sb feature.add_cylinder radius=2 height=4 base=45,0,0 name=FarHole",
+    "run --open Link.sb --save Link.sb feature.add_boolean operation=cut a=Bar b=NearHole name=Near",
+    "run --open Link.sb --save Link.sb feature.add_boolean operation=cut a=Near b=FarHole name=Link",
+    "run --save Arm.sb assembly.new",
+    "run --open Arm.sb --save Arm.sb component.insert file=Base.sb",
+    "run --open Arm.sb --save Arm.sb component.insert file=Link.sb count=3 at=0,40,0 step=0,20,0",
+    "run --open Arm.sb --save Arm.sb joint.add kind=revolute \"a=Base 1:edge:13\" \"b=Link 1:edge:3\" name=Shoulder value=30",
+    "run --open Arm.sb --save Arm.sb joint.add kind=revolute \"a=Link 1:edge:16\" \"b=Link 2:edge:3\" name=Elbow value=45",
+    "run --open Arm.sb --save Arm.sb joint.add kind=revolute \"a=Link 2:edge:16\" \"b=Link 3:edge:3\" name=Wrist value=-60"
+  ],
+  "assembly": "Arm.sb",
+  "expect": {
+    "components": {
+      "Base 1": {
+        "at": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "Link 1": {
+        "at": [
+          "0 - n*cos(radians(a1))",
+          "0 - n*sin(radians(a1))",
+          "hb"
+        ],
+        "x": [
+          "cos(radians(a1))",
+          "sin(radians(a1))",
+          "0"
+        ],
+        "z": [
+          "0",
+          "0",
+          "1"
+        ]
+      },
+      "Link 2": {
+        "at": [
+          "p*cos(radians(a1)) - n*cos(radians(a1+a2))",
+          "p*sin(radians(a1)) - n*sin(radians(a1+a2))",
+          "hb + t"
+        ],
+        "x": [
+          "cos(radians(a1+a2))",
+          "sin(radians(a1+a2))",
+          "0"
+        ],
+        "z": [
+          "0",
+          "0",
+          "1"
+        ]
+      },
+      "Link 3": {
+        "at": [
+          "p*cos(radians(a1)) + p*cos(radians(a1+a2)) - n*cos(radians(a1+a2+a3))",
+          "p*sin(radians(a1)) + p*sin(radians(a1+a2)) - n*sin(radians(a1+a2+a3))",
+          "hb + 2*t"
+        ],
+        "x": [
+          "cos(radians(a1+a2+a3))",
+          "sin(radians(a1+a2+a3))",
+          "0"
+        ],
+        "z": [
+          "0",
+          "0",
+          "1"
+        ]
+      }
+    },
+    "mass": "rho*(B*B*hb - pi*r**2*hb + 3*(L*w*t - 2*pi*r**2*t))",
+    "overlaps": []
+  },
+  "change": {
+    "command": "run --open Arm.sb --save Arm.sb joint.set joint=Elbow value=-90",
+    "numbers": {
+      "a2": -90
+    },
+    "about": "bend the elbow back 90 degrees: the second and third links swing round the elbow, and the third keeps its angle to the second."
+  }
+}

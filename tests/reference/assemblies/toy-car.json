@@ -1,0 +1,172 @@
+{
+  "title": "Toy car",
+  "about": "Tutorial 10's car: a body with two axle holes, two axles that turn in them on revolute joints (flipped into the holes, 7 mm out), and four wheels held on the axle ends by rigid joints.",
+  "numbers": {
+    "L": 80,
+    "W": 40,
+    "H": 10,
+    "rh": 1.75,
+    "xf": 15,
+    "xb": 65,
+    "ra": 1.5,
+    "la": 54,
+    "R": 12,
+    "T": 6,
+    "off": 7,
+    "a": 0
+  },
+  "commands": [
+    "run --save Body.sb feature.add_box size=80,40,10 name=Chassis",
+    "run --open Body.sb --save Body.sb feature.add_cylinder radius=1.75 height=40 base=15,0,5 axis=0,1,0 name=FrontHole",
+    "run --open Body.sb --save Body.sb feature.add_cylinder radius=1.75 height=40 base=65,0,5 axis=0,1,0 name=BackHole",
+    "run --open Body.sb --save Body.sb feature.add_boolean operation=cut a=Chassis b=FrontHole name=Front",
+    "run --open Body.sb --save Body.sb feature.add_boolean operation=cut a=Front b=BackHole name=Body",
+    "run --save Axle.sb feature.add_cylinder radius=1.5 height=54 name=Axle",
+    "run --save Wheel.sb feature.add_cylinder radius=12 height=6 name=Tire",
+    "run --open Wheel.sb --save Wheel.sb feature.add_cylinder radius=1.5 height=6 name=AxleHole",
+    "run --open Wheel.sb --save Wheel.sb feature.add_boolean operation=cut a=Tire b=AxleHole name=Wheel",
+    "run --save Car.sb assembly.new",
+    "run --open Car.sb --save Car.sb component.insert file=Body.sb",
+    "run --open Car.sb --save Car.sb component.insert file=Axle.sb count=2 at=0,60,0 step=20,0,0",
+    "run --open Car.sb --save Car.sb component.insert file=Wheel.sb count=4 at=0,-40,0 step=30,0,0",
+    "run --open Car.sb --save Car.sb joint.add kind=revolute \"a=Body 1:edge:6\" \"b=Axle 1:edge:1\" flip=true offset=7 name=FrontAxle",
+    "run --open Car.sb --save Car.sb joint.add kind=revolute \"a=Body 1:edge:7\" \"b=Axle 2:edge:1\" flip=true offset=7 name=BackAxle",
+    "run --open Car.sb --save Car.sb joint.add kind=rigid \"a=Axle 1:edge:1\" \"b=Wheel 1:edge:1\" flip=true",
+    "run --open Car.sb --save Car.sb joint.add kind=rigid \"a=Axle 1:edge:3\" \"b=Wheel 2:edge:1\" flip=true",
+    "run --open Car.sb --save Car.sb joint.add kind=rigid \"a=Axle 2:edge:1\" \"b=Wheel 3:edge:1\" flip=true",
+    "run --open Car.sb --save Car.sb joint.add kind=rigid \"a=Axle 2:edge:3\" \"b=Wheel 4:edge:1\" flip=true"
+  ],
+  "assembly": "Car.sb",
+  "expect": {
+    "components": {
+      "Body 1": {
+        "at": [
+          "0",
+          "0",
+          "0"
+        ],
+        "x": [
+          "1",
+          "0",
+          "0"
+        ],
+        "z": [
+          "0",
+          "0",
+          "1"
+        ]
+      },
+      "Axle 1": {
+        "at": [
+          "xf",
+          "-off",
+          "H/2"
+        ],
+        "x": [
+          "cos(radians(a))",
+          "0",
+          "sin(radians(a))"
+        ],
+        "z": [
+          "0",
+          "1",
+          "0"
+        ]
+      },
+      "Axle 2": {
+        "at": [
+          "xb",
+          "-off",
+          "H/2"
+        ],
+        "x": [
+          "1",
+          "0",
+          "0"
+        ],
+        "z": [
+          "0",
+          "1",
+          "0"
+        ]
+      },
+      "Wheel 1": {
+        "at": [
+          "xf",
+          "-off",
+          "H/2"
+        ],
+        "x": [
+          "cos(radians(a))",
+          "0",
+          "sin(radians(a))"
+        ],
+        "z": [
+          "0",
+          "1",
+          "0"
+        ]
+      },
+      "Wheel 2": {
+        "at": [
+          "xf",
+          "la-off",
+          "H/2"
+        ],
+        "x": [
+          "cos(radians(a))",
+          "0",
+          "sin(radians(a))"
+        ],
+        "z": [
+          "0",
+          "-1",
+          "0"
+        ]
+      },
+      "Wheel 3": {
+        "at": [
+          "xb",
+          "-off",
+          "H/2"
+        ],
+        "x": [
+          "1",
+          "0",
+          "0"
+        ],
+        "z": [
+          "0",
+          "1",
+          "0"
+        ]
+      },
+      "Wheel 4": {
+        "at": [
+          "xb",
+          "la-off",
+          "H/2"
+        ],
+        "x": [
+          "1",
+          "0",
+          "0"
+        ],
+        "z": [
+          "0",
+          "-1",
+          "0"
+        ]
+      }
+    },
+    "mass": "rho*(L*W*H - 2*pi*rh**2*W + 2*pi*ra**2*la + 4*pi*(R**2 - ra**2)*T)",
+    "overlaps": []
+  },
+  "change": {
+    "command": "run --open Car.sb --save Car.sb joint.set joint=FrontAxle value=50",
+    "numbers": {
+      "a": 50
+    },
+    "about": "turn the front axle 50 degrees: its wheels turn with it, about the axle, and stay where they are."
+  }
+}

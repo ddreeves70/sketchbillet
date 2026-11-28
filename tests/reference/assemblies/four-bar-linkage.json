@@ -1,0 +1,111 @@
+{
+  "title": "Four-bar linkage",
+  "about": "A parallelogram four-bar: a ground with two pivots 60 mm apart, a crank and a rocker 30 mm long (two of one part), and a coupler 60 mm long. Its fourth joint makes a loop. At the start the loop's sides meet, so nothing warns; turn the crank alone and they don't, so the loop joint warns how far apart they are, and moves nothing.",
+  "numbers": {
+    "d": 60,
+    "a": 30,
+    "b": 60,
+    "n": 5,
+    "hg": 10,
+    "t": 4,
+    "r": 2,
+    "q": 60,
+    "rk": 60,
+    "Lg": 80,
+    "wg": 20,
+    "La": 40,
+    "Lb": 70,
+    "w": 10
+  },
+  "commands": [
+    "run --save Ground.sb feature.add_box size=80,20,10 corner=-10,-10,0 name=Block",
+    "run --open Ground.sb --save Ground.sb feature.add_cylinder radius=2 height=10 name=HoleA",
+    "run --open Ground.sb --save Ground.sb feature.add_cylinder radius=2 height=10 base=60,0,0 name=HoleD",
+    "run --open Ground.sb --save Ground.sb feature.add_boolean operation=cut a=Block b=HoleA name=CutA",
+    "run --open Ground.sb --save Ground.sb feature.add_boolean operation=cut a=CutA b=HoleD name=Ground",
+    "run --save Crank.sb feature.add_box size=40,10,4 corner=0,-5,0 name=Bar",
+    "run --open Crank.sb --save Crank.sb feature.add_cylinder radius=2 height=4 base=5,0,0 name=NearHole",
+    "run --open Crank.sb --save Crank.sb feature.add_cylinder radius=2 height=4 base=35,0,0 name=FarHole",
+    "run --open Crank.sb --save Crank.sb feature.add_boolean operation=cut a=Bar b=NearHole name=Near",
+    "run --open Crank.sb --save Crank.sb feature.add_boolean operation=cut a=Near b=FarHole name=Crank",
+    "run --save Coupler.sb feature.add_box size=70,10,4 corner=0,-5,0 name=Bar",
+    "run --open Coupler.sb --save Coupler.sb feature.add_cylinder radius=2 height=4 base=5,0,0 name=NearHole",
+    "run --open Coupler.sb --save Coupler.sb feature.add_cylinder radius=2 height=4 base=65,0,0 name=FarHole",
+    "run --open Coupler.sb --save Coupler.sb feature.add_boolean operation=cut a=Bar b=NearHole name=Near",
+    "run --open Coupler.sb --save Coupler.sb feature.add_boolean operation=cut a=Near b=FarHole name=Coupler",
+    "run --save Linkage.sb assembly.new",
+    "run --open Linkage.sb --save Linkage.sb component.insert file=Ground.sb",
+    "run --open Linkage.sb --save Linkage.sb component.insert file=Crank.sb count=2 at=0,40,0 step=0,20,0",
+    "run --open Linkage.sb --save Linkage.sb component.insert file=Coupler.sb at=0,90,0",
+    "run --open Linkage.sb --save Linkage.sb joint.add kind=revolute \"a=Ground 1:edge:15\" \"b=Crank 1:edge:3\" name=Crank value=60",
+    "run --open Linkage.sb --save Linkage.sb joint.add kind=revolute \"a=Ground 1:edge:16\" \"b=Crank 2:edge:3\" name=Rocker value=60",
+    "run --open Linkage.sb --save Linkage.sb joint.add kind=revolute \"a=Crank 1:edge:16\" \"b=Coupler 1:edge:3\" name=Coupler value=-60",
+    "run --open Linkage.sb --save Linkage.sb joint.add kind=revolute \"a=Crank 2:edge:16\" \"b=Coupler 1:edge:4\" name=Loop"
+  ],
+  "assembly": "Linkage.sb",
+  "expect": {
+    "components": {
+      "Ground 1": {
+        "at": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "Crank 1": {
+        "at": [
+          "-n*cos(radians(q))",
+          "-n*sin(radians(q))",
+          "hg"
+        ],
+        "x": [
+          "cos(radians(q))",
+          "sin(radians(q))",
+          "0"
+        ]
+      },
+      "Crank 2": {
+        "at": [
+          "d - n*cos(radians(rk))",
+          "-n*sin(radians(rk))",
+          "hg"
+        ],
+        "x": [
+          "cos(radians(rk))",
+          "sin(radians(rk))",
+          "0"
+        ]
+      },
+      "Coupler 1": {
+        "at": [
+          "a*cos(radians(q)) - n*cos(radians(q-rk))",
+          "a*sin(radians(q)) - n*sin(radians(q-rk))",
+          "hg + t"
+        ],
+        "x": [
+          "cos(radians(q-rk))",
+          "sin(radians(q-rk))",
+          "0"
+        ]
+      }
+    },
+    "mass": "rho*(Lg*wg*hg - 2*pi*r**2*hg + 2*(La*w*t - 2*pi*r**2*t) + (Lb*w*t - 2*pi*r**2*t))",
+    "overlaps": [],
+    "warnings": []
+  },
+  "change": {
+    "command": "run --open Linkage.sb --save Linkage.sb joint.set joint=Crank value=90",
+    "numbers": {
+      "q": 90
+    },
+    "expect": {
+      "warnings": [
+        {
+          "code": "joint.loop",
+          "apart": "sqrt((a*cos(radians(q)) + b*cos(radians(q-rk)) - d - a*cos(radians(rk)))**2 + (a*sin(radians(q)) + b*sin(radians(q-rk)) - a*sin(radians(rk)))**2)"
+        }
+      ]
+    },
+    "about": "turn only the crank, to 90 degrees: the coupler turns with it, and its far end leaves the rocker's, so the loop warns how far apart they are."
+  }
+}

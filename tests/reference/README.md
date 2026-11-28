@@ -73,3 +73,55 @@ Then work every formula out by hand, never from SketchBillet's own output, run
 `cmake --preset <preset>` so CTest picks up a new file, rewrite the gallery with
 `python3 tools/reference/check_parts.py --gallery docs/user-guide/reference-parts.md --write`,
 and make the picture with `tools/docs/make_images.py ... ref-my-part`.
+
+# Reference assemblies
+
+Phase 4's test: assemblies in `assemblies/`, each built from scratch and checked
+against values worked out by hand. CTest runs each one as
+`reference.assembly.<name>` through `tools/reference/check_assemblies.py`, which:
+
+1. runs its `commands` with `sketchbillet_cli`, in a folder of their own: each
+   part's file, then the assembly. A command that fails, or a step that doesn't
+   build, fails it;
+2. lists the assembly with `open --components` and checks each component's
+   place (`at`, mm) and which way its x and z face, the mass in all (g), and
+   the warnings (a loop whose sides are some mm apart);
+3. runs `check` and compares the overlapping pairs, and how much they overlap;
+4. makes the `change`, and checks everything again with the changed numbers.
+
+| Assembly | What it shows |
+| --- | --- |
+| `toy-car` | Tutorial 10: revolute axles flipped into holes with an offset, rigid wheels; turning an axle turns its wheels |
+| `hinged-box` | Tutorial 11: parts made from bodies, a rigid pin, a hinge with limits; the lid's place as it turns about a line away from its origin |
+| `three-joint-arm` | Three revolute joints in a chain: each link's place adds the angles before it |
+| `four-bar-linkage` | A loop: its sides meet at the start (no warning), and after the crank alone turns they're a worked-out distance apart |
+
+## File format
+
+```json
+{
+  "title": "Toy car",
+  "about": "What it is and what it shows.",
+  "numbers": {"xf": 15, "off": 7, "a": 0},  // the sizes and angles the formulas use (mm, degrees)
+  "commands": ["run --save Body.sb feature.add_box size=80,40,10", "..."],  // sketchbillet_cli arguments
+  "assembly": "Car.sb",
+  "expect": {
+    "components": {"Axle 1": {"at": ["xf", "-off", "H/2"], "x": ["cos(radians(a))", "0", "sin(radians(a))"], "z": ["0", "1", "0"]}},
+    "mass": "rho*(...)",                     // grams; rho is PLA's 1.24e-3 g/mm^3
+    "overlaps": [{"between": ["Base 1", "Lid 1"], "volume": "..."}],  // or [] for none
+    "warnings": [{"code": "joint.loop", "apart": "..."}]             // or [] (the default)
+  },
+  "change": {
+    "command": "run --open Car.sb --save Car.sb joint.set joint=FrontAxle value=50",
+    "numbers": {"a": 50},                   // the numbers that change
+    "expect": {"warnings": ["..."]},       // anything expected that changes too (optional)
+    "about": "What the change does."
+  }
+}
+```
+
+The formulas use the same helpers as the reference parts. Work them out from the
+design, never from SketchBillet's output. Positions, masses and gaps are checked to
+the 2 decimals `sketchbillet_cli` prints, directions to its 3 significant digits.
+`tools/reference/test_check_assemblies.py` (`reference.assembly_checker`) checks how
+the output is read.
