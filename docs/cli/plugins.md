@@ -40,6 +40,7 @@ Only the built-in plugins:
 $ sketchbillet_cli plugins
 loaded   sb.modeling 0.1.0  Modeling (built in)
            tier    foundation
+           command assembly.from_bodies
            command assembly.new
            command component.add
            command component.delete
@@ -148,6 +149,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            action  Model/Steps > Delete step  (feature.delete)
            action  Assemble/Insert > Insert part  (component.insert)
            action  Assemble/Insert > Insert copy  (component.insert)
+           action  Model/Make > Make Parts from Bodies  (runs plugin code)
            action  Assemble/Insert > New part  (component.new)
            action  Assemble/Insert > Add another  (runs plugin code)
            action  Assemble/Component > Ground  (check mark)
@@ -179,6 +181,7 @@ loaded   example.tape 1.0.0  Tape
            log: A 25.4 mm box is 1.00 in long.
 loaded   sb.modeling 0.1.0  Modeling (built in)
            tier    foundation
+           command assembly.from_bodies
            command assembly.new
            command component.add
            command component.delete
@@ -287,6 +290,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            action  Model/Steps > Delete step  (feature.delete)
            action  Assemble/Insert > Insert part  (component.insert)
            action  Assemble/Insert > Insert copy  (component.insert)
+           action  Model/Make > Make Parts from Bodies  (runs plugin code)
            action  Assemble/Insert > New part  (component.new)
            action  Assemble/Insert > Add another  (runs plugin code)
            action  Assemble/Component > Ground  (check mark)
@@ -323,7 +327,7 @@ failed   test.badname 1.0.0  Test badname
 failed   test.noentry 1.0.0  Test noentry
            error [plugin.library_bad]: The Test noentry plugin's program file isn't a SketchBillet plugin (it has no SB_PLUGIN_ENTRY). Ask its author for a fixed version. (...)
 failed   test.oldapi 1.0.0  Test oldapi
-           error [plugin.api_version]: The Test oldapi plugin was built for a different version of SketchBillet (plugin API 0; this SketchBillet uses 74). Get a version of the plugin made for this SketchBillet. (...)
+           error [plugin.api_version]: The Test oldapi plugin was built for a different version of SketchBillet (plugin API 0; this SketchBillet uses 75). Get a version of the plugin made for this SketchBillet. (...)
 ```
 
 Every reason and its fix is listed in the plugin guide's

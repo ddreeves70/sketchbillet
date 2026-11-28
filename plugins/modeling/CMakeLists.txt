@@ -12,4 +12,5 @@ sb_embed_files(sb_plugin_modeling HEADER ModelingIcons.h NAMESPACE sb::icons::mo
         icons/fillet.svg icons/chamfer.svg icons/revolve.svg icons/hole.svg icons/pattern-linear.svg icons/pattern-circular.svg icons/mirror.svg icons/shell.svg icons/pick-edges.svg
         icons/insert-part.svg icons/insert-copy.svg icons/new-part.svg icons/add-component.svg icons/ground.svg
         icons/delete-component.svg icons/update-links.svg icons/find-file.svg icons/make-inside.svg icons/save-part.svg
-        icons/edit-part.svg icons/open-part.svg icons/reset-joints.svg icons/joint.svg icons/explode.svg icons/explode-step.svg)
+        icons/edit-part.svg icons/open-part.svg icons/reset-joints.svg icons/joint.svg icons/explode.svg icons/explode-step.svg
+        icons/parts-from-bodies.svg)

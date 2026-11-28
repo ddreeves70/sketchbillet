@@ -18,6 +18,7 @@ sketchbillet_cli help [--plugins <folder>]... [<command>]
 ```console
 $ sketchbillet_cli help
 Commands for sketchbillet_cli run:
+  assembly.from_bodies     Make parts from bodies
   assembly.new             Make assembly
   component.add            Add components
   component.delete         Delete component

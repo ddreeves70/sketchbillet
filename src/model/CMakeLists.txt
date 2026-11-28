@@ -18,6 +18,7 @@ sb_add_library(sb_model
     Import.cpp
     Joints.cpp
     AssemblyMass.cpp
+    PartsFromBodies.cpp
     PartsList.cpp
     Overlaps.cpp
   DEPS

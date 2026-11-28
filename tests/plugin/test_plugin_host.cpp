@@ -87,7 +87,8 @@ TEST_CASE("sb.modeling loads and its commands work", "[plugin][host]") {
     const auto& modeling = get(host, "sb.modeling");
     CHECK(modeling.state == PluginState::Loaded);
     CHECK(modeling.builtin);
-    CHECK(modeling.commands == std::vector<std::string>{"assembly.new",
+    CHECK(modeling.commands == std::vector<std::string>{"assembly.from_bodies",
+                                                        "assembly.new",
                                                         "component.add",
                                                         "component.delete",
                                                         "component.ground",
@@ -422,6 +423,7 @@ TEST_CASE("sb.modeling adds menu items that run its commands", "[plugin][host]")
                                           "sb.modeling.delete",
                                           "sb.modeling.insert_part",
                                           "sb.modeling.insert_copy",
+                                          "sb.modeling.parts_from_bodies",
                                           "sb.modeling.new_part",
                                           "sb.modeling.add_component",
                                           "sb.modeling.ground",

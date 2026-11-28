@@ -28,7 +28,7 @@ This page covers what the student gets, in the order it gets built:
 | 6. Checks | Parts that overlap, the whole assembly's mass and balance point, measuring between parts | Built |
 | 7. Exploded views | Parts pulled apart to show how they fit, for pictures and drawings | Built (drawing views come with drawings) |
 | 8. Parts list | How many of each part, with material and mass, for printing and drawings | Built: the list, CSV, 3MF and STEP export, in the app and the command line |
-| 9. Parts from bodies | A part with several bodies turned into an assembly (copy-and-group's "groups that move together") | Planned |
+| 9. Parts from bodies | A part with several bodies turned into an assembly (copy-and-group's "groups that move together") | Built: reference bodies, then Make Parts from Bodies |
 
 ## Words
 
@@ -608,7 +608,18 @@ Each line is one pull request, in this order:
      `bodies()`, so mass, export, printing, the parts list and overlap checks
      leave them out. The view draws them see-through with their edges, and
      their faces can still be picked; an assembly doesn't draw them.
-   - Next: Make Parts from Bodies itself.
+   - **Make Parts from Bodies** (built, Nov 28, 2026): `model::partsFromBodies()`
+     makes one part per finished body (`finishedBodySteps()`, worked out from
+     the steps, so a command can do it without building), copying its steps
+     with `copySteps()`, the design's parameters, own materials and unit; other
+     bodies the copied steps leave as finished bodies are kept for reference. A
+     linked copy of a picked body is another component of that body's part, at
+     the copies' moves composed (`kernel::fromMotion()`).
+     `MakePartsFromBodiesCommand` makes a new, empty design the assembly as one
+     undo step. `assembly.from_bodies file= bodies=` (in sb_io, as it reads the
+     file), and **Model > Make > Make parts**, which opens the assembly in a new
+     tab and leaves the part alone. Plugin API 75.
+   - Next: the guides and tutorials (step 10).
 10. **Guides:** user's guide pages for each piece as it's built, and two
     tutorials, a toy car whose wheels turn and a box with a hinged lid.
 

@@ -492,6 +492,7 @@ the design that's showing. Opening a design starts a fresh history.
 | File > Save as... | Ctrl+Shift+S | Saves under a new name |
 | File > Close | Ctrl+W | Closes the design that's showing |
 | File > Export... | Ctrl+E | Writes the part as STL or 3MF (for 3D printing) or STEP (for other CAD programs); an assembly as 3MF or STEP |
+| Model > Make > Make parts | | Turns the part's bodies into a new assembly, one part for each, each where it was (see [Making parts from bodies](assemblies.md#making-parts-from-bodies)) |
 | File > Check for Printing... | Ctrl+Shift+P | Checks the part is closed all round and has no wall too thin to print (see [Getting ready to print](printing.md)) |
 
 A `*` after the name in the title bar, and on the design's tab, means there are
