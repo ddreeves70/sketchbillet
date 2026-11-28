@@ -826,6 +826,119 @@
       "crop": [0, 0, 1280, 685]
     },
     {
+      "out": "docs/tutorials/images/car-done.png",
+      "size": "1280x800",
+      "commands": [
+        "run --save Body.sb feature.add_box size=80,40,10 name=Chassis",
+        "run --open Body.sb --save Body.sb feature.add_cylinder radius=1.75 height=40 base=15,0,5 axis=0,1,0 name=FrontHole",
+        "run --open Body.sb --save Body.sb feature.add_cylinder radius=1.75 height=40 base=65,0,5 axis=0,1,0 name=BackHole",
+        "run --open Body.sb --save Body.sb feature.add_boolean operation=cut a=Chassis b=FrontHole name=Front",
+        "run --open Body.sb --save Body.sb feature.add_boolean operation=cut a=Front b=BackHole name=Body",
+        "run --save Axle.sb feature.add_cylinder radius=1.5 height=54 name=Axle",
+        "run --save Wheel.sb feature.add_cylinder radius=12 height=6 name=Tire",
+        "run --open Wheel.sb --save Wheel.sb feature.add_cylinder radius=1.5 height=6 name=AxleHole",
+        "run --open Wheel.sb --save Wheel.sb feature.add_boolean operation=cut a=Tire b=AxleHole name=Wheel",
+        "run --open Wheel.sb --save Wheel.sb feature.set_color feature=Wheel color=#3a3f47",
+        "run --open Axle.sb --save Axle.sb feature.set_color feature=Axle color=#d9a441",
+        "run --save Car.sb assembly.new",
+        "run --open Car.sb --save Car.sb component.insert file=Body.sb",
+        "run --open Car.sb --save Car.sb component.insert file=Axle.sb count=2 at=0,60,0 step=20,0,0",
+        "run --open Car.sb --save Car.sb component.insert file=Wheel.sb count=4 at=0,-40,0 step=30,0,0",
+        "run --open Car.sb --save Car.sb joint.add kind=revolute \"a=Body 1:edge:6\" \"b=Axle 1:edge:1\" flip=true offset=7 name=FrontAxle",
+        "run --open Car.sb --save Car.sb joint.add kind=revolute \"a=Body 1:edge:7\" \"b=Axle 2:edge:1\" flip=true offset=7 name=BackAxle",
+        "run --open Car.sb --save Car.sb joint.add kind=rigid \"a=Axle 1:edge:1\" \"b=Wheel 1:edge:1\" flip=true",
+        "run --open Car.sb --save Car.sb joint.add kind=rigid \"a=Axle 1:edge:3\" \"b=Wheel 2:edge:1\" flip=true",
+        "run --open Car.sb --save Car.sb joint.add kind=rigid \"a=Axle 2:edge:1\" \"b=Wheel 3:edge:1\" flip=true",
+        "run --open Car.sb --save Car.sb joint.add kind=rigid \"a=Axle 2:edge:3\" \"b=Wheel 4:edge:1\" flip=true"
+      ],
+      "app": {
+        "open": "Car.sb"
+      },
+      "crop": [
+        0,
+        0,
+        1280,
+        685
+      ]
+    },
+    {
+      "out": "docs/tutorials/images/hinge-bodies.png",
+      "size": "1280x800",
+      "commands": [
+        "run --save box.sb feature.add_box size=60,40,20 name=Tray",
+        "run --open box.sb --save box.sb feature.add_shell body=Tray faces=6 name=Hollow",
+        "run --open box.sb --save box.sb feature.add_box size=56,3,7 corner=2,40,14 name=Mount",
+        "run --open box.sb --save box.sb feature.add_cylinder radius=3 height=60 base=0,43,21 axis=1,0,0 name=Barrel",
+        "run --open box.sb --save box.sb feature.add_boolean operation=union a=Hollow b=Mount name=WithMount",
+        "run --open box.sb --save box.sb feature.add_boolean operation=union a=WithMount b=Barrel name=WithBarrel",
+        "run --open box.sb --save box.sb feature.add_box size=24,7,12 corner=18,40,13 name=Gap",
+        "run --open box.sb --save box.sb feature.add_boolean operation=cut a=WithBarrel b=Gap name=Knuckles",
+        "run --open box.sb --save box.sb feature.add_cylinder radius=1.75 height=60 base=0,43,21 axis=1,0,0 name=TrayPinHole",
+        "run --open box.sb --save box.sb feature.add_boolean operation=cut a=Knuckles b=TrayPinHole name=Base",
+        "run --open box.sb --save box.sb feature.add_box size=60,40,2 corner=0,0,20 name=Plate",
+        "run --open box.sb --save box.sb feature.add_box size=16,3,2 corner=22,40,20 name=Tab",
+        "run --open box.sb --save box.sb feature.add_cylinder radius=3 height=20 base=20,43,21 axis=1,0,0 name=Knuckle",
+        "run --open box.sb --save box.sb feature.add_boolean operation=union a=Plate b=Tab name=PlateTab",
+        "run --open box.sb --save box.sb feature.add_boolean operation=union a=PlateTab b=Knuckle name=LidKnuckle",
+        "run --open box.sb --save box.sb feature.add_cylinder radius=1.75 height=20 base=20,43,21 axis=1,0,0 name=LidPinHole",
+        "run --open box.sb --save box.sb feature.add_boolean operation=cut a=LidKnuckle b=LidPinHole name=Lid",
+        "run --open box.sb --save box.sb feature.add_cylinder radius=1.5 height=60 base=0,43,21 axis=1,0,0 name=Pin",
+        "run --open box.sb --save box.sb feature.set_color feature=Lid color=#e08a2c",
+        "run --open box.sb --save box.sb feature.set_color feature=Pin color=#d9a441"
+      ],
+      "app": {
+        "open": "box.sb"
+      },
+      "crop": [
+        0,
+        0,
+        1280,
+        685
+      ]
+    },
+    {
+      "out": "docs/tutorials/images/hinge-open.png",
+      "size": "1280x800",
+      "commands": [
+        "run --save box.sb feature.add_box size=60,40,20 name=Tray",
+        "run --open box.sb --save box.sb feature.add_shell body=Tray faces=6 name=Hollow",
+        "run --open box.sb --save box.sb feature.add_box size=56,3,7 corner=2,40,14 name=Mount",
+        "run --open box.sb --save box.sb feature.add_cylinder radius=3 height=60 base=0,43,21 axis=1,0,0 name=Barrel",
+        "run --open box.sb --save box.sb feature.add_boolean operation=union a=Hollow b=Mount name=WithMount",
+        "run --open box.sb --save box.sb feature.add_boolean operation=union a=WithMount b=Barrel name=WithBarrel",
+        "run --open box.sb --save box.sb feature.add_box size=24,7,12 corner=18,40,13 name=Gap",
+        "run --open box.sb --save box.sb feature.add_boolean operation=cut a=WithBarrel b=Gap name=Knuckles",
+        "run --open box.sb --save box.sb feature.add_cylinder radius=1.75 height=60 base=0,43,21 axis=1,0,0 name=TrayPinHole",
+        "run --open box.sb --save box.sb feature.add_boolean operation=cut a=Knuckles b=TrayPinHole name=Base",
+        "run --open box.sb --save box.sb feature.add_box size=60,40,2 corner=0,0,20 name=Plate",
+        "run --open box.sb --save box.sb feature.add_box size=16,3,2 corner=22,40,20 name=Tab",
+        "run --open box.sb --save box.sb feature.add_cylinder radius=3 height=20 base=20,43,21 axis=1,0,0 name=Knuckle",
+        "run --open box.sb --save box.sb feature.add_boolean operation=union a=Plate b=Tab name=PlateTab",
+        "run --open box.sb --save box.sb feature.add_boolean operation=union a=PlateTab b=Knuckle name=LidKnuckle",
+        "run --open box.sb --save box.sb feature.add_cylinder radius=1.75 height=20 base=20,43,21 axis=1,0,0 name=LidPinHole",
+        "run --open box.sb --save box.sb feature.add_boolean operation=cut a=LidKnuckle b=LidPinHole name=Lid",
+        "run --open box.sb --save box.sb feature.add_cylinder radius=1.5 height=60 base=0,43,21 axis=1,0,0 name=Pin",
+        "run --open box.sb --save box.sb feature.set_color feature=Lid color=#e08a2c",
+        "run --open box.sb --save box.sb feature.set_color feature=Pin color=#d9a441",
+        "run --save \"Hinged box.sb\" assembly.from_bodies file=box.sb",
+        "run --open \"Hinged box.sb\" --save \"Hinged box.sb\" joint.add kind=rigid \"a=Base 1:edge:59\" \"b=Pin 1:edge:1\" flip=true name=PinJoint",
+        "run --open \"Hinged box.sb\" --save \"Hinged box.sb\" joint.add kind=revolute \"a=Base 1:edge:61\" \"b=Lid 1:edge:22\" offset=2 name=Hinge",
+        "run --open \"Hinged box.sb\" --save \"Hinged box.sb\" joint.set joint=Hinge lowest=-180 highest=0 value=-110"
+      ],
+      "app": {
+        "open": "Hinged box.sb",
+        "select": [
+          "Lid 1"
+        ]
+      },
+      "crop": [
+        0,
+        0,
+        1280,
+        685
+      ]
+    },
+    {
       "out": "docs/user-guide/images/app-parts-list.png",
       "size": "1280x800",
       "commands": [

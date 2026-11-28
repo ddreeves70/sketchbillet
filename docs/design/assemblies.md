@@ -5,7 +5,9 @@
 > step 2 (assembly documents, from the command line) is built (Nov 20, 2026),
 > step 3 (linked parts, from the command line) is built (Nov 20, 2026), and
 > step 4 (assemblies in the app) is built (Nov 23, 2026), and step 5's joints
-> are built from the command line (Nov 23, 2026); the rest isn't yet. Two choices were made on Nov 13, 2026: an
+> are built from the command line (Nov 23, 2026); steps 5 to 10 followed, to
+> the two tutorials (Nov 28, 2026). Still to come: the reference assemblies
+> (see [Tested by](#tested-by)). Two choices were made on Nov 13, 2026: an
 > assembly's parts can live **inside** the assembly file or be **linked** to
 > other files, from the start; and parts move along **chains** of joints first,
 > with loops (like a four-bar linkage) later. Changes to `sb_model`, naming and
@@ -29,6 +31,7 @@ This page covers what the student gets, in the order it gets built:
 | 7. Exploded views | Parts pulled apart to show how they fit, for pictures and drawings | Built (drawing views come with drawings) |
 | 8. Parts list | How many of each part, with material and mass, for printing and drawings | Built: the list, CSV, 3MF and STEP export, in the app and the command line |
 | 9. Parts from bodies | A part with several bodies turned into an assembly (copy-and-group's "groups that move together") | Built: reference bodies, then Make Parts from Bodies |
+| 10. Guides | The user's guide for each piece, and two tutorials | Built: tutorials 10 (toy car) and 11 (hinged box) |
 
 ## Words
 
@@ -619,9 +622,13 @@ Each line is one pull request, in this order:
      undo step. `assembly.from_bodies file= bodies=` (in sb_io, as it reads the
      file), and **Model > Make > Make parts**, which opens the assembly in a new
      tab and leaves the part alone. Plugin API 75.
-   - Next: the guides and tutorials (step 10).
 10. **Guides:** user's guide pages for each piece as it's built, and two
-    tutorials, a toy car whose wheels turn and a box with a hinged lid.
+    tutorials (built, Nov 28, 2026): [Tutorial 10](../tutorials/10-toy-car.md),
+    a toy car whose axles turn in the body (revolute joints, `flip` and
+    `offset`) with wheels fixed on them (rigid joints), checked for overlaps
+    and exported to print; and [Tutorial 11](../tutorials/11-hinged-box.md), a
+    box, lid and pin modeled in one design, made into parts with Make Parts
+    from Bodies, with a hinge whose limits come from the overlap check.
 
 ## Tested by
 

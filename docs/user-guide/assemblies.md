@@ -8,6 +8,10 @@ Each copy of a part in an assembly is a **component**. Four wheels are four
 components, Wheel 1 to Wheel 4, all made from one Wheel part. Change the Wheel
 part and all four change, because they're the same part.
 
+To learn by making one, follow [Tutorial 10](../tutorials/10-toy-car.md) (a
+toy car whose wheels turn) and [Tutorial 11](../tutorials/11-hinged-box.md) (a
+box with a hinged lid).
+
 Start one in the desktop app with **File > New assembly**, or with
 `sketchbillet_cli` (below). While an assembly is open, the **Assemble** tab takes
 the Model tab's place:
