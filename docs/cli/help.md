@@ -50,6 +50,7 @@ Commands for sketchbillet_cli run:
   feature.delete           Delete step
   feature.duplicate        Duplicate step
   feature.import           Import a part
+  feature.reference        Use for reference
   feature.reload_import    Reload import from file
   feature.rename           Rename step
   feature.set_color        Set color

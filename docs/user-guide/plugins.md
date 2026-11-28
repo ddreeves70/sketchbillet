@@ -43,6 +43,7 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            command feature.delete
            command feature.duplicate
            command feature.import
+           command feature.reference
            command feature.reload_import
            command feature.rename
            command feature.set_color
@@ -112,6 +113,8 @@ loaded   sb.modeling 0.1.0  Modeling (built in)
            action  Model/Steps > Duplicate step  (feature.duplicate)
            action  Model/Steps > Turn off  (feature.suppress)
            action  Model/Steps > Turn on  (feature.suppress)
+           action  Model/Steps > Use for reference  (feature.reference)
+           action  Model/Steps > Make a body  (feature.reference)
            action  Model/Steps > New folder  (folder.add)
            action  Model/Steps > Delete step  (feature.delete)
            action  Assemble/Insert > Insert part  (component.insert)

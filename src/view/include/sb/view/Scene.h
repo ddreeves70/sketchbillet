@@ -41,6 +41,10 @@ struct SceneBody {
     /// Drawn faded, and clicking it picks nothing: the rest of an assembly, shown
     /// around a part being edited in it (Edit Part).
     bool context = false;
+    /// Drawn see-through, with its edges, but its faces, edges and points can
+    /// still be picked (to sketch on, or measure): a body kept for reference
+    /// (model::Feature::reference()).
+    bool reference = false;
 };
 
 /// One edge, face or point drawn picked in a view: which body it's on, and its

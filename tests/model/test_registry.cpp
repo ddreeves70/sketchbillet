@@ -64,6 +64,7 @@ TEST_CASE("The built-in registry lists its commands sorted by name", "[model][re
                                               "feature.delete",
                                               "feature.duplicate",
                                               "feature.import",
+                                              "feature.reference",
                                               "feature.reload_import",
                                               "feature.rename",
                                               "feature.set_color",

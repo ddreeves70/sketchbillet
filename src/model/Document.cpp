@@ -852,7 +852,10 @@ RebuildReport Document::regenerate(kernel::IKernel& kernel, sketch::ISketchSolve
     }
 
     for (const auto& id : report.order_) {
-        if (report.shapeOf(id) && !usedAsInput.count(id)) report.bodies_.push_back(id);
+        if (!report.shapeOf(id) || usedAsInput.count(id)) continue;
+        // A body kept for reference is drawn, but isn't one of the design's bodies.
+        const Feature* f = find(id);
+        (f && f->reference() ? report.referenceBodies_ : report.bodies_).push_back(id);
     }
     return report;
 }

@@ -310,7 +310,8 @@ struct ViewWidget::Impl {
     struct Shown {
         std::uint64_t shapeId = 0;  // the ShapeHandle it was made from
         bool ghost = false;
-        bool context = false;  // faded, and not picked: see SceneBody::context
+        bool context = false;    // faded, and not picked: see SceneBody::context
+        bool reference = false;  // see-through, but picked like a body: see SceneBody::reference
         Rgb color;
         Handle(AIS_Shape) object;
         kernel::Placement placement;  // where it's drawn (a component's place)
@@ -827,7 +828,7 @@ void ViewWidget::setContent(const SceneContent& content) {
             auto it = d.shown.find(key);
             if (it != d.shown.end() && it->second.shapeId == body.shape.id() &&
                 it->second.ghost == body.ghost && it->second.context == body.context &&
-                it->second.color == body.color &&
+                it->second.reference == body.reference && it->second.color == body.color &&
                 kernel::samePlacement(it->second.placement, body.placement, 0)) {
                 next.insert(d.shown.extract(it));
                 continue;
@@ -887,7 +888,10 @@ void ViewWidget::setContent(const SceneContent& content) {
                 obj->Attributes()->ShadingAspect()->Aspect()->SetPolygonOffsets(Aspect_POM_Fill, -1.0f,
                                                                                 -2.0f);
             } else {
-                obj->Attributes()->SetFaceBoundaryDraw(d.style == DisplayStyle::ShadedWithEdges);
+                // A reference body: see-through, with its edges, so the parts around it show.
+                if (body.reference) obj->SetTransparency(0.6);
+                obj->Attributes()->SetFaceBoundaryDraw(d.style == DisplayStyle::ShadedWithEdges ||
+                                                       body.reference);
                 obj->Attributes()->SetFaceBoundaryAspect(new Prs3d_LineAspect(kEdges, Aspect_TOL_SOLID, 1.0));
                 // Wireframe lines in the edge color, so they show on the grid.
                 obj->Attributes()->SetWireAspect(new Prs3d_LineAspect(kEdges, Aspect_TOL_SOLID, 1.0));
@@ -895,12 +899,13 @@ void ViewWidget::setContent(const SceneContent& content) {
                 obj->Attributes()->SetUnFreeBoundaryAspect(
                     new Prs3d_LineAspect(kEdges, Aspect_TOL_SOLID, 1.0));
             }
-            const bool see = body.ghost || body.context;  // see-through: always shaded
+            const bool see = body.ghost || body.context || body.reference;  // see-through: always shaded
             const bool wire = !see && d.style == DisplayStyle::Wireframe;
             d.context->Display(obj, wire ? AIS_WireFrame : AIS_Shaded, 0, false);
-            next[key] = {body.shape.id(),    body.ghost, body.context, body.color,       obj,
-                         body.placement,     *shape,     drawn,        std::move(edges), std::move(faces),
-                         std::move(vertices)};
+            next[key] = {body.shape.id(),  body.ghost,       body.context,
+                         body.reference,   body.color,       obj,
+                         body.placement,   *shape,           drawn,
+                         std::move(edges), std::move(faces), std::move(vertices)};
         }
         for (auto& [id, s] : d.shown) d.context->Remove(s.object, false);
         d.shown = std::move(next);

@@ -578,6 +578,7 @@ json featureToJson(const Feature& f) {
     json j{{"id", f.id().toString()}, {"name", f.name()}};
     if (!f.material().empty()) j["material"] = f.material();   // left out when not picked
     if (f.color()) j["color"] = model::colorText(*f.color());  // left out when not picked
+    if (f.reference()) j["reference"] = true;                  // left out for a body
     switch (f.type()) {
         case FeatureType::Box: {
             const auto& b = static_cast<const model::BoxFeature&>(f);
@@ -1891,6 +1892,9 @@ OpenResult readDesign(zip_t* za, const std::string& prefix, std::string_view dis
         // A color that can't be read is left out: the body gets its material's color.
         if (fj->contains("color") && (*fj)["color"].is_string())
             feature->setColor(model::parseColor((*fj)["color"].get<std::string>()));
+        // Anything but true (a damaged value) leaves it a body.
+        if (const auto r = fj->find("reference"); r != fj->end() && r->is_boolean())
+            feature->setReference(r->get<bool>());
 
         // Add through the normal command, so the same checks run as when a
         // student builds the design (unique names, inputs come first).
@@ -2131,6 +2135,8 @@ StepsResult stepsFromText(std::string_view text) {
             f->setMaterial(fj["material"].get<std::string>());
         if (fj.contains("color") && fj["color"].is_string())
             f->setColor(model::parseColor(fj["color"].get<std::string>()));
+        if (const auto r = fj.find("reference"); r != fj.end() && r->is_boolean())
+            f->setReference(r->get<bool>());
         seen.push_back(*id);
         read.push_back(std::move(f));
     }

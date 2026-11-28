@@ -319,6 +319,19 @@ inside part per picked body (with the steps that make it, copied as Copy and
 Paste does), places each where it was, and grounds the first. Then the student
 joins them.
 
+Two choices (decided Nov 27, 2026):
+
+- **A body a part only looks at comes along for reference.** Copying the steps
+  that make the Lid brings every step they use, so a Lid sketched on the Box's
+  top face brings the Box too. In the Lid's part, the Box is kept **for
+  reference** (`Feature::reference()`, `feature.reference`): drawn see-through,
+  so the sketch still finds its face, but with no mass, and left out of exports,
+  the parts list and overlap checks. Reference bodies work in any part too, for
+  a phone a case must fit or an imported motor to mount.
+- **Linked copies become more components of one part.** A body and its linked
+  copies (four wheels made with Linked Copy) become one part with a component
+  for each, placed where each copy is: Wheel x4 in the parts list.
+
 ## File format
 
 An assembly is a `.sb` file whose `manifest.json` has `"kind": "assembly"` and
@@ -588,6 +601,14 @@ Each line is one pull request, in this order:
      writes an assembly too: 3MF put together, or STEP, and refuses STL.
    - Still to come: the parts list table in drawings (Phase 5).
 9. **Make Parts from Bodies.**
+   - **Reference bodies** (built, Nov 27, 2026): `Feature::reference()`, saved
+     as `"reference": true` on a step; `ReferenceFeaturesCommand`
+     (`feature.reference`, **Model > Steps > Use for reference** and **Make a
+     body**). A rebuild lists them in `RebuildReport::referenceBodies()`, not
+     `bodies()`, so mass, export, printing, the parts list and overlap checks
+     leave them out. The view draws them see-through with their edges, and
+     their faces can still be picked; an assembly doesn't draw them.
+   - Next: Make Parts from Bodies itself.
 10. **Guides:** user's guide pages for each piece as it's built, and two
     tutorials, a toy car whose wheels turn and a box with a hinged lid.
 

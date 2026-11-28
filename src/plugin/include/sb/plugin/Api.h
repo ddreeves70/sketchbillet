@@ -207,7 +207,9 @@ class PluginContext;
 /// which a kernel must now provide, and sb/kernel/StepAssembly.h.
 /// Version 73 asks the student for a file to save to
 /// (ui::UiRegistry::askSaveFile(), which the desktop app must now provide).
-inline constexpr int kPluginApiVersion = 73;
+/// Version 74 added bodies kept for reference (model::Feature::reference(),
+/// which changes Feature's layout, and RebuildReport::referenceBodies()).
+inline constexpr int kPluginApiVersion = 74;
 
 /// The function every plugin provides. SketchBillet calls it once, at start, to let the
 /// plugin add its commands and start listening to events.

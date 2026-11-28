@@ -239,6 +239,12 @@ body is drawn in its material's color. A color SketchBillet can't read is left o
 when the design opens. Older versions of SketchBillet skip the key, so they open the
 design with the material's colors.
 
+A step can also have `"reference": true`: its body is kept only for reference
+(see `feature.reference`), drawn see-through, with no mass, and left out of
+exports. A body has no `"reference"` key, and anything but `true` counts as a
+body. Older versions of SketchBillet skip the key, so they open the design with
+the reference body as an ordinary one.
+
 ### materials.json
 
 Only a design that added materials of its own has this file:

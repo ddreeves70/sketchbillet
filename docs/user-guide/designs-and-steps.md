@@ -70,6 +70,42 @@ is finished. A 3D printer prints the finished bodies.
 
 ![Before the cut there are two bodies; after it, one](../tutorials/images/tag-hole.png)
 
+### Reference bodies
+
+Sometimes a body is only there to design around: the phone a case must fit, or
+an [imported](importing.md) motor you're making a mount for. Keep it **for
+reference**, and it's drawn see-through, so you can see your part around it.
+You can still sketch on its faces and measure it, but it isn't one of the
+design's finished bodies: it has no mass, and it isn't exported, printed, listed
+in a parts list or checked for overlaps.
+
+![A tray with a see-through phone, kept for reference, sitting in its pocket](images/app-reference-body.png)
+
+In the desktop app, pick the body and click **Steps > Use for reference** (or
+right-click it in the feature tree). The feature tree says `reference`. **Steps >
+Make a body** changes it back. With `sketchbillet_cli`, use
+[`feature.reference`](../cli/commands.md#featurereference):
+
+<!-- cli-example -->
+```console
+$ sketchbillet_cli run --save case.sb feature.add_box name=Phone size=70,140,8 corner=0,0,12
+case: 1 step
+  Phone        ok  volume 78400.00 mm^3  mass 97.22 g (PLA)
+wrote case.sb
+$ sketchbillet_cli run --open case.sb --save case.sb feature.add_box name=Stand size=80,150,10 corner=-5,-5,0
+case: 2 steps
+  Phone        ok  volume 78400.00 mm^3  mass 97.22 g (PLA)
+  Stand        ok  volume 120000.00 mm^3  mass 148.80 g (PLA)
+wrote case.sb
+$ sketchbillet_cli run --open case.sb --save case.sb feature.reference steps=Phone
+case: 2 steps
+  Phone        ok  volume 78400.00 mm^3  for reference
+  Stand        ok  volume 120000.00 mm^3  mass 148.80 g (PLA)
+wrote case.sb
+```
+
+A step that uses a reference body up, like a union, makes an ordinary body.
+
 ## Changing a design
 
 Every change is a **command**: add a step, rename a step, turn a step off,

@@ -220,6 +220,13 @@ private:
                 if (r) {
                     switch (r->status) {
                         case model::FeatureStatus::Ok:
+                            if (const auto& refs = report->referenceBodies();
+                                std::find(refs.begin(), refs.end(), f.id()) != refs.end()) {
+                                status = tr("reference");
+                                tip =
+                                    tr("Kept for reference: drawn see-through, to sketch on or design "
+                                       "around. It has no mass and isn't exported.\n");
+                            }
                             break;
                         case model::FeatureStatus::Failed:
                             status = tr("failed");
@@ -396,7 +403,8 @@ private:
         item->setText(2, status);
         if (status != tr("ok")) {
             // Grey for steps that are off or rolled back: nothing's wrong with them.
-            const bool quiet = status == tr("off") || status == tr("rolled back");
+            const bool quiet =
+                status == tr("off") || status == tr("rolled back") || status == tr("reference");
             const QColor c =
                 quiet ? palette().color(QPalette::Disabled, QPalette::Text) : QColor(196, 43, 28);
             for (int col = 0; col < 3; ++col) item->setForeground(col, c);
@@ -692,6 +700,17 @@ private:
         if (std::find(steps.begin(), steps.end(), clicked) == steps.end()) steps = {clicked};
         m.addAction(tr("Rename"), this, [this, item] { tree_->editItem(item, 0); });
         addTurn(steps);
+        // Bodies kept for reference, or made bodies again (sketches and planes have no body).
+        const bool bodies = std::all_of(steps.begin(), steps.end(), [&](const auto& id) {
+            const auto* f = design->find(id);
+            return f && f->type() != model::FeatureType::Sketch && f->type() != model::FeatureType::Plane;
+        });
+        if (bodies) {
+            const bool on = std::any_of(steps.begin(), steps.end(),
+                                        [&](const auto& id) { return !design->find(id)->reference(); });
+            m.addAction(on ? tr("Use for reference") : tr("Make a body"), this,
+                        [run, steps, on] { run("feature.reference", {{"steps", steps}, {"on", on}}); });
+        }
         if (design->folderOf(clicked).isNil()) {
             m.addAction(steps.size() == 1 ? tr("New folder") : tr("New folder of %1 steps").arg(steps.size()),
                         this, [run, steps] { run("folder.add", {{"steps", steps}}); });

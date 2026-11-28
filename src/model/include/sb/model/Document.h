@@ -60,9 +60,16 @@ public:
     const FeatureResult* resultOf(const FeatureId& id) const override { return result(id); }
 
     /// Lists the finished bodies: features that built successfully and are not
-    /// used as an input by any later active step.
+    /// used as an input by any later active step, and aren't kept for reference
+    /// (see referenceBodies()).
     /// @return The body features, in document order.
     const std::vector<FeatureId>& bodies() const { return bodies_; }
+
+    /// Lists the bodies kept only for reference (Feature::reference()): finished
+    /// bodies that are drawn see-through, but have no mass and aren't exported.
+    /// They aren't in bodies().
+    /// @return The reference body features, in document order.
+    const std::vector<FeatureId>& referenceBodies() const { return referenceBodies_; }
 
     /// Checks whether everything built.
     /// @return True if every active (not suppressed) feature built successfully.
@@ -107,6 +114,7 @@ private:
     std::vector<FeatureId> order_;
     std::map<FeatureId, FeatureResult> results_;
     std::vector<FeatureId> bodies_;
+    std::vector<FeatureId> referenceBodies_;
     std::vector<FeatureId> reused_;
     // What each result was built from, so the next rebuild can tell what changed.
     std::map<FeatureId, std::uint64_t> revisions_;

@@ -1171,6 +1171,26 @@ CommandRegistry makeBuiltin() {
                                                                argBool(a, "off", true));
           });
 
+    r.add({"feature.reference",
+           "Use for reference",
+           "Keeps bodies only for reference: drawn see-through, to sketch on or design around (like a phone "
+           "a case must fit), but with no mass, and left out of exports, printing and overlap checks. Or "
+           "makes them bodies again.",
+           {{"steps",
+             ArgType::FeatureList,
+             "The steps that make the bodies, as names separated by commas, like Phone,Box1.",
+             true,
+             {}},
+            {"on",
+             ArgType::Bool,
+             "true to keep them for reference only, false to make them bodies again. Default true.",
+             false,
+             {}}}},
+          [](const Document&, const Args& a) -> std::unique_ptr<Command> {
+              return std::make_unique<ReferenceFeaturesCommand>(argFeatures(a, "steps"),
+                                                                argBool(a, "on", true));
+          });
+
     r.add({"timeline.rollback",
            "Roll back",
            "Moves the rollback marker. The steps after it are kept but not built, so you see the part as it "
